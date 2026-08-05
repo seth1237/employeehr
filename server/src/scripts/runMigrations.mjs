@@ -1,5 +1,6 @@
 import { exec } from 'child_process'
 import { promisify } from 'util'
+import fs from 'fs'
 import dotenv from 'dotenv'
 import path from 'path'
 import { fileURLToPath } from 'url'
@@ -19,6 +20,40 @@ function requireMysqlUrl() {
   }
 }
 
+function listMigrationNames() {
+  const migrationsDir = path.join(serverRoot, 'prisma/migrations')
+  if (!fs.existsSync(migrationsDir)) return []
+  return fs
+    .readdirSync(migrationsDir, { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .map((d) => d.name)
+    .sort()
+}
+
+function isPrismaP3005(error) {
+  const text = `${error?.stderr || ''}\n${error?.stdout || ''}\n${error?.message || ''}`
+  return text.includes('P3005') || text.includes('schema is not empty')
+}
+
+async function baselineExistingDatabase(execOpts) {
+  const names = listMigrationNames()
+  if (names.length === 0) {
+    console.warn('⚠️ No migrations found to baseline')
+    return false
+  }
+
+  console.warn(
+    '⚠️ MySQL already has tables but no Prisma migration history (P3005). Baselining...',
+  )
+
+  for (const name of names) {
+    console.log(`📌 Marking migration as applied: ${name}`)
+    await execAsync(`npx prisma migrate resolve --applied "${name}"`, execOpts)
+  }
+
+  return true
+}
+
 export async function runMigrations() {
   requireMysqlUrl()
 
@@ -34,9 +69,19 @@ export async function runMigrations() {
   try {
     if (environment === 'production') {
       console.log("📦 Using 'prisma migrate deploy' for production...")
-      const { stdout, stderr } = await execAsync('npx prisma migrate deploy', execOpts)
-      if (stdout) console.log(stdout)
-      if (stderr) console.warn(stderr)
+      try {
+        const { stdout, stderr } = await execAsync('npx prisma migrate deploy', execOpts)
+        if (stdout) console.log(stdout)
+        if (stderr) console.warn(stderr)
+      } catch (deployError) {
+        if (!isPrismaP3005(deployError)) throw deployError
+
+        await baselineExistingDatabase(execOpts)
+        console.log("📦 Retrying 'prisma migrate deploy' after baseline...")
+        const { stdout, stderr } = await execAsync('npx prisma migrate deploy', execOpts)
+        if (stdout) console.log(stdout)
+        if (stderr) console.warn(stderr)
+      }
     } else {
       console.log("📦 Using 'prisma db push' for development...")
       const { stdout, stderr } = await execAsync(

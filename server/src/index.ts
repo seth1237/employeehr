@@ -214,17 +214,26 @@ async function startServer() {
     await connectDB()
     console.log("✅ MongoDB connection established")
 
-    // Always run Prisma migrations before starting sync scheduler
-    // The sync scheduler depends on tables existing
+    // MySQL is secondary (Mongo→MySQL sync). Do not block API startup on migrate errors.
     if (!process.env.MYSQL_DATABASE_URL?.trim()) {
       console.warn("⚠️ MYSQL_DATABASE_URL is not set — Mongo→MySQL sync is disabled")
     } else {
       console.log("🔄 Running database migrations...")
-      const migrationsOk = await runMigrations()
-      if (!migrationsOk) {
-        throw new Error("MySQL migrations failed — check MYSQL_DATABASE_URL and that MySQL is running")
+      try {
+        const migrationsOk = await runMigrations()
+        if (!migrationsOk) {
+          console.warn(
+            "⚠️ MySQL migrations did not complete — API will start; sync may be limited",
+          )
+        } else {
+          console.log("✅ Database migrations completed")
+        }
+      } catch (migrationError) {
+        console.error(
+          "⚠️ MySQL migrations failed — continuing without secondary sync:",
+          migrationError instanceof Error ? migrationError.message : migrationError,
+        )
       }
-      console.log("✅ Database migrations completed")
     }
 
     server.listen(PORT, () => {

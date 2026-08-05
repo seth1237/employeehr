@@ -167,7 +167,7 @@ export default function MeetingPage() {
       setLoading(true)
       setError(null)
 
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://hrapi.codewithseth.co.ke'
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://backend.codewithseth.co.ke'
       let url = `${baseUrl}/api/meetings/by-meeting-id/${meetingId}`
       if (pwd) {
         url += `?password=${encodeURIComponent(pwd)}`
@@ -207,7 +207,7 @@ export default function MeetingPage() {
       setError(null)
       setPasswordError(false)
 
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://hrapi.codewithseth.co.ke'
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://backend.codewithseth.co.ke'
       let url = `${baseUrl}/api/meetings/by-meeting-id/${meetingId}`
       if (pwd) {
         url += `?password=${encodeURIComponent(pwd)}`
@@ -257,7 +257,7 @@ export default function MeetingPage() {
     try {
       const guestId = `guest_${Date.now()}_${Math.random().toString(36).substring(7)}`
       const guestName = `${guestInfo.firstName.trim()} ${guestInfo.lastName.trim()}`
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://hrapi.codewithseth.co.ke'
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://backend.codewithseth.co.ke'
 
       const response = await fetch(
         `${baseUrl}/api/meetings/by-meeting-id/${meetingId}/join`,
@@ -309,7 +309,7 @@ export default function MeetingPage() {
       if (!token) {
         throw new Error('Authentication required to start a meeting')
       }
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://hrapi.codewithseth.co.ke'
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://backend.codewithseth.co.ke'
       const response = await fetch(
         `${baseUrl}/api/meetings/${meetingId}/start`,
         {
@@ -336,7 +336,7 @@ export default function MeetingPage() {
     try {
       setLoadingHistory(true)
       const token = getToken()
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://hrapi.codewithseth.co.ke'
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://backend.codewithseth.co.ke'
       
       // Get all meetings and filter for completed ones related to the current user
       const response = await fetch(`${baseUrl}/api/meetings`, {
@@ -376,7 +376,7 @@ export default function MeetingPage() {
       if (!token) {
         throw new Error('Authentication required to end a meeting')
       }
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://hrapi.codewithseth.co.ke'
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://backend.codewithseth.co.ke'
       const response = await fetch(
         `${baseUrl}/api/meetings/${meetingId}/end`,
         {

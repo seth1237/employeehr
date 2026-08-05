@@ -3,7 +3,9 @@
 
 const DEFAULT_LOCAL = "http://localhost:5010"
 const DEFAULT_PROD = "https://backend.codewithseth.co.ke"
-const ELEVATEHUB_API = "https://hrapi.codewithseth.co.ke"
+// hrapi.codewithseth.co.ke currently serves cert for backend.* only → browsers block with ERR_CERT_COMMON_NAME_INVALID.
+// Use the hostname that matches the live SSL cert until a proper cert is issued for hrapi.
+const ELEVATEHUB_API = "https://backend.codewithseth.co.ke"
 
 export const API_URL = (() => {
   // In browser, inspect the hostname

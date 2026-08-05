@@ -4,8 +4,7 @@ import type { AuthenticatedRequest } from "../middleware/auth"
 
 export class AuthController {
   private static shouldRequireLoginOtp(req: AuthenticatedRequest) {
-    // Require OTP only for deployed frontend (hr.codewithseth.co.ke).
-    // Localhost/dev requests bypass OTP.
+    // Require OTP for deployed frontends. Localhost/dev bypasses OTP.
     // Override with SKIP_LOGIN_OTP=true to disable OTP globally.
 
     if (process.env.SKIP_LOGIN_OTP === "true") {
@@ -13,19 +12,56 @@ export class AuthController {
       return false
     }
 
-    // Check Origin and Referer headers to determine if request is from deployed domain
     const origin = (req.get("origin") || "").toLowerCase()
     const referer = (req.get("referer") || "").toLowerCase()
-    const deployedDomain = "hr.codewithseth.co.ke"
+    const combined = `${origin} ${referer}`
 
-    const isFromDeployed = origin.includes(deployedDomain) || referer.includes(deployedDomain)
+    const defaultDomains = [
+      "hr.codewithseth.co.ke",
+      "elevatehub.co.ke",
+      "www.elevatehub.co.ke",
+    ]
+
+    const fromEnv = String(process.env.OTP_REQUIRED_DOMAINS || "")
+      .split(",")
+      .map((d) => d.trim().toLowerCase())
+      .filter(Boolean)
+
+    const frontendHost = (() => {
+      try {
+        const url = process.env.FRONTEND_URL
+        return url ? new URL(url).hostname.toLowerCase() : ""
+      } catch {
+        return ""
+      }
+    })()
+
+    const deployedDomains = [
+      ...defaultDomains,
+      ...fromEnv,
+      ...(frontendHost ? [frontendHost] : []),
+    ]
+
+    const isFromDeployed = deployedDomains.some(
+      (domain) =>
+        origin.includes(domain) ||
+        referer.includes(domain) ||
+        combined.includes(domain),
+    )
 
     if (isFromDeployed) {
-      console.log("Login OTP required: request from deployed domain", { origin, referer })
+      console.log("Login OTP required: request from deployed domain", {
+        origin,
+        referer,
+        matched: deployedDomains.filter((d) => combined.includes(d)),
+      })
       return true
     }
 
-    console.log("Login OTP skipped: request from local/dev environment", { origin, referer })
+    console.log("Login OTP skipped: request from local/dev environment", {
+      origin,
+      referer,
+    })
     return false
   }
 

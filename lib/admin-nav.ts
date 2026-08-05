@@ -1,0 +1,52 @@
+export type AdminNavItem = {
+  label: string
+  href: string
+  section: string
+  keywords?: string[]
+}
+
+/** Shared admin navigation for sidebar + Cmd-K */
+export const ADMIN_NAV_ITEMS: AdminNavItem[] = [
+  { label: "Dashboard", href: "/admin", section: "CORE", keywords: ["home", "overview"] },
+  { label: "Manage Users", href: "/admin/users", section: "CORE", keywords: ["employees", "staff"] },
+  { label: "Job Postings", href: "/admin/jobs", section: "RECRUITMENT" },
+  { label: "Applications", href: "/admin/applications", section: "RECRUITMENT" },
+  { label: "Job Analytics", href: "/admin/analytics", section: "RECRUITMENT" },
+  { label: "Communications", href: "/admin/communications", section: "RECRUITMENT" },
+  { label: "Leave Requests", href: "/admin/leave", section: "EMPLOYEE MANAGEMENT" },
+  { label: "Attendance Tracker", href: "/admin/attendance", section: "EMPLOYEE MANAGEMENT" },
+  { label: "Allocations", href: "/admin/allocations", section: "EMPLOYEE MANAGEMENT" },
+  { label: "Payroll Management", href: "/admin/payroll", section: "EMPLOYEE MANAGEMENT" },
+  { label: "Meetings", href: "/admin/meetings", section: "EMPLOYEE MANAGEMENT" },
+  { label: "Add Inventory", href: "/admin/stock/add-inventory", section: "INVENTORY", keywords: ["products", "stock"] },
+  { label: "Warehouse Management", href: "/admin/stock/wms", section: "INVENTORY" },
+  { label: "Stock Checks", href: "/admin/stock/stock-check", section: "INVENTORY" },
+  { label: "Sales", href: "/admin/stock/sales", section: "INVENTORY" },
+  { label: "Quotations", href: "/admin/stock/quotations", section: "INVENTORY", keywords: ["quotes"] },
+  { label: "New Quotation", href: "/admin/stock/quotations?action=new", section: "ACTIONS", keywords: ["create quote"] },
+  { label: "Tenders", href: "/admin/stock/tender", section: "INVENTORY" },
+  { label: "Services", href: "/admin/stock/services", section: "INVENTORY" },
+  { label: "Invoices", href: "/admin/stock/invoices", section: "INVENTORY", keywords: ["billing"] },
+  { label: "Credit Notes", href: "/admin/stock/credit-notes", section: "INVENTORY" },
+  { label: "Dispatch", href: "/admin/stock/dispatch", section: "INVENTORY" },
+  { label: "eTIMS Posts", href: "/admin/accounts/posts", section: "ACCOUNTS", keywords: ["kra", "tax"] },
+  { label: "Payments", href: "/admin/accounts/payments", section: "ACCOUNTS" },
+  { label: "Debts", href: "/admin/accounts/debts", section: "ACCOUNTS" },
+  { label: "Expenses", href: "/admin/accounts/expenses", section: "ACCOUNTS" },
+  { label: "Clients list", href: "/admin/clients/clients-list", section: "CLIENTS", keywords: ["customers", "crm"] },
+  { label: "Telesales", href: "/admin/clients/telesales", section: "CLIENTS", keywords: ["crm", "calls", "field"] },
+  { label: "Installed Machines", href: "/admin/clients/installed-machines", section: "CLIENTS" },
+  { label: "Complaints", href: "/admin/clients/complaints", section: "CLIENTS" },
+  { label: "Bulk SMS", href: "/admin/clients/bulk-sms", section: "CLIENTS" },
+  { label: "Fleet Tracker", href: "/admin/fleet", section: "FLEET", keywords: ["vehicles"] },
+  { label: "Alerts & Notifications", href: "/admin/alerts", section: "SYSTEM", keywords: ["inbox", "bell"] },
+  { label: "KPIs", href: "/admin/kpis", section: "PERFORMANCE" },
+  { label: "360 Feedback", href: "/admin/feedback-360", section: "PERFORMANCE" },
+  { label: "Reports Hub", href: "/admin/reports", section: "PERFORMANCE" },
+  { label: "Company Settings", href: "/admin/settings/company", section: "SYSTEM" },
+  { label: "System Settings", href: "/admin/settings/system", section: "SYSTEM" },
+  { label: "Email Settings", href: "/admin/settings/system/email", section: "SYSTEM", keywords: ["smtp", "mail", "domain"] },
+  { label: "Page Access", href: "/admin/settings/system/page-access", section: "SYSTEM" },
+  { label: "Contracts", href: "/admin/contracts", section: "EMPLOYEE MANAGEMENT" },
+  { label: "Stamps", href: "/admin/stamps", section: "SYSTEM" },
+]

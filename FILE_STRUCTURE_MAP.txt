@@ -1,0 +1,419 @@
+================================================================================
+                        PROJECT FILE STRUCTURE MAP
+                       Complete Directory Breakdown
+================================================================================
+
+employeehr/
+│
+├── 📄 Root Configuration Files
+│   ├── package.json                  [Frontend dependencies]
+│   ├── tsconfig.json                 [TypeScript config]
+│   ├── next.config.mjs               [Next.js config]
+│   ├── docker-compose.mysql.yml      [Docker compose for MySQL]
+│   ├── postcss.config.mjs
+│   ├── components.json               [Shadcn/ui config]
+│   └── README.md
+│
+├── 📚 Documentation (32 files)
+│   ├── PROJECT_IMPLEMENTATION_ANALYSIS.md     [★ MAIN ANALYSIS]
+│   ├── QUICK_FEATURE_STATUS.md               [★ QUICK REFERENCE]
+│   ├── ARCHITECTURE_OVERVIEW.md              [★ SYSTEM DESIGN]
+│   ├── ANALYSIS_SUMMARY.txt                  [★ THIS SUMMARY]
+│   ├── IMPLEMENTATION_STATUS.md
+│   ├── CLIENTS_MODULE_IMPLEMENTATION.md
+│   ├── QUICK_REFERENCE.md
+│   ├── STOCK_MANAGEMENT_FEATURES.md
+│   ├── WMS.md
+│   ├── INVOICES.md
+│   ├── DEPLOYMENT_CHECKLIST.md
+│   ├── FINAL_COMPLETION_SUMMARY.md
+│   └── [26 more documentation files]
+│
+├── 🎨 Frontend Application (/app)
+│   │
+│   ├── layout.tsx                    [Root layout]
+│   ├── globals.css                   [Global styles]
+│   │
+│   ├── admin/                        [ADMIN PORTAL]
+│   │   ├── layout.tsx                [Admin layout + sidebar]
+│   │   ├── page.tsx                  [Admin dashboard]
+│   │   │
+│   │   ├── stock/                    [STOCK MANAGEMENT]
+│   │   │   ├── page.tsx              [Hub page]
+│   │   │   ├── quotations/
+│   │   │   │   └── page.tsx          [Quotations list & create] ⭐
+│   │   │   ├── invoices/
+│   │   │   │   └── page.tsx          [Invoices list & create] ⭐
+│   │   │   ├── dispatch/
+│   │   │   │   └── [invoiceId]/
+│   │   │   │       └── page.tsx      [Dispatch details]
+│   │   │   ├── wms/
+│   │   │   │   └── page.tsx          [Warehouse management] ⭐
+│   │   │   ├── credit-notes/         [Credit note management]
+│   │   │   ├── services/             [Service jobs]
+│   │   │   ├── sales/                [Sales dashboard]
+│   │   │   ├── analytics/            [Stock analytics]
+│   │   │   ├── add-inventory/        [Stock entry]
+│   │   │   ├── importation/          [Bulk import]
+│   │   │   ├── history/              [Audit logs]
+│   │   │   ├── status/               [Status tracking]
+│   │   │   └── outsourced/           [Third-party items]
+│   │   │
+│   │   ├── clients/                  [CLIENT MANAGEMENT] ⭐
+│   │   │   ├── page.tsx              [Clients hub] ✨ NEW
+│   │   │   ├── clients-list/
+│   │   │   │   └── page.tsx          [Client records]
+│   │   │   ├── installed-machines/
+│   │   │   │   └── page.tsx          [Machine registry] ⭐✨ ENHANCED
+│   │   │   ├── communication/
+│   │   │   │   └── page.tsx          [Client messaging]
+│   │   │   ├── bulk-sms/
+│   │   │   │   └── page.tsx          [SMS campaigns]
+│   │   │   ├── complaints/           [COMPLAINT MANAGEMENT] ⭐
+│   │   │   │   ├── page.tsx          [Complaints list]
+│   │   │   │   ├── [complaintId]/
+│   │   │   │   │   └── page.tsx      [Complaint detail]
+│   │   │   │   └── new/
+│   │   │   │       └── page.tsx      [New complaint form]
+│   │   │   └── [other submodules]
+│   │   │
+│   │   ├── users/                    [USER MANAGEMENT]
+│   │   ├── jobs/                     [JOB MANAGEMENT]
+│   │   ├── attendance/               [TIME TRACKING]
+│   │   ├── leave/                    [LEAVE MANAGEMENT]
+│   │   ├── payroll/                  [PAYROLL]
+│   │   ├── meetings/                 [MEETINGS]
+│   │   ├── feedback-360/             [FEEDBACK]
+│   │   ├── reports/                  [REPORTS]
+│   │   ├── settings/                 [SETTINGS]
+│   │   └── [12+ more sections]
+│   │
+│   ├── employee/                     [EMPLOYEE PORTAL]
+│   │   ├── layout.tsx                [Employee layout]
+│   │   ├── page.tsx                  [Employee dashboard]
+│   │   │
+│   │   ├── stock/                    [STOCK FOR EMPLOYEES]
+│   │   │   ├── page.tsx              [Stock hub]
+│   │   │   ├── quotations/
+│   │   │   │   └── page.tsx          [My quotations] ⭐
+│   │   │   └── invoices/
+│   │   │       └── page.tsx          [My invoices] ⭐
+│   │   │
+│   │   ├── attendance/
+│   │   ├── leave/
+│   │   ├── payroll/
+│   │   ├── meetings/
+│   │   ├── feedback/
+│   │   └── [12+ more modules]
+│   │
+│   ├── auth/                         [AUTHENTICATION]
+│   │   └── [login, signup, password reset]
+│   │
+│   └── setup/                        [COMPANY SETUP]
+│       └── [onboarding flows]
+│
+├── 🧩 Components (/components)
+│   ├── ui/                           [Shadcn/ui Components]
+│   │   ├── card.tsx
+│   │   ├── button.tsx
+│   │   ├── input.tsx
+│   │   ├── select.tsx
+│   │   ├── dialog.tsx
+│   │   ├── table.tsx
+│   │   ├── badge.tsx
+│   │   ├── tabs.tsx
+│   │   ├── dropdown-menu.tsx
+│   │   └── [20+ base components]
+│   │
+│   ├── admin/
+│   │   ├── sidebar.tsx               [Main navigation sidebar]
+│   │   ├── topbar.tsx                [Header with search & profile]
+│   │   ├── stock/
+│   │   │   ├── stock-manager-content.tsx  [★ COMPLEX WMS & STOCK UI]
+│   │   │   ├── quotation-form.tsx
+│   │   │   ├── invoice-form.tsx
+│   │   │   ├── quotation-table.tsx
+│   │   │   ├── invoice-table.tsx
+│   │   │   └── [10+ stock components]
+│   │   ├── clients/
+│   │   │   ├── client-form.tsx
+│   │   │   ├── client-table.tsx
+│   │   │   ├── machine-registry.tsx
+│   │   │   ├── complaint-form.tsx
+│   │   │   ├── complaint-table.tsx
+│   │   │   └── [5+ client components]
+│   │   └── [other admin components]
+│   │
+│   ├── employee/
+│   │   └── [employee-specific components]
+│   │
+│   └── shared/
+│       ├── layouts/
+│       ├── navigation/
+│       └── [common components]
+│
+├── 🎯 Hooks (/hooks)
+│   ├── use-toast.ts                  [Toast notifications]
+│   ├── use-api.ts                    [API wrapper hook]
+│   ├── use-auth.ts                   [Authentication hook]
+│   └── [custom hooks]
+│
+├── 📚 Libraries (/lib)
+│   ├── apiBase.ts                    [API base URL config]
+│   ├── api.ts                        [API client wrapper (stockApi, etc)]
+│   ├── auth.ts                       [Auth utilities (getToken, getUser)]
+│   ├── stock-document-pdf.ts         [PDF generation utilities]
+│   ├── validators.ts                 [Validation functions]
+│   ├── formatters.ts                 [Data formatting utilities]
+│   └── [utility libraries]
+│
+├── 🎨 Styles (/styles)
+│   └── [CSS/SCSS files]
+│
+├── 🔧 Server Backend (/server)
+│   │
+│   ├── package.json                  [Backend dependencies]
+│   ├── tsconfig.json                 [TypeScript config]
+│   │
+│   ├── prisma/
+│   │   ├── schema.prisma             [MySQL Prisma schema]
+│   │   └── migrations/               [Schema migrations]
+│   │
+│   ├── src/
+│   │   │
+│   │   ├── index.ts                  [Express server entry point]
+│   │   │
+│   │   ├── config/
+│   │   │   ├── database.ts           [MongoDB connection]
+│   │   │   ├── email.ts              [Email service config]
+│   │   │   ├── mpesa.ts              [M-Pesa payment config]
+│   │   │   └── [other configs]
+│   │   │
+│   │   ├── controllers/ (42 files)   [REQUEST HANDLERS]
+│   │   │   ├── stockController.ts              [★ PRIMARY - 2000+ lines]
+│   │   │   ├── installedMachineController.ts  [★ MACHINES]
+│   │   │   ├── complaintController.ts         [★ COMPLAINTS]
+│   │   │   ├── warehouseController.ts         [★ WMS]
+│   │   │   ├── userController.ts
+│   │   │   ├── companyController.ts
+│   │   │   ├── branchController.ts
+│   │   │   ├── attendanceController.ts
+│   │   │   ├── leaveController.ts
+│   │   │   ├── payrollController.ts
+│   │   │   ├── taskController.ts
+│   │   │   ├── meetingController.ts
+│   │   │   ├── feedbackController.ts
+│   │   │   ├── jobController.ts
+│   │   │   ├── applicationFormController.ts
+│   │   │   ├── authController.ts
+│   │   │   ├── creditNoteController.ts
+│   │   │   ├── companyEmailController.ts
+│   │   │   └── [26 more controllers]
+│   │   │
+│   │   ├── models/ (76+ files)       [DATA MODELS]
+│   │   │   ├── StockQuotation.ts     [★ QUOTATION MODEL]
+│   │   │   ├── StockInvoice.ts       [★ INVOICE MODEL]
+│   │   │   ├── InstalledMachine.ts   [★ MACHINE MODEL]
+│   │   │   ├── ClientComplaint.ts    [★ COMPLAINT MODEL]
+│   │   │   ├── StockClient.ts        [CLIENT MODEL]
+│   │   │   ├── Warehouse.ts          [WMS MODEL]
+│   │   │   ├── StockProduct.ts
+│   │   │   ├── StockCategory.ts
+│   │   │   ├── StockLocation.ts
+│   │   │   ├── StockProductLocation.ts
+│   │   │   ├── CreditNote.ts
+│   │   │   ├── User.ts
+│   │   │   ├── Company.ts
+│   │   │   ├── Branch.ts
+│   │   │   ├── Attendance.ts
+│   │   │   ├── LeaveRequest.ts
+│   │   │   ├── Payroll.ts
+│   │   │   ├── Task.ts
+│   │   │   ├── Meeting.ts
+│   │   │   ├── Feedback.ts
+│   │   │   ├── Job.ts
+│   │   │   └── [56 more models]
+│   │   │
+│   │   ├── routes/ (42 files)        [API ENDPOINTS]
+│   │   │   ├── stock.routes.ts       [★ PRIMARY - 250+ lines]
+│   │   │   ├── complaint.routes.ts   [★ COMPLAINT ROUTES]
+│   │   │   ├── auth.routes.ts
+│   │   │   ├── user.routes.ts
+│   │   │   ├── company.routes.ts
+│   │   │   ├── attendance.routes.ts
+│   │   │   ├── leave.routes.ts
+│   │   │   ├── payroll.routes.ts
+│   │   │   ├── task.routes.ts
+│   │   │   ├── meeting.routes.ts
+│   │   │   ├── feedback.routes.ts
+│   │   │   ├── job.routes.ts
+│   │   │   ├── job-application.routes.ts
+│   │   │   └── [31 more route files]
+│   │   │
+│   │   ├── middleware/
+│   │   │   ├── auth.ts               [JWT verification]
+│   │   │   ├── tenantIsolation.middleware.ts  [★ MULTI-TENANT]
+│   │   │   ├── errorHandler.ts       [Error handling]
+│   │   │   ├── sanitization.middleware.ts [Input validation]
+│   │   │   ├── rateLimit.middleware.ts [Rate limiting]
+│   │   │   ├── upload.middleware.ts   [File upload]
+│   │   │   └── [other middleware]
+│   │   │
+│   │   ├── services/
+│   │   │   ├── email.service.ts      [Email service]
+│   │   │   ├── sms.service.ts        [SMS service]
+│   │   │   ├── mpesa.service.ts      [Payment service]
+│   │   │   ├── scheduler/
+│   │   │   │   └── syncScheduler.ts  [MongoDB ↔ MySQL sync]
+│   │   │   └── [other services]
+│   │   │
+│   │   ├── utils/
+│   │   │   ├── validators.ts
+│   │   │   ├── formatters.ts
+│   │   │   ├── helpers.ts
+│   │   │   └── [utilities]
+│   │   │
+│   │   ├── types/
+│   │   │   └── [TypeScript type definitions]
+│   │   │
+│   │   └── scripts/
+│   │       ├── runMigrations.mjs
+│   │       └── [database scripts]
+│   │
+│   └── uploads/                      [Generated files directory]
+│       ├── logos/
+│       ├── images/
+│       ├── attachments/
+│       └── pdfs/
+│
+├── public/                           [Static assets]
+│   ├── images/
+│   ├── logos/
+│   └── [static files]
+│
+├── designformeet/                    [Design/UI resources]
+│
+└── .git/                             [Version control]
+
+================================================================================
+LEGEND
+================================================================================
+
+⭐ = Critical/Core Feature File
+✨ = Recently Enhanced/New
+★ = Primary Implementation File
+📄 = File
+📚 = Documentation Directory
+🎨 = Frontend/UI Directory
+🧩 = React Components
+🎯 = Hooks/Utilities
+📚 = Libraries
+🔧 = Backend/Server
+🎨 = Styles
+
+[42 files] = Count of files in directory
+[lines] = Approximate line count
+
+================================================================================
+QUICK FILE LOCATIONS BY FEATURE
+================================================================================
+
+QUOTATIONS:
+  Frontend Admin:   /app/admin/stock/quotations/page.tsx
+  Frontend Employee: /app/employee/stock/quotations/page.tsx
+  Backend:         /server/src/controllers/stockController.ts
+  Model:           /server/src/models/StockQuotation.ts
+  Routes:          /server/src/routes/stock.routes.ts
+
+INVOICES:
+  Frontend Admin:   /app/admin/stock/invoices/page.tsx
+  Frontend Employee: /app/employee/stock/invoices/page.tsx
+  Backend:         /server/src/controllers/stockController.ts
+  Model:           /server/src/models/StockInvoice.ts
+  Routes:          /server/src/routes/stock.routes.ts
+
+WAREHOUSE (WMS):
+  Frontend Admin:   /app/admin/stock/wms/page.tsx
+  Component:       /components/admin/stock/stock-manager-content.tsx
+  Backend:         /server/src/controllers/warehouseController.ts
+  Models:          /server/src/models/Warehouse.ts
+  Routes:          /server/src/routes/stock.routes.ts
+
+INSTALLED MACHINES:
+  Frontend Admin:   /app/admin/clients/installed-machines/page.tsx
+  Backend:         /server/src/controllers/installedMachineController.ts
+  Model:           /server/src/models/InstalledMachine.ts
+  Routes:          /server/src/routes/stock.routes.ts
+
+COMPLAINTS:
+  Frontend Admin:   /app/admin/clients/complaints/page.tsx
+  Detail Page:     /app/admin/clients/complaints/[complaintId]/page.tsx
+  Backend:         /server/src/controllers/complaintController.ts
+  Model:           /server/src/models/ClientComplaint.ts
+  Routes:          /server/src/routes/complaint.routes.ts
+
+CLIENTS:
+  Frontend Hub:    /app/admin/clients/page.tsx
+  Clients List:    /app/admin/clients/clients-list/page.tsx
+  Communication:   /app/admin/clients/communication/page.tsx
+  Bulk SMS:        /app/admin/clients/bulk-sms/page.tsx
+  Backend:         /server/src/controllers/stockController.ts
+  Model:           /server/src/models/StockClient.ts
+  Routes:          /server/src/routes/stock.routes.ts
+
+AUTHENTICATION:
+  Frontend:        /app/auth/*/page.tsx
+  Backend:         /server/src/controllers/authController.ts
+  Routes:          /server/src/routes/auth.routes.ts
+  Middleware:      /server/src/middleware/auth.ts
+
+MULTI-TENANT:
+  Middleware:      /server/src/middleware/tenantIsolation.middleware.ts
+  Auth Extraction: /server/src/middleware/auth.ts
+  Usage:           Every controller & route
+
+================================================================================
+KEY COMPONENT PATTERNS
+================================================================================
+
+1. STOCK PAGES (Quotations, Invoices)
+   Pattern: Large client component with complex state management
+   Structure:
+     - useEffect to load data
+     - Multiple state variables for form/list
+     - Table component with pagination
+     - Modal/form for creation/editing
+     - PDF generation integration
+   Example: /app/admin/stock/quotations/page.tsx (537 lines)
+
+2. WAREHOUSE CANVAS
+   Pattern: Complex visual component with drag-drop
+   Structure:
+     - Canvas context for element positioning
+     - Property inspector panel
+     - Real-time synchronization
+     - Percent-based coordinates
+   Located: /components/admin/stock/stock-manager-content.tsx
+
+3. TABLE WITH FILTERS
+   Pattern: Reusable for clients, machines, complaints
+   Structure:
+     - Search input
+     - Status/priority filters
+     - Pagination
+     - Action buttons (edit, delete, view)
+     - Sort capabilities
+   Examples: Multiple pages use this pattern
+
+4. MODAL DIALOG
+   Pattern: For inline editing and detailed forms
+   Structure:
+     - Trigger button
+     - Dialog container from Shadcn
+     - Form fields
+     - Save/Cancel actions
+   Examples: Edit machine, add complaint
+
+================================================================================
+END OF FILE STRUCTURE MAP
+================================================================================

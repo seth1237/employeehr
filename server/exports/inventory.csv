@@ -1,0 +1,17 @@
+column_1,column_2
+Inventory Type,Basic grouping of saleable items
+Inventory categories,"Item categories e.g Software, Hardware"
+Inventory,Create and maintain inventory items
+Stock Take Setup,Create and manage stock take setup
+Stock Take List,Create and manage stock takes
+Closed Stock Take List,List of Posted Stock takes
+Purchase Requestion Lists,Purchase Requestion List
+Stock Take Template,DownLoad Stock take Template
+Inventory Price Tags,Print Inventory Items Price Tags
+Print Inventory Serial Tags,Print inventory serial tags by item
+Assets,"Create and maintain assets e.g furniture,computers"
+Unit of Measure,Units of Measure
+Stores,Store Setup
+Shifts,Shifts Setup
+Promotion Types,Create & Manage Sales Promotions (Happy Hour)
+Defect Types,Add product defects

@@ -1,0 +1,767 @@
+// Prisma schema file for MySQL
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("MYSQL_DATABASE_URL")
+}
+
+// ==================== CORE MODELS ====================
+
+model Company {
+  id            String  @id @default(cuid())
+  name          String
+  slug          String  @unique @db.VarChar(100)
+  email         String  @unique @db.VarChar(255)
+  phone         String?
+  website       String?
+  industry      String
+  employeeCount Int
+  logo          String?
+  country       String?
+  state         String?
+  city          String?
+  countryCode   String? @db.Char(2)
+
+  // Branding
+  primaryColor    String @default("#2563eb")
+  secondaryColor  String @default("#059669")
+  accentColor     String @default("#f59e0b")
+  backgroundColor String @default("#ffffff")
+  textColor       String @default("#1f2937")
+  borderRadius    String @default("0.5rem")
+  fontFamily      String @default("system-ui")
+  buttonStyle     String @default("rounded") // rounded, sharp, pill
+
+  subscription String    @default("starter") // starter, professional, enterprise
+  status       String    @default("active") // active, suspended, inactive
+  isFrozen     Boolean   @default(false)
+  frozenReason String?
+  frozenAt     DateTime?
+  frozenBy     String?
+
+  // Email Configuration
+  emailEnabled   Boolean @default(false)
+  emailVerified  Boolean @default(false)
+  emailFromName  String?
+  emailFromEmail String?
+  emailPassword  String?
+
+  emailConfig         Json?
+  dispatchSmsSettings Json?
+  invoiceSettings     Json?
+  setupProgress       Json?
+  pageAccessSettings  Json?
+  enabledPages        Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users           User[]
+  stockClients    StockClient[]
+  stockProducts   StockProduct[]
+  stockCategories StockCategory[]
+  stockEntries    StockEntry[]
+  stockSales      StockSale[]
+  stockQuotations StockQuotation[]
+  stockInvoices   StockInvoice[]
+  services        Service[]
+  serviceJobs     ServiceJob[]
+  meetings        Meeting[]
+  leaves          LeaveRequest[]
+  holidays        Holiday[]
+  jobs            Job[]
+  tasks           Task[]
+  kpis            KPI[]
+
+  @@unique([id, slug])
+  @@index([status])
+}
+
+model User {
+  id    String  @id @default(cuid())
+  orgId String
+  org   Company @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  employeeId String? @unique @db.VarChar(50)
+  firstName  String
+  lastName   String
+  email      String  @unique @db.VarChar(255)
+  password   String
+
+  role       String  @default("employee") // super_admin, company_admin, manager, employee, hr
+  department String?
+  position   String? // Job title
+  managerId  String? @db.VarChar(255)
+
+  avatar        String?
+  signatureUrl  String?
+  phone         String?
+  dateOfJoining DateTime?
+  status        String    @default("active") // active, inactive, pending
+
+  salary            Float?
+  bankAccountName   String?
+  bankAccountNumber String?
+  bankName          String?
+  bankDetails       Json?
+
+  promptStampOnPdf Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  meetings         Meeting[]         @relation("MeetingOrganizer")
+  meetingAttendees MeetingAttendee[]
+  leaveRequests    LeaveRequest[]
+  tasks            Task[]
+  jobApplications  JobApplication[]
+  clientComplaints ClientComplaint[]
+
+  @@unique([orgId, email])
+  @@index([role])
+  @@index([status])
+}
+
+// ==================== STOCK MANAGEMENT ====================
+
+model StockClient {
+  id    String  @id @default(cuid())
+  orgId String
+  org   Company @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  sourceName     String
+  sourceNumber   String
+  sourceLocation String
+  legalName      String
+  kraPin         String?
+  email          String?
+  branchId       String?
+  hasKraDetails  Boolean @default(false)
+
+  createdBy String
+  updatedBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  quotations StockQuotation[]
+  invoices   StockInvoice[]
+  sales      StockSale[]
+  serviceJobs ServiceJob[]
+  complaints ClientComplaint[]
+
+  @@unique([orgId, sourceName, sourceNumber, sourceLocation])
+  @@index([orgId])
+}
+
+model StockCategory {
+  id    String  @id @default(cuid())
+  orgId String
+  org   Company @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String?  @db.Text
+  level       Int     @default(1) // 1, 2, or 3 (max 3 levels)
+  parentId    String? // For nested categories (level 2 and 3)
+  parent      StockCategory? @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children    StockCategory[] @relation("CategoryHierarchy")
+
+  createdBy   String
+  updatedBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  products StockProduct[]
+
+  @@unique([orgId, name, parentId])
+  @@index([parentId])
+  @@index([level])
+}
+
+model StockProduct {
+  id    String  @id @default(cuid())
+  orgId String
+  org   Company @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  categoryId String
+  category   StockCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  name         String
+  description  String? @db.Text
+  sku          String
+  unitPrice    Float
+  quantity     Int     @default(0)
+  reorderLevel Int     @default(10)
+  supplier     String?
+
+  createdBy String
+  updatedBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  entries    StockEntry[]
+  salesItems StockSaleItem[]
+
+  @@unique([orgId, sku])
+  @@index([categoryId])
+}
+
+model StockEntry {
+  id    String  @id @default(cuid())
+  orgId String
+  org   Company @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  productId String
+  product   StockProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  entryType  String // purchase, sale, adjustment, return
+  quantity   Int
+  unitPrice  Float
+  totalPrice Float
+  reference  String? // Invoice/PO number
+  notes      String? @db.Text
+
+  createdBy String
+  createdAt DateTime @default(now())
+
+  @@index([orgId])
+  @@index([productId])
+}
+
+model StockQuotation {
+  id              String      @id @default(cuid())
+  orgId           String
+  org             Company     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  quotationNumber String
+  clientId        String
+  client          StockClient @relation(fields: [clientId], references: [id], onDelete: Restrict)
+
+  items       Json // Array of {productId, quantity, unitPrice}
+  totalAmount Float
+  status      String    @default("draft") // draft, sent, accepted, rejected, expired
+  validUntil  DateTime?
+  notes       String?   @db.Text
+
+  createdBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  serviceItems ServiceQuotationItem[]
+
+  @@unique([orgId, quotationNumber])
+  @@index([clientId])
+}
+
+model StockInvoice {
+  id            String      @id @default(cuid())
+  orgId         String
+  org           Company     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  invoiceNumber String
+  clientId      String
+  client        StockClient @relation(fields: [clientId], references: [id], onDelete: Restrict)
+
+  items    Json // Array of {productId, quantity, unitPrice}
+  subtotal Float
+  tax      Float     @default(0)
+  total    Float
+  status   String    @default("draft") // draft, sent, paid, cancelled
+  dueDate  DateTime?
+  notes    String?   @db.Text
+
+  createdBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  payments StockInvoicePayment[]
+
+  @@unique([orgId, invoiceNumber])
+  @@index([clientId])
+}
+
+model StockInvoicePayment {
+  id        String       @id @default(cuid())
+  invoiceId String
+  invoice   StockInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  amount        Float
+  paymentDate   DateTime
+  paymentMethod String // cash, check, bank_transfer, card
+  reference     String?
+  notes         String?  @db.Text
+
+  createdBy String
+  createdAt DateTime @default(now())
+
+  @@index([invoiceId])
+}
+
+model StockSale {
+  id    String  @id @default(cuid())
+  orgId String
+  org   Company @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  saleNumber String
+  clientId   String
+  client     StockClient @relation(fields: [clientId], references: [id], onDelete: Restrict)
+
+  items    StockSaleItem[]
+  subtotal Float
+  tax      Float           @default(0)
+  total    Float
+  status   String          @default("completed") // draft, pending, completed, cancelled
+  saleDate DateTime        @default(now())
+  notes    String?         @db.Text
+
+  createdBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([orgId, saleNumber])
+  @@index([clientId])
+}
+
+model StockSaleItem {
+  id     String    @id @default(cuid())
+  saleId String
+  sale   StockSale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  productId String
+  product   StockProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  quantity  Int
+  unitPrice Float
+  total     Float
+
+  @@index([saleId])
+  @@index([productId])
+}
+
+// ==================== SERVICE MANAGEMENT ====================
+
+model Service {
+  id    String  @id @default(cuid())
+  orgId String
+  org   Company @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  name          String
+  description   String?  @db.Text
+  category      String   // e.g., "Installation", "Maintenance", "Inspection", etc.
+  price         Float
+  duration      String?  // e.g., "2 hours", "1 day", etc.
+  
+  // Recurring service configuration
+  isRecurring   Boolean  @default(false)
+  intervalDays  Int      @default(0) // Days between recurring services (0 = one-time)
+  
+  // Status tracking
+  status        String   @default("active") // active, inactive, archived
+  
+  createdBy     String
+  updatedBy     String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  jobs ServiceJob[]
+  quotationItems ServiceQuotationItem[]
+
+  @@unique([orgId, name])
+  @@index([category])
+  @@index([isRecurring])
+}
+
+model ServiceJob {
+  id    String  @id @default(cuid())
+  orgId String
+  org   Company @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  serviceId String
+  service   Service @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+
+  clientId  String
+  client    StockClient @relation(fields: [clientId], references: [id], onDelete: Restrict)
+
+  // Job scheduling & tracking
+  scheduledDate  DateTime
+  completedDate  DateTime?
+  status         String   @default("pending") // pending, in-progress, completed, cancelled, overdue
+  
+  // Details
+  notes          String?  @db.Text
+  price          Float    // Can differ from service base price
+  
+  // Recurring management
+  isRecurring    Boolean  @default(false)
+  intervalDays   Int      @default(0)
+  recurringJobId String?  // Reference to parent recurring job if auto-generated
+  
+  // Tracking
+  createdBy      String
+  updatedBy      String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([orgId])
+  @@index([clientId])
+  @@index([status])
+  @@index([scheduledDate])
+  @@index([isRecurring])
+}
+
+model ServiceQuotationItem {
+  id    String  @id @default(cuid())
+  
+  serviceId String
+  service   Service @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+
+  quotationId String
+  quotation   StockQuotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+
+  quantity   Int
+  unitPrice  Float
+  totalPrice Float
+
+  @@index([serviceId])
+  @@index([quotationId])
+}
+
+// ==================== CLIENT COMPLAINTS ====================
+
+model ClientComplaint {
+  id          String @id @default(cuid())
+  orgId       String
+  complaintId String @unique @db.VarChar(50)
+
+  clientId String
+  client   StockClient @relation(fields: [clientId], references: [id], onDelete: Restrict)
+
+  clientName     String
+  clientNumber   String
+  clientLocation String?
+  clientEmail    String?
+  clientPhone    String?
+
+  category    String // poor_service, delayed_delivery, billing_issues, etc.
+  priority    String // low, medium, high, urgent
+  status      String @default("new") // new, under_review, assigned, in_progress, etc.
+  title       String
+  description String @db.Text
+  attachments Json? // Array of URLs or file info
+
+  submittedBy     String
+  submittedByName String?
+  assignedTo      String?
+  assignedToName  String?
+  assignedUser    User?   @relation(fields: [assignedTo], references: [id], onDelete: SetNull)
+
+  relatedTaskId    String?
+  escalatedTo      String?
+  escalationReason String? @db.Text
+
+  communications ComplaintCommunication[]
+  internalNotes  ComplaintNote[]
+  resolution     ComplaintResolution?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orgId])
+  @@index([clientId])
+  @@index([status])
+  @@index([priority])
+}
+
+model ComplaintCommunication {
+  id          String          @id @default(cuid())
+  complaintId String
+  complaint   ClientComplaint @relation(fields: [complaintId], references: [id], onDelete: Cascade)
+
+  senderUserId String
+  senderName   String?
+  senderRole   String // client, staff
+  message      String  @db.Text
+  attachments  Json? // Array of URLs or file info
+
+  createdAt DateTime @default(now())
+
+  @@index([complaintId])
+}
+
+model ComplaintNote {
+  id          String          @id @default(cuid())
+  complaintId String
+  complaint   ClientComplaint @relation(fields: [complaintId], references: [id], onDelete: Cascade)
+
+  userId   String
+  userName String?
+  note     String  @db.Text
+
+  createdAt DateTime @default(now())
+
+  @@index([complaintId])
+}
+
+model ComplaintResolution {
+  id          String          @id @default(cuid())
+  complaintId String          @unique
+  complaint   ClientComplaint @relation(fields: [complaintId], references: [id], onDelete: Cascade)
+
+  resolvedBy         String
+  resolvedByName     String?
+  satisfactionRating Int? // 1-5 scale
+  notes              String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([complaintId])
+}
+
+// ==================== MEETINGS ====================
+
+model Meeting {
+  id    String  @id @default(cuid())
+  orgId String
+  org   Company @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  title           String
+  description     String?  @db.Text
+  scheduledAt     DateTime
+  durationMinutes Int      @default(60)
+  meetingType     String // video, audio, in-person
+  meetingId       String   @unique @db.VarChar(100)
+  meetingLink     String?
+  password        String?
+  requirePassword Boolean  @default(false)
+
+  status String @default("scheduled") // scheduled, in-progress, completed, cancelled
+
+  organizerId String
+  organizer   User   @relation("MeetingOrganizer", fields: [organizerId], references: [id], onDelete: Restrict)
+
+  attendees MeetingAttendee[]
+
+  actualStartTime DateTime?
+  actualEndTime   DateTime?
+  agenda          String?             @db.Text
+  transcript      String?             @db.LongText
+  aiSummary       String?             @db.Text
+  keyPoints       Json? // Array of strings
+  actionItems     MeetingActionItem[]
+
+  recordingUrl       String?
+  aiProcessed        Boolean @default(false)
+  aiProcessingStatus String? // pending, processing, completed, failed
+  aiProcessingError  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orgId])
+  @@index([organizerId])
+  @@index([scheduledAt])
+}
+
+model MeetingAttendee {
+  id        String  @id @default(cuid())
+  meetingId String
+  meeting   Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  displayName String?
+  isGuest     Boolean @default(false)
+  status      String // invited, accepted, declined, tentative
+  attended    Boolean @default(false)
+
+  joinedAt        DateTime?
+  leftAt          DateTime?
+  durationMinutes Int?
+
+  @@unique([meetingId, userId])
+  @@index([meetingId])
+}
+
+model MeetingActionItem {
+  id        String  @id @default(cuid())
+  meetingId String
+  meeting   Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  description String    @db.Text
+  assignedTo  String    @db.VarChar(255)
+  dueDate     DateTime?
+  taskId      String?
+
+  @@index([meetingId])
+}
+
+// ==================== LEAVE MANAGEMENT ====================
+
+model LeaveRequest {
+  id    String  @id @default(cuid())
+  orgId String
+  org   Company @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  leaveType     String // annual, sick, maternity, etc.
+  startDate     DateTime
+  endDate       DateTime
+  daysRequested Float
+  reason        String?   @db.Text
+  status        String    @default("pending") // pending, approved, rejected, cancelled
+  approvedBy    String?
+  approvalDate  DateTime?
+  approvalNotes String?   @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  leaveBalance LeaveBalance?
+
+  @@index([orgId])
+  @@index([userId])
+  @@index([status])
+}
+
+model LeaveBalance {
+  id             String       @id @default(cuid())
+  leaveRequestId String       @unique
+  leaveRequest   LeaveRequest @relation(fields: [leaveRequestId], references: [id], onDelete: Cascade)
+
+  leaveType     String
+  balanceBefore Float
+  balanceUsed   Float
+  balanceAfter  Float
+
+  createdAt DateTime @default(now())
+}
+
+model Holiday {
+  id    String  @id @default(cuid())
+  orgId String
+  org   Company @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  name        String
+  date        DateTime
+  description String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([orgId, name, date])
+}
+
+// ==================== RECRUITMENT & JOBS ====================
+
+model Job {
+  id    String  @id @default(cuid())
+  orgId String
+  org   Company @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String? @db.Text
+  department  String?
+  location    String?
+  salaryMin   Float?
+  salaryMax   Float?
+  jobType     String? // full-time, part-time, contract
+  status      String  @default("open") // open, closed, archived
+
+  createdBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  applications JobApplication[]
+
+  @@index([orgId])
+  @@index([status])
+}
+
+model JobApplication {
+  id    String @id @default(cuid())
+  jobId String
+  job   Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  status    String   @default("applied") // applied, shortlisted, interviewed, offered, rejected
+  appliedAt DateTime @default(now())
+  resumeUrl String?
+  notes     String?  @db.Text
+
+  @@unique([jobId, userId])
+  @@index([jobId])
+  @@index([status])
+}
+
+// ==================== TASKS & KPI ====================
+
+model Task {
+  id    String  @id @default(cuid())
+  orgId String
+  org   Company @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  title        String
+  description  String?   @db.Text
+  priority     String // low, medium, high, urgent
+  status       String    @default("todo") // todo, in_progress, done, blocked
+  assignedTo   String
+  assignedUser User      @relation(fields: [assignedTo], references: [id], onDelete: Restrict)
+  dueDate      DateTime?
+
+  createdBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orgId])
+  @@index([assignedTo])
+  @@index([status])
+}
+
+model KPI {
+  id    String  @id @default(cuid())
+  orgId String
+  org   Company @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  name         String
+  description  String? @db.Text
+  targetValue  Float
+  currentValue Float   @default(0)
+  unit         String?
+  owner        String?
+  period       String // daily, weekly, monthly, quarterly, annual
+  status       String  @default("on_track") // on_track, at_risk, off_track
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([orgId, name])
+}
+
+// ==================== AUDIT & LOGS ====================
+
+model AuditLog {
+  id    String @id @default(cuid())
+  orgId String
+
+  userId     String?
+  action     String
+  entityType String // User, StockProduct, etc.
+  entityId   String
+  changes    Json? // Before/after values
+  ipAddress  String?
+  userAgent  String?
+
+  createdAt DateTime @default(now())
+
+  @@index([orgId])
+  @@index([userId])
+  @@index([createdAt])
+}

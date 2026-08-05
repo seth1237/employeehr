@@ -1,0 +1,27 @@
+# Local MySQL for Mongo→MySQL secondary sync
+# Usage:
+#   docker compose -f docker-compose.mysql.yml up -d
+#   MYSQL_DATABASE_URL=mysql://elevate:elevate123@localhost:3306/elevate_dev
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: employeehr-mysql
+    restart: unless-stopped
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: elevate_dev
+      MYSQL_USER: elevate
+      MYSQL_PASSWORD: elevate123
+    volumes:
+      - employeehr_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-prootpassword"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  employeehr_mysql_data:

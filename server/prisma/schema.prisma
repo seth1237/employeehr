@@ -1,0 +1,115 @@
+// Prisma schema for MySQL secondary storage (MongoDB sync cache)
+// Uses dedicated tables so we do not conflict with legacy ERP tables (Company, User, etc.)
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-1.1.x", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("MYSQL_DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  mongoId      String   @unique @map("mongo_id")
+  org_id       String
+  email        String   @unique
+  firstName    String
+  lastName     String
+  role         String
+  status       String
+  employee_id  String?  @unique
+  password     String
+  phone        String?
+  department   String?
+  manager_id   String?
+  profileImage String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  isActive     Boolean  @default(true)
+
+  @@index([org_id])
+  @@index([email])
+  @@index([role])
+  @@map("mongo_sync_users")
+}
+
+model Company {
+  id             String   @id @default(uuid())
+  mongoId        String   @unique @map("mongo_id")
+  name           String
+  slug           String   @unique
+  email          String
+  phone          String?
+  website        String?
+  industry       String?
+  employeeCount  Int?
+  status         String   @default("active")
+  isFrozen       Boolean  @default(false)
+  primaryColor   String   @default("#667eea")
+  secondaryColor String   @default("#764ba2")
+  logo           String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([slug])
+  @@index([status])
+  @@map("mongo_sync_companies")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String
+  orgId      String   @map("org_id")
+  entityType String   @map("entity_type")
+  action     String
+  entityId   String
+  changes    Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([orgId])
+  @@index([entityType])
+  @@index([action])
+  @@index([createdAt])
+  @@map("mongo_sync_audit_logs")
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String
+  orgId     String   @map("org_id")
+  token     String   @unique
+  ipAddress String?
+  userAgent String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([token])
+  @@index([expiresAt])
+  @@map("mongo_sync_sessions")
+}
+
+model AnalyticsSnapshot {
+  id             String   @id @default(uuid())
+  orgId          String   @map("org_id")
+  date           DateTime
+  totalUsers     Int      @default(0)
+  activeUsers    Int      @default(0)
+  totalCompanies Int      @default(0)
+  totalProducts  Int      @default(0)
+  totalSales     Int      @default(0)
+  totalRevenue   Float    @default(0)
+  data           Json?
+  createdAt      DateTime @default(now())
+
+  @@unique([orgId, date])
+  @@index([orgId])
+  @@index([date])
+  @@map("mongo_sync_analytics_snapshots")
+}

@@ -1,0 +1,482 @@
+                                        PUBLIC
+
+
+
+
+              ISO 9001:2015 CERTIFIED
+
+
+
+
+eTIMS Online Sales Control Unit
+   (OSCU) AND Virtual Sales
+ Control Unit (VSCU) Step-by-
+          Step Guide
+
+
+
+
+April, 2023
+Version 1.1
+KENYA REVENUE AUTHORITY                                                                   PUBLIC
+
+
+
+
+                                           Notice
+           © 2023 Kenya Revenue Authority (KRA)
+           This is a controlled document. Unauthorized access, copying, replication or
+           usage for a purpose other than for which it is intended, are prohibited.
+           All trademarks that appear in the document have been used for identification
+           purposes only and belong to their respective companies.
+KENYA REVENUE AUTHORITY                                                        PUBLIC
+
+
+      eTIMS OSCU and VSCU Integration Step-by-
+      Step Guide
+      A. SIGN UP FOR ACCESS ON THE eTIMS TAXPAYER SANDBOX
+         PORTAL
+
+   1. Access the eTIMS taxpayer sandbox portal on the following URL address:
+
+          •   https://etims-sbx.kra.go.ke
+
+
+
+
+   2. Select the Sign Up option.
+
+
+
+
+                                                                                        3
+KENYA REVENUE AUTHORITY                                                           PUBLIC
+
+
+   3. Select PIN option and complete the Sign Up form.
+
+         •   You will enter the PIN of the company
+
+         • Verify that the masked phone number value displayed is correct and can be
+         accessed as the One Time Password (OTP) message will be sent to this number. In
+         case it is incorrect, write to timsupport@kra.go.ke for the correct phone number to
+         be updated.
+
+         • Enter and confirm the Password to be used for the taxpayer sandbox portal
+         access.
+
+
+
+
+                                                                                           4
+KENYA REVENUE AUTHORITY                                                             PUBLIC
+
+
+      B. REGISTER FOR OSCU OR VSCU DEVICE
+
+   1. Upon successful sign up, access the eTIMS taxpayer sandbox portal using your
+      credentials (KRA PIN and Password).
+
+   2. Select the Service Request button at the top right corner of the home page.
+
+   3. Select eTIMS button on the dialog box presented.
+
+
+
+
+                                                                                             5
+KENYA REVENUE AUTHORITY                                                             PUBLIC
+
+
+   4. The Service Request form will be displayed.
+
+
+
+
+   5. Complete the Service Request form.
+
+         •   Select the appropriate eTIMS Type:
+
+                 i. Virtual Sales Control Unit (VSCU) – Implemented and hosted on the
+                    client side. Suitable for organizations with large volumes of invoices that
+                    require to be generated in a short span of time.
+
+                ii. Online Sales Control Unit (OSCU) – Implemented and hosted at
+                    KRA. Integration organization requires to customize their trader invoicing
+                    system to work with OSCU API. Suitable for systems that operate online.
+
+               iii. eTIMS Client – Standalone clients for Windows and Android platforms
+                    for PC, Mobile, PDAs and Tablets developed by KRA. This solution is
+                    specifically designed for Large and Medium Taxpayers, both VAT and
+                    non- VAT registered taxpayers, as well as other taxpayers who may apply
+                    for it.
+
+
+
+
+                                                                                             6
+KENYA REVENUE AUTHORITY                                                             PUBLIC
+
+
+                iv. eTIMS Online – Invoicing functionality availed on the eTIMS taxpayer
+                    portal. Eligible taxpayers for this solution are those operating in service
+                    sector who do not issue more than 10 invoices per month. E.g.: rental
+                    property owners, transport service providers, consultants, lawyers, etc.
+
+
+
+
+         •   Complete and upload the eTIMS Commitment Form. The form is available on
+                the Service Request form and on the eTIMS Learn More page
+                (https://www.kra.go.ke/images/publications/eTIMS-confirmation-
+                document.pdf).
+
+   6. The Service Request will be processed, and you will receive a confirmation SMS
+      message on your registered mobile number reading “Service Request was approved. You
+      can now proceed with eTIMS installation in your KRA Account.”.
+
+
+
+
+                                                                                             7
+KENYA REVENUE AUTHORITY                                                            PUBLIC
+
+
+      C. SETUP FOR OSCU
+
+   1. Upon approval of OSCU, a taxpayer will access the OSCU from KRA servers and start
+      activation.
+
+   2. The OSCU running process, main configurations and technical policies are detailed in
+      the OSCU Specifications document/guide section 2.2.
+
+          Note that the services included in the sequence definitions are to be used with the
+          below URLs:
+          •   In Sandbox environment use: https://etims-api-sbx.kra.go.ke
+          •   In Production environment use: https://etims-api.kra.go.ke
+          e.g. the url path for OSCU device activation is indicated as (url :
+          /selectInitOsdcInfo) therefore the full url path is https://etims-api-
+          sbx.kra.go.ke/selectInitOsdcInfo in sandbox environment.
+
+   3. The Trader Invoicing System (TIS) will need to invoke the initialization Method of OSCU
+      with PIN, branch office ID, and equipment information. After which the OSCU will begin
+      verification of the device and receive communication key from the KRA eTIMS API
+      server.
+
+
+
+
+   4. The Taxpayer PIN, branch office ID and Communication key are critical details that are
+      necessary for communications between the TIS and eTIMS OSCU API server.
+
+
+
+      D. SETUP FOR VSCU
+
+   1. After approval of VSCU, a VSCU package file will be availed on the eTIMS taxpayers
+      portal.
+
+   2. The package file (eTIMS-VSCU-<version>.zip) needs to be deployed in the TaxPayer
+      server environment using the following steps:.
+
+          a) Prepare the environment
+
+                 Install the Java Runtime Environment (JRE) or Java Development Kit (JDK)
+                  on the target machine where you want to deploy the JAR file, if it is not
+                  already installed
+                  NOTE: Required Java (JRE/JDK) Version is Java 16 or higher.
+
+                                                                                            8
+KENYA REVENUE AUTHORITY                                                           PUBLIC
+
+
+                Set up the Java environment variables (such as JAVA_HOME and PATH) on
+                 the target machine to point to the installed JRE or JDK.
+
+         b) Transfer the package file
+             Transfer the package file to the target machine where you want to deploy it.
+               You can use methods such as FTP, SCP, or a file-sharing service to transfer
+               the package file from your local machine to the target machine.
+             Unzip the package file
+
+         c) Set configuration parameters in config/application.properties file.
+                 VSCU runs on port 8088 by default. This can be changed to a preffered
+                   port by editing the server.port property.
+                 Dependent on whether you are connecting to Sandbox or Production
+                   environments, uncomment the appropriate api.external.domain
+                   property.
+
+         d) Run the JAR file
+             Open a command prompt or terminal on the target machine.
+             Navigate to the directory where the JAR file is located.
+             Execute the JAR file using the Java Virtual Machine (JVM) by running the
+               following command:
+                   java -jar etims-vscu-<version>.jar
+
+                The JAR file should now be executed, and VSCU application should start
+                 running on the target machine.
+
+
+         e) Connecting the JAR Server process.
+
+                The Trader Invoicing System (TIS) should point to the VSCU JAR Server
+                 through the following URL http://<hostname or ip running vscu
+                 jar>:<server.port>
+
+   3. The VSCU running process, main configurations and technical policies are detailed in
+      the VSCU Specifications document/guide section 2.2.
+
+         Note that the services included in the sequence definitions are to be used with the
+         below URL:
+                http://<hostname or ip running vscu jar>:<server.port>
+
+                 e.g. the url path for OSCU device activation is indicated as (url :
+                 /selectInitOsdcInfo)      therefore    the     full url   path    is
+                 http://vscuserverhostname:8088/selectInitOsdcInfo
+
+
+
+   4. The Trader Invoicing System (TIS) will need to invoke initialization Service URL of
+      VSCU with PIN, branch office ID , and equipment information as request body, VSCU
+
+
+
+                                                                                           9
+KENYA REVENUE AUTHORITY                                                               PUBLIC
+
+
+      will begin verification of the device and receive and save keys from the KRA eTIMS API
+      server.
+
+
+
+
+      E. INITIALIZATION AND SYSTEM FUNCTIONALITIES (PROCESS
+         FLOW)
+
+   The functionalities of OSCU/VSCU are grouped into eight (8) categories based on their
+   purpose. The below briefly introduces the purpose of each category.
+
+   1. Initialization (Send only)
+
+      This functionality maps the provided PIN, Branch Code and serial number during the
+      service request process to the TIS being integrated.
+
+      NOTE: For VSCU/OSCU initialization, registration and approval of the e-TIMS type
+      must have been completed. (Refer to Section B above)
+
+   2. Basic Data Management (Get only)
+
+   This category of functionalites is used to get necessary standard codes and data from the
+   eTIMS API Server, which is the basis of generating invoice data. The standard codes and
+   data includes item classification code for managing item, location code, and package, weight
+   code, PIN list and notice from KRA. For more information, check code definition chapter.
+
+   NOTE: To send Invoice data to the eTIMS API server, the consistency of the data is
+   essential.
+
+
+   3. Branch Information Management (Get and Send)
+
+   Functionalities in this category allows the TIS to send list of head and branch office(s), and
+   user information of branch offices to e-TIMS API server.
+
+   NOTE:
+     i. For Pharmacy, there is a functionalty for sending insurance information of the head
+        & branch offices to e-TIMS API Server.
+    ii. Branch codes will be used while sending stock within branch office(s).
+
+
+   4. Item Management (Get and Send)
+
+
+                                                                                               10
+KENYA REVENUE AUTHORITY                                                                PUBLIC
+
+
+   Functionalities in this category allows TIS to send item information to and get item list from
+   eTIMS API Server.
+
+   NOTE: In case you want to recover your items, you can receive them through eTIMS API
+   server.
+
+
+   5. Imported Item Management (Get and Send)
+
+   Functionalities in this category allows TIS to receive data of imported items which is
+   declared by the PIN of TIS owner and to send confirmation of the received imported items
+   with the corresponding TIS stock items.
+
+   NOTE: The imported items data are retrieved from KRA customs system and data can be
+   used for stock adjustment.
+
+
+   6. Sales Management (Send only)
+
+   Functionalities in this category allows TIS to send sales transaction and invoice information
+   to e-TIMS API Server.
+
+   NOTE:
+     i. Sales transaction data comprises of information such as Customer PIN, Customer
+        Name, Sales Type Code, Receipt Type Code, Payment Type Code, Invoice Status
+        Code, Validated Date, Sale Date, Stock Released Date, Cancel Requested Date,
+        Canceled Date and Refunded Date.
+    ii. Sales Invoice data comprises of information such as Invoice Number, Current
+        Receipt Number, Total Receipt Number, Customer PIN, Customer Mobile Number,
+        Receipt Published Date, Internal Data and Receipt Signature.
+
+
+   7. Purchase Transaction Management (Get and Send)
+
+   The functionalities in this category allows TIS to get purchase transaction(s) and Invoice
+   data from eTIMS Server with the PIN of TIS owner. It also allows for confirmation of the
+   purchases by the TIS owner for stock adjustment purposes.
+
+   8. Stock Management (Get and Send)
+
+   The functionalities in this category allows TIS to send inventory in & out of the branches and
+   update the stock status by item classification to eTIMS Server. It also provides for request of
+   stock from main branch.
+
+
+
+NOTE: For implementation purposes, the categories and actions listed in the table below are
+ordered sequentially meaning that latter actions are dependent on some of the preceding
+actions.
+
+
+
+
+                                                                                                11
+KENYA REVENUE AUTHORITY                                                                          PUBLIC
+
+
+#      Category        Action of TIS side                   Description                       Remark
+1.   Initialization   Device authentication     Device authentication from KRA. 3rd
+                                                party users must complete an eTIMS
+                                                service request.
+2. Basic data                                   TIS application can update common
+     management       Get code list             standard codes managed by KRA
+                                                from eTIMS API server
+                                                Server TIS application can update
+                      Get item classification
+                                                item classification codes managed by
+                      list
+                                                KRA from eTIMS API server.
+                                                TIS application can get information
+                      Get PIN information
+                                                on a certain PIN from eTIMS server
+                                                TIS application can update the
+                      Get the branch list of
+                                                branch office information of head
+                      head office(store)
+                                                office into eTIMS API server.
+                                                TIS application gets eTIMS
+                      Get notice list from
+                                                notification managed by KRA from
+                      eTIMS API server
+                                                eTIMS API server.
+3. Branch             Send customer
+                                                TIS application sends customer
+     information                                information of the head & branch
+                      information
+     management                                 offices into eTIMS Server.
+                                                TIS application sends branch user
+                      Send branch user
+                                                account information to upload it in
+                      account
+                                                eTIMS Server.
+                                                TIS application sends insurance           Applied to
+                      Send branch
+                                                information of the head & branch          Pharmacy only.
+                      insurance information
+                                                offices and update it in eTIMS Server     Not Mandatory
+4. Item                                         TIS application sends item                Head
+     management                                 information (name, unit price, bar        office(store) role
+                      Send Item
+                                                code and etc.) of the head or branch
+                      information
+                                                offices and updates them in eTIMS
+                                                Server
+                                                TIS application sends item                Head
+                                                composition information of the head       office(store) role
+                      Send Item
+                                                or branch store and updates them in
+                      Composition
+                                                eTIMS API server. Item composition
+                      information
+                                                is used to calculate BOM (Bill of
+                                                Material) of the final processed items.
+                                                TIS application gets item information
+                      Get item list             updated to eTIMS Server by TIS
+                                                application.
+5. Imported item      Get imported item         TIS application gets imported item        Head
+     management       information               information managed by KRA                office(store) role
+                                                customs department. All the import
+                                                declaration result of an owner of TIS
+                                                application is provided from eTIMS
+                                                Server.
+                      Send (converted)          TIS shall convert the received            Head
+                      imported item             imported item information into            office(store) role
+                      information               eTIMS standard item information for
+                                                sales (inventory).
+
+                                                TIS application sends converted
+                                                imported items information to eTIMS
+
+
+                                                                                                          12
+KENYA REVENUE AUTHORITY                                                                     PUBLIC
+
+
+#      Category    Action of TIS side                     Description                    Remark
+                                            API server.
+6. Sales           Send sales transaction   TIS application sends sales
+     management    and sales Invoice        transaction and sales invoice
+                   information              information to eTIMS API server.
+                                            The sales transaction information
+                                            must proceed sales Invoice
+                                            information for VSCU.
+                   Send sales Invoice       TIS application sends sales invoice
+                   information and get      information to the VSCU and gets
+                   Internal Data and        Receipt counters, Receipt Date,
+                   Signature Data           Internal Data and Signature Data.
+                   (VSCU Only)              Every sales Invoice information must
+                                            have its sales transaction information
+                                            sent in advance to eTIMS server.
+7.   Purchase      Get purchase             TIS application gets purchase            Head
+     transaction   transaction              transaction information which were       office(store) role
+     management    information              registered to eTIMS Server by a seller
+                                            under TIS application owner’s PIN.
+                   Send purchase            TIS application sends purchase           Head
+                   transaction              transaction confirmation of received     office(store) role
+                   confirmation             purchase transaction information to
+                                            eTIMS Server.
+8. Stock           Send stock in/out        When adjusting inventory quantities
+     management    information              or selling items at each branches or
+                                            head office, TIS application sends the
+                                            stock in/out information to the
+                                            eTIMS Server.
+
+                                            Every stock in/out information must
+                                            have its sales Invoice information
+                                            sent in advance to eTIMS Server.
+                   Send stock inventory     If stock inventory information is
+                   information              changed due to stock IN / OUT,
+                                            Server TIS application sends the
+                                            changed information of the inventory
+                                            master and stores it in the eTIMS API
+                                            server.
+
+                                            Every stock inventory information
+                                            must have its stock in/out
+                                            information sent in advance to eTIMS
+                                            Server.
+                   Receive stock from       Branch office should request for
+                   head office.             inventory coming from head office.
+
+
+
+
+                                                                                                     13
+

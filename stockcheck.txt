@@ -1,0 +1,224 @@
+# Stock Check Module — Backend File Plan
+
+Everything needed to power the frontend page, based on the workflow in the Stock Check spec (draft → count → variance → review → adjust → close). Paths assume your existing `server/src/{models,controllers,routes,services}` layout — adjust to match your actual tree.
+
+---
+
+## At a glance
+
+| File | Type | Purpose |
+|---|---|---|
+| `models/StockCheck.model.ts` | Model | Header record — one per stock check run |
+| `models/StockCheckItem.model.ts` | Model | One row per product counted within a stock check |
+| `models/StockAdjustment.model.ts` | Model | Inventory adjustment created after approval |
+| `models/StockCheckLog.model.ts` | Model | Immutable audit trail entry |
+| `services/stockCheck.service.ts` | Service | Numbering, variance calc, adjustment + notification logic |
+| `controllers/stockCheck.controller.ts` | Controller | Request handlers for every endpoint |
+| `routes/stockCheck.routes.ts` | Routes | Maps HTTP verbs/paths to controller functions |
+| `validators/stockCheck.validation.ts` | Validation | Request body schemas (zod/joi/express-validator) |
+| `app.ts` / `index.ts` (edit) | Wiring | Register `app.use('/api/stock/stock-checks', stockCheckRoutes)` |
+
+---
+
+## 1. `models/StockCheck.model.ts`
+
+Header document. One per stock check run, tenant-scoped.
+
+```
+stockCheckNumber   string   unique, auto-generated (e.g. SC-2026-0001)
+tenantId           ObjectId  ref Tenant (via existing multi-tenant plugin/middleware)
+warehouseId        ObjectId  ref Warehouse
+checkType          enum      full | partial | cycle | emergency
+status             enum      draft | assigned | in_progress | submitted |
+                              under_review | approved | adjusted | closed
+scope              object    { categoryIds?, shelfIds?, productIds? }  // for partial/cycle
+assignedCounters    ObjectId[] ref User
+supervisorId        ObjectId  ref User
+createdBy           ObjectId  ref User
+approvedBy           ObjectId  ref User, optional
+startTime / endTime  Date, optional
+itemsTotal           number   denormalized count, kept in sync by service
+itemsCounted         number   denormalized count
+varianceCount        number   denormalized count
+totalVarianceValue   number   denormalized sum (for dashboard cards)
+notes                string
+timestamps           createdAt / updatedAt
+```
+Indexes: `{ tenantId, status }`, `{ tenantId, warehouseId }`, unique on `stockCheckNumber`.
+
+---
+
+## 2. `models/StockCheckItem.model.ts`
+
+One row per product per stock check. Bulk-inserted when a stock check is created from its scope.
+
+```
+stockCheckId        ObjectId  ref StockCheck
+productId            ObjectId  ref Product
+batchNumber          string, optional
+expiryDate           Date, optional
+storageLocation      string   bin/shelf
+systemQty            number   snapshot at check creation
+physicalQty          number, optional  // null until counted
+difference           number   auto: physicalQty - systemQty
+variancePercentage    number   auto
+status               enum      pending | match | variance
+varianceReason        enum      counting_error | damaged | expired | theft |
+                                 misplaced | returned | supplier_error |
+                                 packaging_difference | wrong_transaction |
+                                 unknown | other
+varianceComment       string, optional  // required if reason = other
+remarks               string, optional
+countedBy             ObjectId  ref User, optional
+countedAt             Date, optional
+attachments            string[]  // uploaded photo/doc URLs
+recountOf              ObjectId  ref StockCheckItem, optional  // links a recount to the original
+timestamps
+```
+Indexes: `{ stockCheckId, productId }` unique (unless recount flow allows duplicates), `{ stockCheckId, status }`.
+
+---
+
+## 3. `models/StockAdjustment.model.ts`
+
+Created per item once a stock check is approved.
+
+```
+stockCheckItemId   ObjectId  ref StockCheckItem
+productId          ObjectId  ref Product
+warehouseId        ObjectId  ref Warehouse
+oldQty              number
+newQty              number
+adjustmentQty       number   // newQty - oldQty
+adjustmentType      enum     increase | decrease
+approvedBy          ObjectId ref User
+approvalDate        Date
+timestamps
+```
+
+---
+
+## 4. `models/StockCheckLog.model.ts`
+
+Append-only. Never updated or deleted — write on every state-changing action.
+
+```
+stockCheckId   ObjectId ref StockCheck
+action         enum     created | assigned | counting_started | item_counted |
+                        recount_requested | submitted | reviewed | approved |
+                        rejected | adjusted | closed
+userId         ObjectId ref User
+details        object   // freeform: { itemId?, from?, to?, reason? }
+ipAddress      string, optional
+timestamps     createdAt only
+```
+
+---
+
+## 5. `services/stockCheck.service.ts`
+
+Business logic kept out of the controller so it's reusable/testable.
+
+```
+generateStockCheckNumber(tenantId)          → "SC-2026-0001"
+createStockCheckFromScope(input)            → snapshots systemQty per product into StockCheckItem[]
+recordCount(itemId, physicalQty, userId)     → sets difference/variancePercentage/status,
+                                                 requires varianceReason if difference ≠ 0
+checkLargeVarianceAlert(item)                → notifies supervisor if |variancePercentage| > threshold
+recalculateStockCheckTotals(stockCheckId)    → updates itemsCounted/varianceCount/totalVarianceValue on StockCheck
+submitForReview(stockCheckId, userId)        → status → submitted, blocks if uncounted items remain
+approve(stockCheckId, userId)                → status → approved, writes StockCheckLog
+reject(stockCheckId, userId, reason)         → status → in_progress (recount), writes StockCheckLog
+applyAdjustments(stockCheckId, userId)       → creates StockAdjustment[] + updates Product.systemQty,
+                                                 status → adjusted
+closeStockCheck(stockCheckId, userId)        → status → closed, locks all items from further edits
+notify(event, stockCheck)                    → counter/supervisor/manager/finance notifications per spec §16
+```
+
+---
+
+## 6. `controllers/stockCheck.controller.ts`
+
+Thin — validates via middleware, calls the service, shapes the response as `{ success, data }` to match your existing controllers.
+
+```
+listStockChecks(req, res)          GET    /              filter by status/warehouse/date, tenant-scoped
+getStockCheck(req, res)            GET    /:id            includes items unless ?itemsPage= is used
+createStockCheck(req, res)         POST   /                warehouse, checkType, scope, assignedCounters, supervisor
+assignCounters(req, res)           POST   /:id/assign
+startCounting(req, res)            POST   /:id/start        status → in_progress, sets startTime
+listItems(req, res)                GET    /:id/items         paginated product counting screen data
+recordItemCount(req, res)          PATCH  /:id/items/:itemId  physicalQty, varianceReason, remarks, attachments
+requestRecount(req, res)           POST   /:id/items/:itemId/recount
+submitStockCheck(req, res)         POST   /:id/submit         sets endTime
+reviewStockCheck(req, res)         POST   /:id/review          approve | reject + comment
+applyAdjustments(req, res)         POST   /:id/adjust
+closeStockCheck(req, res)          POST   /:id/close
+getAuditTrail(req, res)            GET    /:id/logs
+getReports(req, res)               GET    /reports/:type      stock-count | variance | adjustment | user-performance
+getKpis(req, res)                  GET    /kpis                for a future analytics dashboard
+```
+
+---
+
+## 7. `routes/stockCheck.routes.ts`
+
+```ts
+import { Router } from "express"
+import * as controller from "../controllers/stockCheck.controller"
+import { requireAuth, requireRole } from "../middleware/auth" // match your existing names
+import { validate } from "../middleware/validate"
+import * as schema from "../validators/stockCheck.validation"
+
+const router = Router()
+
+router.use(requireAuth) // tenant + user resolved from token, same as your other stock routes
+
+router.get("/", controller.listStockChecks)
+router.get("/reports/:type", controller.getReports)
+router.get("/kpis", controller.getKpis)
+router.post("/", requireRole(["admin", "warehouse_manager", "supervisor"]), validate(schema.createStockCheck), controller.createStockCheck)
+router.get("/:id", controller.getStockCheck)
+router.post("/:id/assign", requireRole(["admin", "supervisor"]), controller.assignCounters)
+router.post("/:id/start", controller.startCounting)
+router.get("/:id/items", controller.listItems)
+router.patch("/:id/items/:itemId", validate(schema.recordCount), controller.recordItemCount)
+router.post("/:id/items/:itemId/recount", requireRole(["admin", "supervisor"]), controller.requestRecount)
+router.post("/:id/submit", controller.submitStockCheck)
+router.post("/:id/review", requireRole(["admin", "supervisor", "warehouse_manager"]), controller.reviewStockCheck)
+router.post("/:id/adjust", requireRole(["admin", "warehouse_manager"]), controller.applyAdjustments)
+router.post("/:id/close", requireRole(["admin", "warehouse_manager"]), controller.closeStockCheck)
+router.get("/:id/logs", controller.getAuditTrail)
+
+export default router
+```
+
+---
+
+## 8. `validators/stockCheck.validation.ts`
+
+Request-shape checks only (business rules like "reason required if difference ≠ 0" live in the service).
+
+```
+createStockCheck   { warehouseId, checkType, scope?, assignedCounters[], supervisorId, notes? }
+recordCount        { physicalQty: number, varianceReason?: string, varianceComment?: string, remarks?, attachments?[] }
+```
+
+---
+
+## 9. Wiring
+
+In your main router file (wherever `/api/stock/invoices` is registered):
+
+```ts
+import stockCheckRoutes from "./routes/stockCheck.routes"
+app.use("/api/stock/stock-checks", stockCheckRoutes)
+```
+
+---
+
+## Notes matching the spec
+
+- **Business rules (§19)** — enforce in the service, not the controller: no edits after approval, only assigned counters can record counts, mandatory reason on variance, large-variance auto-alert, lock product stock movements while `status = in_progress` (or record concurrent transactions for reconciliation).
+- **Audit trail (§14)** — write a `StockCheckLog` entry from inside the service on every state change, not from the controller, so it can't be bypassed.
+- **Denormalized totals** on `StockCheck` (`itemsCounted`, `varianceCount`, `totalVarianceValue`) exist purely so the dashboard list/stats cards you already have don't need to aggregate `StockCheckItem` on every list request — recalculate them in the service whenever an item changes.

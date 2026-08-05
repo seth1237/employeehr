@@ -1,0 +1,11 @@
+Category name,Category Code,Category description,Is Menu,Is Default Menu,Status,Order No,Options
+DENTAL CONSUMABLE,DENTAL CONSUMABLE,DENTAL CONSUMABLE,YES,YES,active,6,Options Edit on/off Category Dimensions Delete
+HOSPITAL FURNITURE,HOSPITAL FURNITURE,HOSPITAL FURNITURE,YES,YES,active,3,Options Edit on/off Category Dimensions Delete
+HOSPITAL LINEN,HOSPITAL LINEN,HOSPITAL LINEN,YES,YES,active,6,Options Edit on/off Category Dimensions Delete
+INSTRUMENTS,INSTRUMENTS,INSTRUMENTS,YES,YES,active,4,Options Edit on/off Category Dimensions Delete
+INSTRUMENTS,INSTRUMENTS,INSTRUMENTS,YES,YES,active,7,Options Edit on/off Category Dimensions Delete
+LABORATORY CONSUMABLES,LABORATORY CONSUMABLES,LABORATORY CONSUMABLES,YES,YES,active,1,Options Edit on/off Category Dimensions Delete
+MATERNITY CONSUMABLE,MATERNITY CONSUMABLE,MATERNITY CONSUMABLE,YES,YES,active,6,Options Edit on/off Category Dimensions Delete
+MEDICAL EQUIPMENT,MEDICAL EQUIPMENT,MEDICAL EQUIPMENT,YES,YES,active,2,Options Edit on/off Category Dimensions Delete
+NON PHARMACEUTICALS,NON PHARMACEUTICALS,NON PHARMACEUTICALS,YES,YES,active,5,Options Edit on/off Category Dimensions Delete
+THEATRE,THEATRE,THEATRE,YES,YES,active,10,Options Edit on/off Category Dimensions Delete

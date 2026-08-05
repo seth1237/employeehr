@@ -16,17 +16,7 @@ export class WebRTCSignalingService {
   constructor(server: HTTPServer) {
     this.io = new SocketIOServer(server, {
       cors: {
-        origin: [
-          "http://localhost:3000",
-          "http://127.0.0.1:3000",
-          "https://employeehr.vercel.app",
-          "https://hr.codewithseth.co.ke",
-          "https://backend.codewithseth.co.ke",
-          "https://hrapi.codewithseth.co.ke",
-          "https://elevatehub.co.ke",
-          "https://www.elevatehub.co.ke",
-          process.env.FRONTEND_URL,
-        ].filter(Boolean) as string[],
+        origin: true, // public — allow any origin
         credentials: true,
       },
     })

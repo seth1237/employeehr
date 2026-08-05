@@ -94,38 +94,26 @@ app.use('/uploads', (_req, res, next) => {
   next()
 }, express.static(path.join(__dirname, '../uploads')))
 
-// Core middleware
-// Allow local dev and production frontend origins
+// Core middleware — public CORS (all origins)
 app.use(
   cors({
-    origin: (origin, callback) => {
-      const allowAllOrigins = String(process.env.ALLOW_ALL_ORIGINS || "true").toLowerCase() === "true"
-      if (allowAllOrigins) return callback(null, true)
-
-      const allowed = [
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "https://employeehr.vercel.app",
-        "https://hpapi.codewithseth.co.ke",
-        "https://hrapi.codewithseth.co.ke",
-        "https://backend.codewithseth.co.ke",
-        "https://hr.codewithseth.co.ke",
-        "https://elevatehub.co.ke",
-        "https://www.elevatehub.co.ke",
-        process.env.FRONTEND_URL,
-      ].filter(Boolean)
-
-      // Allow non-browser requests (no origin)
-      if (!origin) return callback(null, true)
-
-      if (allowed.some((o) => origin === o)) {
-        return callback(null, true)
-      }
-      return callback(new Error("Not allowed by CORS"))
-    },
+    origin: true, // reflect request Origin (works with credentials)
     credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "Accept",
+      "Origin",
+      "Cache-Control",
+      "Pragma",
+    ],
+    exposedHeaders: ["Content-Disposition", "Content-Length"],
+    optionsSuccessStatus: 204,
   }),
 )
+app.options("*", cors({ origin: true, credentials: true }))
 app.use(express.json({ limit: "10mb" }))
 app.use(express.urlencoded({ extended: true, limit: "10mb" }))
 

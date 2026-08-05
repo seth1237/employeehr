@@ -3,6 +3,7 @@
 
 const DEFAULT_LOCAL = "http://localhost:5010"
 const DEFAULT_PROD = "https://backend.codewithseth.co.ke"
+const ELEVATEHUB_API = "https://hrapi.codewithseth.co.ke"
 
 export const API_URL = (() => {
   // In browser, inspect the hostname
@@ -14,9 +15,14 @@ export const API_URL = (() => {
       return DEFAULT_LOCAL
     }
 
+    // Elevate Hub production frontend
+    if (host === "elevatehub.co.ke" || host === "www.elevatehub.co.ke") {
+      return process.env.NEXT_PUBLIC_API_URL || ELEVATEHUB_API
+    }
+
     // Production hostnames
     if (host.endsWith("codewithseth.co.ke") || host.endsWith(".vercel.app")) {
-      return DEFAULT_PROD
+      return process.env.NEXT_PUBLIC_API_URL || DEFAULT_PROD
     }
 
     // If the browser is on an unknown host, prefer the explicit env only if present.

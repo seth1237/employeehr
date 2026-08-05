@@ -22,7 +22,11 @@ export class WebRTCSignalingService {
           "https://employeehr.vercel.app",
           "https://hr.codewithseth.co.ke",
           "https://backend.codewithseth.co.ke",
-        ],
+          "https://hrapi.codewithseth.co.ke",
+          "https://elevatehub.co.ke",
+          "https://www.elevatehub.co.ke",
+          process.env.FRONTEND_URL,
+        ].filter(Boolean) as string[],
         credentials: true,
       },
     })

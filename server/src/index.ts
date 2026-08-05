@@ -107,8 +107,11 @@ app.use(
         "http://127.0.0.1:3000",
         "https://employeehr.vercel.app",
         "https://hpapi.codewithseth.co.ke",
+        "https://hrapi.codewithseth.co.ke",
         "https://backend.codewithseth.co.ke",
         "https://hr.codewithseth.co.ke",
+        "https://elevatehub.co.ke",
+        "https://www.elevatehub.co.ke",
         process.env.FRONTEND_URL,
       ].filter(Boolean)
 

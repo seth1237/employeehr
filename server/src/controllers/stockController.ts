@@ -2553,13 +2553,13 @@ export class StockController {
       for (let index = 0; index < rows.length; index += 1) {
         try {
           const row = rows[index];
-          let sourceName = cell(row, [
+          const rawName = cell(row, [
             "client_name",
             "Client Name",
             "sourceName",
             "Source Name",
           ]);
-          let sourceNumber = cell(row, [
+          const rawNumber = cell(row, [
             "client_number",
             "Client Number",
             "sourceNumber",
@@ -2567,7 +2567,7 @@ export class StockController {
             "client_phone",
             "Client Phone",
           ]);
-          let sourceLocation = cell(row, [
+          const rawLocation = cell(row, [
             "client_location",
             "Client Location",
             "Region/Location",
@@ -2577,24 +2577,22 @@ export class StockController {
             "Client Address",
           ]);
 
-          if (!sourceName && lastSourceName) sourceName = lastSourceName;
-          if (!sourceNumber && lastSourceNumber) sourceNumber = lastSourceNumber;
-          if (!sourceLocation && lastSourceLocation)
-            sourceLocation = lastSourceLocation;
+          // Continuation rows leave facility columns blank (export/sample layout).
+          // Also inherit location when a new facility row omitted Region/Location.
+          const isContinuation = !rawName && Boolean(lastSourceName);
+          let sourceName = rawName || (isContinuation ? lastSourceName : "");
+          let sourceNumber =
+            rawNumber || (isContinuation ? lastSourceNumber : "");
+          let sourceLocation = rawLocation || lastSourceLocation || "";
 
-          if (!sourceName || !sourceNumber || !sourceLocation) {
-            errors.push(
-              `Row ${index + 1}: Missing required fields (Client Name, Client Number, Region/Location). Fill them on the first contact row for each facility.`,
-            );
-            continue;
-          }
-
-          lastSourceName = sourceName;
-          lastSourceNumber = sourceNumber;
-          lastSourceLocation = sourceLocation;
-
-          const legalName = cell(row, ["legalName", "Legal Name"]) || sourceName;
-          const kraPin = cell(row, ["kraPin", "KRA PIN", "pin_no", "PIN No"]).toUpperCase();
+          const legalName =
+            cell(row, ["legalName", "Legal Name"]) || sourceName;
+          const kraPin = cell(row, [
+            "kraPin",
+            "KRA PIN",
+            "pin_no",
+            "PIN No",
+          ]).toUpperCase();
           const facilityEmail = cell(row, [
             "email",
             "Email",
@@ -2635,8 +2633,26 @@ export class StockController {
             "Active",
           ]);
 
-          const key = `${sourceName.toLowerCase()}|${sourceNumber.toLowerCase()}|${sourceLocation.toLowerCase()}`;
-          let draft = drafts.get(key);
+          // Sheets often leave Client Number blank — use this row's contact phone.
+          if ((!sourceNumber || sourceNumber === "n/a") && contactPhone) {
+            sourceNumber = contactPhone;
+          }
+          if (!sourceNumber) sourceNumber = "n/a";
+
+          if (!sourceName || !sourceLocation) {
+            errors.push(
+              `Row ${index + 1}: Missing Client Name or Region/Location. Fill them on the first contact row for each facility.`,
+            );
+            continue;
+          }
+
+          lastSourceName = sourceName;
+          lastSourceNumber = sourceNumber;
+          lastSourceLocation = sourceLocation;
+
+          // Group by facility name + location so blank Client Number sheets still merge contacts.
+          const facilityKey = `${sourceName.toLowerCase()}|${sourceLocation.toLowerCase()}`;
+          let draft = drafts.get(facilityKey);
           if (!draft) {
             draft = {
               sourceName,
@@ -2650,7 +2666,7 @@ export class StockController {
               contacts: [],
               rowIndexes: [index + 1],
             };
-            drafts.set(key, draft);
+            drafts.set(facilityKey, draft);
           } else {
             draft.rowIndexes.push(index + 1);
             if (legalName) draft.legalName = legalName;
@@ -2659,6 +2675,13 @@ export class StockController {
             if (branchId) draft.branchId = branchId;
             if (legacyContactPerson)
               draft.legacyContactPerson = legacyContactPerson;
+            if (
+              (draft.sourceNumber === "n/a" || !draft.sourceNumber) &&
+              sourceNumber &&
+              sourceNumber !== "n/a"
+            ) {
+              draft.sourceNumber = sourceNumber;
+            }
           }
 
           if (contactName) {

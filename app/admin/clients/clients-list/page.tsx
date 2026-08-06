@@ -1154,7 +1154,8 @@ export default function AccountsClientsPage() {
               Download the sample CSV — it includes facilities with{" "}
               <strong>multiple contact people</strong>. Required on the first
               row of each facility:{" "}
-              <strong>Client Name, Client Number, Region/Location</strong>.
+              <strong>Client Name, Region/Location</strong>. Client Number is
+              optional (Contact Phone is used when it is blank).
             </p>
             <div className="rounded-md border bg-muted/30 p-3 text-xs space-y-2">
               <p className="font-medium text-foreground">
@@ -1198,7 +1199,17 @@ export default function AccountsClientsPage() {
                     const res = await stockApi.bulkUploadClients(file);
                     if (!res?.success)
                       throw new Error(res?.message || "Upload failed");
-                    window.alert(res?.message || "Upload complete");
+                    const detailErrors = Array.isArray(res?.data?.errors)
+                      ? res.data.errors.filter(Boolean)
+                      : [];
+                    const summary =
+                      res?.message ||
+                      `Upload complete: ${res?.data?.createdCount || 0} created, ${res?.data?.updatedCount || 0} updated`;
+                    window.alert(
+                      detailErrors.length > 0
+                        ? `${summary}\n\nFirst issues:\n- ${detailErrors.slice(0, 8).join("\n- ")}`
+                        : summary,
+                    );
                     await loadData({ silent: true });
                     setShowBulkUploadPanel(false);
                   } catch (err: any) {

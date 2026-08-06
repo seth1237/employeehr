@@ -6,6 +6,8 @@ export interface IClientContact {
   phone?: string
   email?: string
   notes?: string
+  /** When true, this person is the active facility contact shown in CRM lists */
+  isActive?: boolean
 }
 
 export interface IStockClient {
@@ -35,6 +37,7 @@ const clientContactSchema = new Schema<IClientContact>(
     phone: { type: String, trim: true },
     email: { type: String, trim: true },
     notes: { type: String, trim: true },
+    isActive: { type: Boolean, default: false },
   },
   { _id: true },
 )

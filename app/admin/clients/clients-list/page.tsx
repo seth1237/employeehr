@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { stockApi } from "@/lib/api";
+import { useEffect, useMemo, useRef, useState } from "react";
+import api, { stockApi } from "@/lib/api";
 import { runDataLoad, type SilentLoadOptions } from "@/lib/silent-load";
 import { PageLoadingSkeleton } from "@/components/admin/ui/page-states";
 import API_URL from "@/lib/apiBase";
@@ -10,7 +10,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { useRef } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Dialog,
   DialogContent,
@@ -19,6 +26,16 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { generateStatementOfAccountPdf } from "@/lib/stock-document-pdf";
+import {
+  Download,
+  FileText,
+  MessageSquare,
+  PhoneCall,
+  Plus,
+  RefreshCw,
+  Users,
+} from "lucide-react";
+import * as XLSX from "xlsx";
 
 interface TenantBranding {
   primaryColor?: string;
@@ -37,6 +54,22 @@ interface ClientActivity {
   externalReference?: string;
 }
 
+interface ClientContact {
+  role: string;
+  name: string;
+  phone?: string;
+  email?: string;
+  notes?: string;
+  isActive?: boolean;
+}
+
+interface ClientGroup {
+  _id: string;
+  name: string;
+  description?: string;
+  memberKeys?: string[];
+}
+
 interface AccountsClientRow {
   key: string;
   client: {
@@ -44,9 +77,11 @@ interface AccountsClientRow {
     number: string;
     location: string;
     contactPerson?: string;
+    email?: string;
   };
   quotationsCount: number;
   quotationsValue: number;
+  pendingQuotationsCount?: number;
   invoicesCount: number;
   purchasesValue: number;
   paidAmount: number;
@@ -55,26 +90,11 @@ interface AccountsClientRow {
   salesValue: number;
   lastActivityAt?: string;
   activities: ClientActivity[];
+  contacts?: ClientContact[];
+  groupIds?: string[];
 }
 
-interface SavedClientRow {
-  key: string;
-  client: {
-    name: string;
-    number: string;
-    location: string;
-    contactPerson?: string;
-  };
-  quotationsCount: number;
-  quotationsValue: number;
-  invoicesCount: number;
-  purchasesValue: number;
-  paidAmount: number;
-  debtAmount: number;
-  salesCount: number;
-  salesValue: number;
-  lastActivityAt?: string;
-  activities: ClientActivity[];
+interface SavedClientRow extends AccountsClientRow {
   isSavedClient?: boolean;
 }
 
@@ -93,13 +113,48 @@ function hexToRgba(hex: string, alpha: number) {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+/** Prefer explicitly active contacts; fall back to legacy contactPerson. */
+function getActiveContacts(row: SavedClientRow): ClientContact[] {
+  const actives = (row.contacts || []).filter((c) => c.isActive);
+  if (actives.length > 0) return actives;
+  if (row.client.contactPerson) {
+    return [
+      {
+        role: "Contact",
+        name: row.client.contactPerson,
+        phone: undefined,
+        email: row.client.email,
+        isActive: true,
+      },
+    ];
+  }
+  return (row.contacts || []).slice(0, 1);
+}
+
+function pendingQuotationsFor(row: SavedClientRow) {
+  if (typeof row.pendingQuotationsCount === "number") {
+    return row.pendingQuotationsCount;
+  }
+  return (row.activities || []).filter(
+    (a) =>
+      a.type === "quotation" &&
+      (a.status === "draft" || a.status === "pending_approval"),
+  ).length;
+}
+
 export default function AccountsClientsPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState("name_asc");
+  const [locationFilter, setLocationFilter] = useState("all");
+  const [clientGroups, setClientGroups] = useState<ClientGroup[]>([]);
+  const [groupFilter, setGroupFilter] = useState("all");
+  const [selectedClientKeys, setSelectedClientKeys] = useState<string[]>([]);
   const [rows, setRows] = useState<SavedClientRow[]>([]);
   const [selectedClientKey, setSelectedClientKey] = useState("");
   const [savingClient, setSavingClient] = useState(false);
+  const [savingCrm, setSavingCrm] = useState(false);
   const [newClient, setNewClient] = useState({
     name: "",
     number: "",
@@ -108,6 +163,40 @@ export default function AccountsClientsPage() {
   });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [uploadingClients, setUploadingClients] = useState(false);
+  const [showCreateGroupDialog, setShowCreateGroupDialog] = useState(false);
+  const [newGroupName, setNewGroupName] = useState("");
+  const [newGroupDescription, setNewGroupDescription] = useState("");
+  const [addToGroupId, setAddToGroupId] = useState("");
+  const [showContactsDialog, setShowContactsDialog] = useState(false);
+  const [contactRoles, setContactRoles] = useState<string[]>([
+    "Doctor",
+    "Lab Technician",
+    "Nurse",
+    "Procurement",
+    "Facility Manager",
+    "Accountant",
+    "Reception",
+    "Other",
+  ]);
+  const [contactsDraft, setContactsDraft] = useState<ClientContact[]>([]);
+  const [contactForm, setContactForm] = useState({
+    role: "Doctor",
+    customRole: "",
+    name: "",
+    phone: "",
+    email: "",
+    notes: "",
+    isActive: false,
+  });
+  const [showCallDialog, setShowCallDialog] = useState(false);
+  const [showHistoryDialog, setShowHistoryDialog] = useState(false);
+  const [callForm, setCallForm] = useState({
+    note: "",
+    status: "Interested",
+    followUpDate: "",
+  });
+  const [clientHistory, setClientHistory] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   const [statementModalOpen, setStatementModalOpen] = useState(false);
   const [statementStartDate, setStatementStartDate] = useState("");
@@ -213,10 +302,22 @@ export default function AccountsClientsPage() {
       await runDataLoad(
         setLoading,
         async () => {
-          const [accountsResponse, clientsResponse, brandingResult] =
+          const [
+            accountsResponse,
+            clientsResponse,
+            groupsResponse,
+            rolesResponse,
+            brandingResult,
+          ] =
             await Promise.all([
               stockApi.getAccountsClients(),
               stockApi.getSavedClients(),
+              stockApi
+                .getClientGroups()
+                .catch(() => ({ success: false, data: [] })),
+              stockApi
+                .getClientContactRoles()
+                .catch(() => ({ success: false, data: [] })),
               fetch(`${API_URL}/api/company/branding`, {
                 headers: { Authorization: `Bearer ${getToken()}` },
               }).catch(() => null),
@@ -231,6 +332,14 @@ export default function AccountsClientsPage() {
             }
           }
 
+          setClientGroups((groupsResponse?.data || []) as ClientGroup[]);
+          if (
+            Array.isArray(rolesResponse?.data) &&
+            rolesResponse.data.length > 0
+          ) {
+            setContactRoles(rolesResponse.data);
+          }
+
           const accountsRows = (accountsResponse.data || []) as AccountsClientRow[];
           const savedClients = (clientsResponse.data ||
             clientsResponse ||
@@ -239,23 +348,60 @@ export default function AccountsClientsPage() {
             number: string;
             location: string;
             contactPerson?: string;
+            email?: string;
+            contacts?: ClientContact[];
+            groupIds?: string[];
           }>;
 
           const mergedMap = new Map<string, SavedClientRow>();
 
           for (const row of accountsRows) {
-            mergedMap.set(row.key, { ...row, isSavedClient: false });
+            mergedMap.set(row.key, {
+              ...row,
+              contacts: row.contacts || [],
+              groupIds: row.groupIds || [],
+              isSavedClient: false,
+            });
           }
 
           for (const client of savedClients) {
-            const key = `${String(client.name || "")
-              .trim()
-              .toLowerCase()}|${String(client.number || "")
-              .trim()
-              .toLowerCase()}|${String(client.location || "")
-              .trim()
-              .toLowerCase()}`;
-            if (!key || mergedMap.has(key)) continue;
+            const key =
+              (client as any).key ||
+              [
+                String(client.name || "")
+                  .trim()
+                  .toLowerCase()
+                  .replace(/\s+/g, " "),
+                String(client.number || "")
+                  .trim()
+                  .toLowerCase()
+                  .replace(/\s+/g, " "),
+                String(client.location || "")
+                  .trim()
+                  .toLowerCase()
+                  .replace(/\s+/g, " "),
+              ].join("|");
+            if (!key || key === "||") continue;
+
+            if (mergedMap.has(key)) {
+              const existing = mergedMap.get(key)!;
+              mergedMap.set(key, {
+                ...existing,
+                client: {
+                  ...existing.client,
+                  contactPerson:
+                    client.contactPerson || existing.client.contactPerson,
+                  email: client.email || existing.client.email,
+                },
+                contacts:
+                  (client.contacts && client.contacts.length > 0
+                    ? client.contacts
+                    : existing.contacts) || [],
+                groupIds: client.groupIds || existing.groupIds || [],
+                isSavedClient: true,
+              });
+              continue;
+            }
 
             mergedMap.set(key, {
               key,
@@ -264,9 +410,11 @@ export default function AccountsClientsPage() {
                 number: String(client.number || "").trim(),
                 location: String(client.location || "").trim(),
                 contactPerson: client.contactPerson,
+                email: client.email,
               },
               quotationsCount: 0,
               quotationsValue: 0,
+              pendingQuotationsCount: 0,
               invoicesCount: 0,
               purchasesValue: 0,
               paidAmount: 0,
@@ -275,6 +423,8 @@ export default function AccountsClientsPage() {
               salesValue: 0,
               lastActivityAt: undefined,
               activities: [],
+              contacts: client.contacts || [],
+              groupIds: client.groupIds || [],
               isSavedClient: true,
             });
           }
@@ -296,26 +446,516 @@ export default function AccountsClientsPage() {
     loadData();
   }, []);
 
+  const locationOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const row of rows) {
+      const loc = String(row.client?.location || "").trim();
+      if (loc) set.add(loc);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [rows]);
+
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return rows;
+    let result = [...rows];
 
-    return rows.filter((row) =>
-      [
-        row.client?.name,
-        row.client?.number,
-        row.client?.location,
-        row.client?.contactPerson,
-      ]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(q)),
-    );
-  }, [rows, search]);
+    if (groupFilter !== "all") {
+      const group = clientGroups.find(
+        (candidate) => String(candidate._id) === groupFilter,
+      );
+      const memberKeys = new Set((group?.memberKeys || []).map(String));
+      result = result.filter((row) => memberKeys.has(row.key));
+    }
+
+    if (locationFilter !== "all") {
+      result = result.filter(
+        (row) =>
+          String(row.client.location || "").trim().toLowerCase() ===
+          locationFilter.toLowerCase(),
+      );
+    }
+
+    if (q) {
+      result = result.filter(
+        (row) =>
+          [
+            row.client?.name,
+            row.client?.number,
+            row.client?.location,
+            row.client?.contactPerson,
+            row.client?.email,
+          ]
+            .filter(Boolean)
+            .some((value) => String(value).toLowerCase().includes(q)) ||
+          (row.contacts || []).some((contact) =>
+            [contact.name, contact.role, contact.phone, contact.email]
+              .filter(Boolean)
+              .some((value) => String(value).toLowerCase().includes(q)),
+          ),
+      );
+    }
+
+    result.sort((a, b) => {
+      if (sortBy === "name_desc") {
+        return b.client.name.localeCompare(a.client.name);
+      }
+      if (sortBy === "location") {
+        const loc = a.client.location.localeCompare(b.client.location);
+        return loc !== 0 ? loc : a.client.name.localeCompare(b.client.name);
+      }
+      if (sortBy === "pending_quotations") {
+        const diff = pendingQuotationsFor(b) - pendingQuotationsFor(a);
+        return diff !== 0 ? diff : a.client.name.localeCompare(b.client.name);
+      }
+      if (sortBy === "debt") {
+        const diff = Number(b.debtAmount || 0) - Number(a.debtAmount || 0);
+        return diff !== 0 ? diff : a.client.name.localeCompare(b.client.name);
+      }
+      if (sortBy === "quotations") {
+        const diff =
+          Number(b.quotationsCount || 0) - Number(a.quotationsCount || 0);
+        return diff !== 0 ? diff : a.client.name.localeCompare(b.client.name);
+      }
+      return a.client.name.localeCompare(b.client.name);
+    });
+    return result;
+  }, [rows, search, sortBy, groupFilter, locationFilter, clientGroups]);
 
   const selectedClient = useMemo(
     () => rows.find((row) => row.key === selectedClientKey) || null,
     [rows, selectedClientKey],
   );
+
+  const toggleClientSelected = (key: string) => {
+    setSelectedClientKeys((current) =>
+      current.includes(key)
+        ? current.filter((candidate) => candidate !== key)
+        : [...current, key],
+    );
+  };
+
+  const createGroup = async () => {
+    if (!newGroupName.trim()) {
+      window.alert("Group name is required");
+      return;
+    }
+    try {
+      setSavingCrm(true);
+      const response = await stockApi.createClientGroup({
+        name: newGroupName.trim(),
+        description: newGroupDescription.trim() || undefined,
+        memberKeys: selectedClientKeys,
+      });
+      if (response?.data) {
+        setClientGroups((current) => [response.data, ...current]);
+      } else {
+        await loadData({ silent: true });
+      }
+      setRows((current) =>
+        current.map((row) =>
+          selectedClientKeys.includes(row.key) && response?.data?._id
+            ? {
+                ...row,
+                groupIds: Array.from(
+                  new Set([...(row.groupIds || []), String(response.data._id)]),
+                ),
+              }
+            : row,
+        ),
+      );
+      setSelectedClientKeys([]);
+      setNewGroupName("");
+      setNewGroupDescription("");
+      setShowCreateGroupDialog(false);
+    } catch (error: any) {
+      window.alert(error?.message || "Failed to create group");
+    } finally {
+      setSavingCrm(false);
+    }
+  };
+
+  const addClientsToGroup = async (groupId: string, keys: string[]) => {
+    if (!groupId || keys.length === 0) return;
+    try {
+      setSavingCrm(true);
+      const response = await stockApi.addClientsToGroup(groupId, keys);
+      if (response?.data) {
+        setClientGroups((current) =>
+          current.map((group) =>
+            String(group._id) === groupId ? response.data : group,
+          ),
+        );
+        setRows((current) =>
+          current.map((row) =>
+            keys.includes(row.key)
+              ? {
+                  ...row,
+                  groupIds: Array.from(
+                    new Set([...(row.groupIds || []), groupId]),
+                  ),
+                }
+              : row,
+          ),
+        );
+      } else {
+        await loadData({ silent: true });
+      }
+      setSelectedClientKeys([]);
+      setAddToGroupId("");
+    } catch (error: any) {
+      window.alert(error?.message || "Failed to add clients to group");
+    } finally {
+      setSavingCrm(false);
+    }
+  };
+
+  const openContactsDialog = (row: SavedClientRow) => {
+    setSelectedClientKey(row.key);
+    setContactsDraft(
+      row.contacts?.length
+        ? row.contacts.map((contact) => ({
+            ...contact,
+            isActive: Boolean(contact.isActive),
+          }))
+        : row.client.contactPerson
+          ? [
+              {
+                role: "Facility Manager",
+                name: row.client.contactPerson,
+                phone: undefined,
+                email: row.client.email,
+                isActive: true,
+              },
+            ]
+          : [],
+    );
+    setContactForm({
+      role: "Doctor",
+      customRole: "",
+      name: "",
+      phone: "",
+      email: "",
+      notes: "",
+      isActive: false,
+    });
+    setShowContactsDialog(true);
+  };
+
+  const addContactToDraft = () => {
+    const role =
+      contactForm.role === "Other"
+        ? contactForm.customRole.trim()
+        : contactForm.role;
+    if (!role || !contactForm.name.trim()) {
+      window.alert("Role and name are required");
+      return;
+    }
+    const nextContact: ClientContact = {
+      role,
+      name: contactForm.name.trim(),
+      phone: contactForm.phone.trim() || undefined,
+      email: contactForm.email.trim() || undefined,
+      notes: contactForm.notes.trim() || undefined,
+      isActive: contactForm.isActive,
+    };
+    setContactsDraft((current) => [...current, nextContact]);
+    if (!contactRoles.includes(role)) {
+      setContactRoles((current) => [...current, role]);
+    }
+    setContactForm({
+      role: "Doctor",
+      customRole: "",
+      name: "",
+      phone: "",
+      email: "",
+      notes: "",
+      isActive: false,
+    });
+  };
+
+  const setDraftContactActive = (index: number, active: boolean) => {
+    setContactsDraft((current) =>
+      current.map((contact, i) =>
+        i === index ? { ...contact, isActive: active } : contact,
+      ),
+    );
+  };
+
+  const saveContacts = async () => {
+    if (!selectedClient) return;
+
+    const pendingRole =
+      contactForm.role === "Other"
+        ? contactForm.customRole.trim()
+        : contactForm.role;
+    let draft = [...contactsDraft];
+    if (contactForm.name.trim()) {
+      if (!pendingRole) {
+        window.alert("Role and name are required for the new contact");
+        return;
+      }
+      const pending: ClientContact = {
+        role: pendingRole,
+        name: contactForm.name.trim(),
+        phone: contactForm.phone.trim() || undefined,
+        email: contactForm.email.trim() || undefined,
+        notes: contactForm.notes.trim() || undefined,
+        isActive: contactForm.isActive,
+      };
+      draft = [...draft, pending];
+      setContactsDraft(draft);
+    }
+
+    if (draft.length === 0) {
+      window.alert("Add at least one contact before saving");
+      return;
+    }
+
+    const sourceName = String(selectedClient.client.name || "").trim();
+    const sourceNumber = String(selectedClient.client.number || "").trim();
+    const sourceLocation = String(selectedClient.client.location || "").trim();
+    if (!sourceName || !sourceNumber || !sourceLocation) {
+      window.alert(
+        "This client is missing a name, phone number, or location — contacts cannot be saved until those are set.",
+      );
+      return;
+    }
+
+    try {
+      setSavingCrm(true);
+      const res = await stockApi.saveClientContacts({
+        sourceName,
+        sourceNumber,
+        sourceLocation,
+        legalName: sourceName,
+        contacts: draft.map((contact) => ({
+          role: contact.role,
+          name: contact.name,
+          phone: contact.phone,
+          email: contact.email,
+          notes: contact.notes,
+          isActive: Boolean(contact.isActive),
+        })),
+      });
+      if (res && (res as any).success === false) {
+        throw new Error((res as any).message || "Failed to save contacts");
+      }
+
+      const savedContacts =
+        Array.isArray((res as any)?.data?.contacts) &&
+        (res as any).data.contacts.length > 0
+          ? ((res as any).data.contacts as ClientContact[])
+          : draft;
+
+      setContactsDraft(savedContacts);
+      setContactForm({
+        role: "Doctor",
+        customRole: "",
+        name: "",
+        phone: "",
+        email: "",
+        notes: "",
+        isActive: false,
+      });
+      setRows((current) =>
+        current.map((row) =>
+          row.key === selectedClient.key
+            ? {
+                ...row,
+                contacts: savedContacts,
+                isSavedClient: true,
+                client: {
+                  ...row.client,
+                  contactPerson:
+                    savedContacts
+                      .filter((c) => c.isActive)
+                      .map((c) => c.name)
+                      .join("; ") ||
+                    savedContacts[0]?.name ||
+                    row.client.contactPerson,
+                  email:
+                    savedContacts.find((c) => c.isActive)?.email ||
+                    savedContacts[0]?.email ||
+                    row.client.email,
+                },
+              }
+            : row,
+        ),
+      );
+      setShowContactsDialog(false);
+    } catch (error: any) {
+      window.alert(error?.message || "Failed to save contacts");
+    } finally {
+      setSavingCrm(false);
+    }
+  };
+
+  const openCallDialog = (quoteRequested = false) => {
+    setCallForm({
+      note: quoteRequested ? "Client requested a quotation." : "",
+      status: quoteRequested ? "Quote Requested" : "Interested",
+      followUpDate: "",
+    });
+    setShowCallDialog(true);
+  };
+
+  const saveCall = async () => {
+    if (!selectedClient || !callForm.note.trim()) return;
+    try {
+      setSavingCrm(true);
+      await api.crm.createConversation({
+        roomName: "Telesales",
+        note: callForm.note.trim(),
+        status: callForm.status,
+        followUpDate: callForm.followUpDate || undefined,
+        clientName: selectedClient.client.name,
+        clientPhone: selectedClient.client.number,
+      });
+      setShowCallDialog(false);
+    } catch (error: any) {
+      window.alert(error?.message || "Failed to log call");
+    } finally {
+      setSavingCrm(false);
+    }
+  };
+
+  const openHistoryDialog = async () => {
+    if (!selectedClient) return;
+    setClientHistory([]);
+    setShowHistoryDialog(true);
+    setLoadingHistory(true);
+    try {
+      const response = await api.crm.getConversations({
+        clientName: selectedClient.client.name,
+      });
+      setClientHistory(response?.data || []);
+    } catch (error: any) {
+      window.alert(error?.message || "Failed to load client history");
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const handleExportClientReport = () => {
+    const headers = [
+      "Client Name",
+      "Client Number",
+      "Region/Location",
+      "Contact Role",
+      "Contact Name",
+      "Contact Phone",
+      "Contact Email",
+      "Active",
+      "Groups",
+      "Source",
+    ];
+
+    const aoa: (string | number)[][] = [headers];
+    const merges: XLSX.Range[] = [];
+
+    for (const row of filteredRows) {
+      const memberships = clientGroups
+        .filter((group) => (group.memberKeys || []).includes(row.key))
+        .map((group) => group.name)
+        .join("; ");
+      const source = row.isSavedClient ? "Saved Client" : "From Accounts";
+
+      const contacts = (
+        (row.contacts || []).length > 0
+          ? row.contacts!
+          : row.client.contactPerson
+            ? [
+                {
+                  role: "Contact",
+                  name: row.client.contactPerson,
+                  phone: undefined,
+                  email: row.client.email,
+                  isActive: true,
+                },
+              ]
+            : []
+      ).filter((contact) => contact?.role && contact?.name);
+
+      const startRow = aoa.length; // 0-based sheet row index
+
+      if (contacts.length === 0) {
+        aoa.push([
+          row.client.name,
+          row.client.number,
+          row.client.location,
+          "",
+          "",
+          "",
+          "",
+          "",
+          memberships,
+          source,
+        ]);
+        continue;
+      }
+
+      contacts.forEach((contact, index) => {
+        const isFirst = index === 0;
+        aoa.push([
+          isFirst ? row.client.name : "",
+          isFirst ? row.client.number : "",
+          isFirst ? row.client.location : "",
+          contact.role || "",
+          contact.name || "",
+          contact.phone || "",
+          contact.email || "",
+          contact.isActive ? "yes" : "no",
+          isFirst ? memberships : "",
+          isFirst ? source : "",
+        ]);
+      });
+
+      if (contacts.length > 1) {
+        const endRow = startRow + contacts.length - 1;
+        // Merge facility columns so blank rows share one cell
+        for (const col of [0, 1, 2, 8, 9]) {
+          merges.push({
+            s: { r: startRow, c: col },
+            e: { r: endRow, c: col },
+          });
+        }
+      }
+    }
+
+    const worksheet = XLSX.utils.aoa_to_sheet(aoa);
+    worksheet["!merges"] = merges;
+    worksheet["!cols"] = [
+      { wch: 28 },
+      { wch: 16 },
+      { wch: 18 },
+      { wch: 16 },
+      { wch: 22 },
+      { wch: 16 },
+      { wch: 24 },
+      { wch: 8 },
+      { wch: 20 },
+      { wch: 14 },
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Clients");
+    const workbookOutput = XLSX.write(workbook, {
+      bookType: "xlsx",
+      type: "array",
+    });
+    const url = URL.createObjectURL(
+      new Blob([workbookOutput], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      }),
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `Client_Directory_Report_${new Date().toISOString().split("T")[0]}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
 
   const handleAddClient = async () => {
     const name = newClient.name.trim();
@@ -371,14 +1011,14 @@ export default function AccountsClientsPage() {
               className="text-sm font-medium tracking-wide"
               style={{ color: primaryColor }}
             >
-              Accounts
+              Accounts & CRM
             </p>
             <h1 className="text-xl font-semibold tracking-tight text-foreground">
-              Clients
+              Client CRM
             </h1>
             <p className="text-sm text-muted-foreground">
-              View client activities, purchases, quotations, debt position, and
-              payment history.
+              Manage the client directory, contacts, calls, groups, and
+              financial activity in one place.
             </p>
           </div>
 
@@ -391,6 +1031,7 @@ export default function AccountsClientsPage() {
                 setShowAddClientPanel(false);
               }}
             >
+              <FileText className="mr-2 h-4 w-4" />
               Bulk Upload
             </Button>
             <Button
@@ -401,7 +1042,31 @@ export default function AccountsClientsPage() {
                 setShowBulkUploadPanel(false);
               }}
             >
+              <Plus className="mr-2 h-4 w-4" />
               Create New Client
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowCreateGroupDialog(true)}
+            >
+              <Users className="mr-2 h-4 w-4" />
+              Create group
+            </Button>
+            <Button size="sm" variant="outline" onClick={handleExportClientReport}>
+              <Download className="mr-2 h-4 w-4" />
+              Export report
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={refreshing}
+              onClick={() => loadData({ silent: true })}
+            >
+              <RefreshCw
+                className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
+              />
+              Refresh
             </Button>
           </div>
         </div>
@@ -485,11 +1150,33 @@ export default function AccountsClientsPage() {
             <CardTitle>Bulk Upload Clients</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <p className="text-sm">
-              Download a sample CSV, fill rows and upload. Required columns:{" "}
-              <strong>client_name, client_number, client_location</strong>.
-              Optional: <strong>contact_person</strong>.
+            <p className="text-sm text-muted-foreground">
+              Download the sample CSV — it includes facilities with{" "}
+              <strong>multiple contact people</strong>. Required on the first
+              row of each facility:{" "}
+              <strong>Client Name, Client Number, Region/Location</strong>.
             </p>
+            <div className="rounded-md border bg-muted/30 p-3 text-xs space-y-2">
+              <p className="font-medium text-foreground">
+                Same layout as the export report
+              </p>
+              <p>
+                Use <strong>one row per contact</strong>. On extra contacts for
+                the same facility, leave Client Name / Number / Location blank —
+                they inherit from the row above (like the merged export).
+              </p>
+              <p>
+                Contact columns:{" "}
+                <code>Contact Role</code>, <code>Contact Name</code>,{" "}
+                <code>Contact Phone</code>, <code>Contact Email</code>,{" "}
+                <code>Active</code> (yes/no). More than one contact can be
+                active.
+              </p>
+              <p className="text-muted-foreground">
+                Example in the sample: Acme Medical has Doctor, Lab Technician,
+                and Procurement on three rows.
+              </p>
+            </div>
             <div className="flex items-center gap-3">
               <a
                 className="text-sm text-primary underline"
@@ -540,11 +1227,84 @@ export default function AccountsClientsPage() {
             <CardTitle>Clients</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <Input
-              placeholder="Search client by name, number, location or contact person"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
+            <div className="space-y-2">
+              <Input
+                placeholder="Search facility, contact, phone or location"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+              <div className="grid gap-2 sm:grid-cols-2">
+                <select
+                  className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                  value={sortBy}
+                  onChange={(event) => setSortBy(event.target.value)}
+                  aria-label="Sort clients"
+                >
+                  <option value="name_asc">Name: A–Z</option>
+                  <option value="name_desc">Name: Z–A</option>
+                  <option value="location">Location / County</option>
+                  <option value="pending_quotations">
+                    Pending quotations
+                  </option>
+                  <option value="quotations">Quotations count</option>
+                  <option value="debt">Outstanding debt</option>
+                </select>
+                <select
+                  className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                  value={locationFilter}
+                  onChange={(event) => setLocationFilter(event.target.value)}
+                  aria-label="Filter by location"
+                >
+                  <option value="all">All locations / counties</option>
+                  {locationOptions.map((loc) => (
+                    <option key={loc} value={loc}>
+                      {loc}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="h-9 rounded-md border border-input bg-background px-3 text-sm sm:col-span-2"
+                  value={groupFilter}
+                  onChange={(event) => setGroupFilter(event.target.value)}
+                  aria-label="Filter clients by group"
+                >
+                  <option value="all">All groups</option>
+                  {clientGroups.map((group) => (
+                    <option key={group._id} value={group._id}>
+                      {group.name} ({group.memberKeys?.length || 0})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {selectedClientKeys.length > 0 ? (
+                <div className="flex items-center gap-2 rounded-md border bg-muted/30 p-2">
+                  <span className="text-xs font-medium">
+                    {selectedClientKeys.length} selected
+                  </span>
+                  <select
+                    className="h-8 min-w-0 flex-1 rounded-md border bg-background px-2 text-xs"
+                    value={addToGroupId}
+                    onChange={(event) => setAddToGroupId(event.target.value)}
+                  >
+                    <option value="">Choose group…</option>
+                    {clientGroups.map((group) => (
+                      <option key={group._id} value={group._id}>
+                        {group.name}
+                      </option>
+                    ))}
+                  </select>
+                  <Button
+                    size="sm"
+                    disabled={!addToGroupId || savingCrm}
+                    onClick={() =>
+                      void addClientsToGroup(addToGroupId, selectedClientKeys)
+                    }
+                  >
+                    Add
+                  </Button>
+                </div>
+              ) : null}
+            </div>
 
             <div className="max-h-[560px] overflow-auto space-y-2">
               {filteredRows.length === 0 ? (
@@ -552,38 +1312,55 @@ export default function AccountsClientsPage() {
                   No clients found.
                 </p>
               ) : (
-                filteredRows.map((row) => (
-                  <button
-                    key={row.key}
-                    onClick={() => setSelectedClientKey(row.key)}
-                    className={`w-full rounded border p-3 text-left transition hover:bg-muted/50 ${
-                      selectedClientKey === row.key
-                        ? "border-primary bg-muted/40"
-                        : "border-border"
-                    }`}
-                  >
-                    <div className="font-medium">{row.client.name}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {row.client.number} · {row.client.location}
-                      {row.client.contactPerson
-                        ? ` · ${row.client.contactPerson}`
-                        : ""}
-                    </div>
-                    <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
-                      <div>Purchases: {row.purchasesValue.toFixed(2)}</div>
-                      <div>Quotations: {row.quotationsCount}</div>
-                      <div>Paid: {row.paidAmount.toFixed(2)}</div>
-                      <div className="font-medium text-primary">
-                        Debt: {row.debtAmount.toFixed(2)}
+                filteredRows.map((row) => {
+                  const actives = getActiveContacts(row);
+                  const pending = pendingQuotationsFor(row);
+                  const activeLabel = actives
+                    .map((c) => `${c.name}${c.role ? ` (${c.role})` : ""}`)
+                    .join(", ");
+                  return (
+                    <div
+                      key={row.key}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setSelectedClientKey(row.key)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          setSelectedClientKey(row.key);
+                        }
+                      }}
+                      className={`w-full cursor-pointer rounded border p-3 text-left transition hover:bg-muted/50 ${
+                        selectedClientKey === row.key
+                          ? "border-primary bg-muted/40"
+                          : "border-border"
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <Checkbox
+                          checked={selectedClientKeys.includes(row.key)}
+                          onCheckedChange={() => toggleClientSelected(row.key)}
+                          onClick={(event) => event.stopPropagation()}
+                          aria-label={`Select ${row.client.name}`}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="font-medium truncate">
+                            {row.client.name}
+                          </div>
+                          <div className="text-xs text-muted-foreground truncate">
+                            {row.client.location || "No location"}
+                            {activeLabel ? ` · ${activeLabel}` : ""}
+                          </div>
+                          {pending > 0 ? (
+                            <p className="mt-1 text-[11px] text-amber-700">
+                              {pending} pending quotation
+                              {pending === 1 ? "" : "s"}
+                            </p>
+                          ) : null}
+                        </div>
                       </div>
                     </div>
-                    {row.isSavedClient ? (
-                      <div className="mt-2 text-[11px] uppercase tracking-wide text-emerald-700">
-                        Saved client
-                      </div>
-                    ) : null}
-                  </button>
-                ))
+                  );
+                })
               )}
             </div>
           </CardContent>
@@ -599,7 +1376,8 @@ export default function AccountsClientsPage() {
                   size="sm"
                   onClick={() => setStatementModalOpen(true)}
                 >
-                  ⬇ Statement of Account
+                  <Download className="mr-2 h-4 w-4" />
+                  Statement of Account
                 </Button>
               )}
             </div>
@@ -611,42 +1389,153 @@ export default function AccountsClientsPage() {
               </p>
             ) : (
               <>
-                <div className="rounded border bg-muted/30 p-3 text-sm space-y-1">
-                  <p>
-                    <span className="font-medium">Client:</span>{" "}
-                    {selectedClient.client.name}
-                  </p>
-                  <p>
-                    <span className="font-medium">Phone:</span>{" "}
-                    {selectedClient.client.number}
-                  </p>
-                  <p>
-                    <span className="font-medium">Location:</span>{" "}
-                    {selectedClient.client.location}
-                  </p>
-                  {selectedClient.client.contactPerson ? (
-                    <p>
-                      <span className="font-medium">Contact Person:</span>{" "}
-                      {selectedClient.client.contactPerson}
+                <div className="flex flex-wrap gap-2 rounded-lg border p-3">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => openCallDialog(false)}
+                  >
+                    <PhoneCall className="mr-2 h-4 w-4" />
+                    Log Call
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => openCallDialog(true)}
+                  >
+                    <FileText className="mr-2 h-4 w-4" />
+                    Request Quote
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => openContactsDialog(selectedClient)}
+                  >
+                    <Users className="mr-2 h-4 w-4" />
+                    Add Contacts
+                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button size="sm" variant="outline">
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add to group
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      {clientGroups.length === 0 ? (
+                        <DropdownMenuItem
+                          onClick={() => setShowCreateGroupDialog(true)}
+                        >
+                          Create a group first…
+                        </DropdownMenuItem>
+                      ) : (
+                        clientGroups.map((group) => (
+                          <DropdownMenuItem
+                            key={group._id}
+                            onClick={() =>
+                              void addClientsToGroup(String(group._id), [
+                                selectedClient.key,
+                              ])
+                            }
+                          >
+                            {group.name}
+                          </DropdownMenuItem>
+                        ))
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void openHistoryDialog()}
+                  >
+                    <MessageSquare className="mr-2 h-4 w-4" />
+                    History
+                  </Button>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="rounded border bg-muted/30 p-3 text-sm space-y-1.5">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Facility & contact
                     </p>
-                  ) : null}
-                  <p>
-                    <span className="font-medium">Total Purchases:</span>{" "}
-                    {selectedClient.purchasesValue.toFixed(2)}
-                  </p>
-                  <p>
-                    <span className="font-medium">Total Paid:</span>{" "}
-                    {selectedClient.paidAmount.toFixed(2)}
-                  </p>
-                  <p>
-                    <span className="font-medium">Outstanding Debt:</span>{" "}
-                    {selectedClient.debtAmount.toFixed(2)}
-                  </p>
-                  <p>
-                    <span className="font-medium">Quotations:</span>{" "}
-                    {selectedClient.quotationsCount} (
-                    {selectedClient.quotationsValue.toFixed(2)})
-                  </p>
+                    <p>
+                      <span className="font-medium">Facility:</span>{" "}
+                      {selectedClient.client.name}
+                    </p>
+                    <p>
+                      <span className="font-medium">Location:</span>{" "}
+                      {selectedClient.client.location || "—"}
+                    </p>
+                    {(() => {
+                      const actives = getActiveContacts(selectedClient);
+                      if (actives.length === 0) {
+                        return (
+                          <p className="text-muted-foreground">
+                            No active contact set — use Add Contacts.
+                          </p>
+                        );
+                      }
+                      return (
+                        <div className="space-y-2 pt-1">
+                          <p className="font-medium">
+                            Active contact{actives.length === 1 ? "" : "s"}:
+                          </p>
+                          {actives.map((active, index) => (
+                            <div
+                              key={`${active.role}-${active.name}-${index}`}
+                              className="rounded border bg-background/60 px-2 py-1.5 text-sm"
+                            >
+                              <p>
+                                {active.name}
+                                {active.role ? (
+                                  <span className="text-muted-foreground">
+                                    {" "}
+                                    · {active.role}
+                                  </span>
+                                ) : null}
+                              </p>
+                              {active.phone ? (
+                                <p className="text-muted-foreground">
+                                  {active.phone}
+                                </p>
+                              ) : null}
+                              {active.email ? (
+                                <p className="text-muted-foreground">
+                                  {active.email}
+                                </p>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                  <div className="rounded border bg-muted/30 p-3 text-sm space-y-1.5">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Business activity
+                    </p>
+                    <p>
+                      <span className="font-medium">Total purchases:</span>{" "}
+                      {selectedClient.purchasesValue.toFixed(2)}
+                    </p>
+                    <p>
+                      <span className="font-medium">Total paid:</span>{" "}
+                      {selectedClient.paidAmount.toFixed(2)}
+                    </p>
+                    <p>
+                      <span className="font-medium">Outstanding debt:</span>{" "}
+                      {selectedClient.debtAmount.toFixed(2)}
+                    </p>
+                    <p>
+                      <span className="font-medium">Quotations:</span>{" "}
+                      {selectedClient.quotationsCount} (
+                      {selectedClient.quotationsValue.toFixed(2)})
+                    </p>
+                    <p>
+                      <span className="font-medium">Pending quotations:</span>{" "}
+                      {pendingQuotationsFor(selectedClient)}
+                    </p>
+                  </div>
                 </div>
 
                 <div className="overflow-x-auto">
@@ -729,6 +1618,372 @@ export default function AccountsClientsPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={showCallDialog} onOpenChange={setShowCallDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Log Call — {selectedClient?.client.name || "Client"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <Label>Outcome / Notes</Label>
+              <Input
+                value={callForm.note}
+                onChange={(event) =>
+                  setCallForm((current) => ({
+                    ...current,
+                    note: event.target.value,
+                  }))
+                }
+                placeholder="What was discussed?"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Next Action Status</Label>
+              <select
+                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                value={callForm.status}
+                onChange={(event) =>
+                  setCallForm((current) => ({
+                    ...current,
+                    status: event.target.value,
+                  }))
+                }
+              >
+                <option value="Interested">Interested</option>
+                <option value="Follow-up Needed">Follow-up Needed</option>
+                <option value="Pending">Pending</option>
+                <option value="Quote Requested">Quote Requested</option>
+                <option value="Closed">Closed</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <Label>Follow-up Date (optional)</Label>
+              <Input
+                type="date"
+                value={callForm.followUpDate}
+                onChange={(event) =>
+                  setCallForm((current) => ({
+                    ...current,
+                    followUpDate: event.target.value,
+                  }))
+                }
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowCallDialog(false)}
+              disabled={savingCrm}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void saveCall()}
+              disabled={savingCrm || !callForm.note.trim()}
+            >
+              {savingCrm ? "Saving…" : "Save Call Log"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showHistoryDialog} onOpenChange={setShowHistoryDialog}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>
+              Interaction History — {selectedClient?.client.name || "Client"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[60vh] space-y-3 overflow-y-auto">
+            {loadingHistory ? (
+              <p className="py-4 text-center text-sm text-muted-foreground">
+                Loading history…
+              </p>
+            ) : clientHistory.length === 0 ? (
+              <p className="py-4 text-center text-sm text-muted-foreground">
+                No logged interactions yet.
+              </p>
+            ) : (
+              clientHistory.map((item, index) => (
+                <div
+                  key={item._id || index}
+                  className="rounded-lg border p-3 text-sm"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-medium">
+                      {item.roomName || "Telesales"}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {item.createdAt
+                        ? new Date(item.createdAt).toLocaleString()
+                        : ""}
+                    </span>
+                  </div>
+                  <p className="mt-2">{item.note || "-"}</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {item.status ? (
+                      <Badge variant="outline">{item.status}</Badge>
+                    ) : null}
+                    {item.followUpDate ? (
+                      <Badge variant="secondary">
+                        Follow-up:{" "}
+                        {new Date(item.followUpDate).toLocaleDateString()}
+                      </Badge>
+                    ) : null}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowHistoryDialog(false)}
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showContactsDialog} onOpenChange={setShowContactsDialog}>
+        <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Contacts — {selectedClient?.client.name || "Client"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {contactsDraft.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No contacts yet.</p>
+            ) : (
+              contactsDraft.map((contact, index) => (
+                <div
+                  key={`${contact.role}-${contact.name}-${index}`}
+                  className="flex items-start justify-between gap-2 rounded-lg border p-3 text-sm"
+                >
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <div>
+                      <p className="font-medium">
+                        {contact.role}: {contact.name}
+                        {contact.isActive ? (
+                          <Badge className="ml-2" variant="secondary">
+                            Active
+                          </Badge>
+                        ) : null}
+                      </p>
+                      {contact.phone ? (
+                        <p className="text-muted-foreground">{contact.phone}</p>
+                      ) : null}
+                      {contact.email ? (
+                        <p className="text-muted-foreground">{contact.email}</p>
+                      ) : null}
+                    </div>
+                    <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Checkbox
+                        checked={Boolean(contact.isActive)}
+                        onCheckedChange={(checked) =>
+                          setDraftContactActive(index, checked === true)
+                        }
+                      />
+                      Active contact (more than one allowed)
+                    </label>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() =>
+                      setContactsDraft((current) =>
+                        current.filter((_, candidateIndex) => candidateIndex !== index),
+                      )
+                    }
+                  >
+                    Remove
+                  </Button>
+                </div>
+              ))
+            )}
+            <div className="space-y-3 rounded-lg border p-3">
+              <p className="text-sm font-medium">Add contact</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <Label>Role</Label>
+                  <select
+                    className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
+                    value={contactForm.role}
+                    onChange={(event) =>
+                      setContactForm((current) => ({
+                        ...current,
+                        role: event.target.value,
+                      }))
+                    }
+                  >
+                    {contactRoles.map((role) => (
+                      <option key={role} value={role}>
+                        {role}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {contactForm.role === "Other" ? (
+                  <div>
+                    <Label>Custom role</Label>
+                    <Input
+                      value={contactForm.customRole}
+                      onChange={(event) =>
+                        setContactForm((current) => ({
+                          ...current,
+                          customRole: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                ) : null}
+                <div>
+                  <Label>Name</Label>
+                  <Input
+                    value={contactForm.name}
+                    onChange={(event) =>
+                      setContactForm((current) => ({
+                        ...current,
+                        name: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <div>
+                  <Label>Phone</Label>
+                  <Input
+                    value={contactForm.phone}
+                    onChange={(event) =>
+                      setContactForm((current) => ({
+                        ...current,
+                        phone: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <Label>Email</Label>
+                  <Input
+                    type="email"
+                    value={contactForm.email}
+                    onChange={(event) =>
+                      setContactForm((current) => ({
+                        ...current,
+                        email: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={contactForm.isActive}
+                      onCheckedChange={(checked) =>
+                        setContactForm((current) => ({
+                          ...current,
+                          isActive: checked === true,
+                        }))
+                      }
+                    />
+                    Set as active contact (more than one allowed)
+                  </label>
+                </div>
+                <div className="sm:col-span-2">
+                  <Label>Notes</Label>
+                  <Input
+                    value={contactForm.notes}
+                    onChange={(event) =>
+                      setContactForm((current) => ({
+                        ...current,
+                        notes: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={addContactToDraft}
+              >
+                Add to list
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Tip: click <strong>Add to list</strong> for each person, then{" "}
+                <strong>Save contacts</strong>. If you leave a name filled in
+                and click Save, that person is included automatically.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowContactsDialog(false)}
+              disabled={savingCrm}
+            >
+              Cancel
+            </Button>
+            <Button onClick={() => void saveContacts()} disabled={savingCrm}>
+              {savingCrm ? "Saving…" : "Save contacts"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={showCreateGroupDialog}
+        onOpenChange={setShowCreateGroupDialog}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create client group</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Selected clients ({selectedClientKeys.length}) will be added
+            automatically.
+          </p>
+          <div className="space-y-3">
+            <div>
+              <Label>Group name</Label>
+              <Input
+                value={newGroupName}
+                onChange={(event) => setNewGroupName(event.target.value)}
+                placeholder="e.g. Private"
+              />
+            </div>
+            <div>
+              <Label>Description (optional)</Label>
+              <Input
+                value={newGroupDescription}
+                onChange={(event) => setNewGroupDescription(event.target.value)}
+                placeholder="Private hospitals and clinics"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowCreateGroupDialog(false)}
+              disabled={savingCrm}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void createGroup()}
+              disabled={savingCrm || !newGroupName.trim()}
+            >
+              {savingCrm ? "Creating…" : "Create group"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={statementModalOpen} onOpenChange={setStatementModalOpen}>
         <DialogContent>

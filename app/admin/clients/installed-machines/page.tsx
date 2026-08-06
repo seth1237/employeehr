@@ -724,16 +724,59 @@ export default function InstalledMachinesPage() {
 
   const saveContacts = async () => {
     if (!activeCRMClient?.client) return;
+
+    const pendingRole =
+      contactForm.role === "Other"
+        ? contactForm.customRole.trim()
+        : contactForm.role;
+    let draft = [...contactsDraft];
+    if (contactForm.name.trim()) {
+      if (!pendingRole) {
+        alert("Role and name are required for the new contact");
+        return;
+      }
+      const pending = {
+        role: pendingRole,
+        name: contactForm.name.trim(),
+        phone: contactForm.phone.trim() || undefined,
+        email: contactForm.email.trim() || undefined,
+        notes: contactForm.notes.trim() || undefined,
+      };
+      draft = [...draft, pending];
+      setContactsDraft(draft);
+    }
+
+    if (draft.length === 0) {
+      alert("Add at least one contact before saving");
+      return;
+    }
+
+    const sourceName = String(activeCRMClient.client.name || "").trim();
+    const sourceNumber = String(activeCRMClient.client.number || "").trim();
+    const sourceLocation = String(activeCRMClient.client.location || "").trim();
+    if (!sourceName || !sourceNumber || !sourceLocation) {
+      alert(
+        "This client is missing a name, phone number, or location — contacts cannot be saved until those are set.",
+      );
+      return;
+    }
+
     try {
       setSaving(true);
       const res = await stockApi.saveClientContacts({
-        sourceName: activeCRMClient.client.name,
-        sourceNumber: activeCRMClient.client.number || "n/a",
-        sourceLocation: activeCRMClient.client.location || "n/a",
-        legalName: activeCRMClient.client.name,
-        contacts: contactsDraft,
+        sourceName,
+        sourceNumber,
+        sourceLocation,
+        legalName: sourceName,
+        contacts: draft,
       });
-      const profile = res?.data;
+      if (res && (res as any).success === false) {
+        throw new Error((res as any).message || "Failed to save contacts");
+      }
+      const savedContacts =
+        Array.isArray(res?.data?.contacts) && res.data.contacts.length > 0
+          ? res.data.contacts
+          : draft;
       const key =
         activeCRMClient.key ||
         buildClientKey(
@@ -747,12 +790,13 @@ export default function InstalledMachinesPage() {
           const next = [...prev];
           next[idx] = {
             ...next[idx],
-            contacts: contactsDraft,
+            contacts: savedContacts,
             isSavedClient: true,
             client: {
               ...next[idx].client,
-              contactPerson: contactsDraft[0]?.name || next[idx].client.contactPerson,
-              email: contactsDraft[0]?.email || next[idx].client.email,
+              contactPerson:
+                savedContacts[0]?.name || next[idx].client.contactPerson,
+              email: savedContacts[0]?.email || next[idx].client.email,
             },
           };
           return next;
@@ -762,14 +806,14 @@ export default function InstalledMachinesPage() {
           {
             key,
             client: {
-              name: activeCRMClient.client.name,
-              number: activeCRMClient.client.number || "n/a",
-              location: activeCRMClient.client.location || "n/a",
-              contactPerson: contactsDraft[0]?.name,
-              email: contactsDraft[0]?.email,
+              name: sourceName,
+              number: sourceNumber,
+              location: sourceLocation,
+              contactPerson: savedContacts[0]?.name,
+              email: savedContacts[0]?.email,
             },
-            contacts: contactsDraft,
-            groupIds: profile?.groupIds || [],
+            contacts: savedContacts,
+            groupIds: res?.data?.groupIds || [],
             isSavedClient: true,
           },
         ];
@@ -2376,177 +2420,28 @@ export default function InstalledMachinesPage() {
         </>
       )}
 
-      {/* ---------------------------- Clients CRM ---------------------------- */}
+      {/* ---------------------------- Clients CRM → main CRM centre ---------------------------- */}
       {section === "clients" && (
         <Card className="overflow-hidden shadow-sm">
-          <CardHeader className="border-b bg-muted/30 pb-3 space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <CardTitle className="text-base whitespace-nowrap">
-                Client Directory & Tele-Logs ({filteredAndSortedCustomers.length})
-              </CardTitle>
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  size="sm"
-                  className="h-8 gap-2"
-                  onClick={() => setShowCreateGroupDialog(true)}
-                >
-                  <Plus className="h-3 w-3" /> Create group
-                </Button>
-                <Button size="sm" variant="outline" className="h-8 gap-2" onClick={handleExportClientReport}>
-                  <Download className="h-3 w-3" /> Report
-                </Button>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Input 
-                placeholder="Search clients, contacts, roles..." 
-                value={clientSearch}
-                onChange={(e) => setClientSearch(e.target.value)}
-                className="h-8 w-40 sm:w-56 text-xs"
-              />
-              <select 
-                className="h-8 rounded-md border border-input bg-background px-3 py-1 text-xs shadow-sm"
-                value={clientSortBy}
-                onChange={(e) => setClientSortBy(e.target.value)}
-                aria-label="Sort clients"
-              >
-                <option value="name_asc">Sort by Name (A-Z)</option>
-                <option value="name_desc">Sort by Name (Z-A)</option>
-                <option value="location">Sort by Region</option>
-              </select>
-              <select
-                className="h-8 rounded-md border border-input bg-background px-3 py-1 text-xs shadow-sm"
-                value={groupFilter}
-                onChange={(e) => setGroupFilter(e.target.value)}
-                aria-label="Filter by group"
-              >
-                <option value="all">All groups</option>
-                {clientGroups.map((g) => (
-                  <option key={g._id} value={g._id}>
-                    {g.name} ({(g.memberKeys || []).length})
-                  </option>
-                ))}
-              </select>
-              {selectedClientKeys.length > 0 && (
-                <>
-                  <select
-                    className="h-8 rounded-md border border-input bg-background px-3 py-1 text-xs shadow-sm"
-                    value={addToGroupId}
-                    onChange={(e) => setAddToGroupId(e.target.value)}
-                    aria-label="Add selected to group"
-                  >
-                    <option value="">Add {selectedClientKeys.length} to group…</option>
-                    {clientGroups.map((g) => (
-                      <option key={g._id} value={g._id}>
-                        {g.name}
-                      </option>
-                    ))}
-                  </select>
-                  <Button
-                    size="sm"
-                    className="h-8"
-                    disabled={!addToGroupId || saving}
-                    onClick={addSelectedToGroup}
-                  >
-                    Save to group
-                  </Button>
-                </>
-              )}
-            </div>
+          <CardHeader className="border-b bg-muted/30 pb-3">
+            <CardTitle className="text-base">Clients CRM</CardTitle>
           </CardHeader>
-          <CardContent className="p-0">
-            {filteredAndSortedCustomers.length === 0 ? (
-              <div className="p-8 text-center text-sm text-muted-foreground">
-                No clients found.
-              </div>
-            ) : (
-              <div className="grid divide-y">
-                {filteredAndSortedCustomers.map((c) => {
-                  const memberships = clientGroups.filter((g) =>
-                    (g.memberKeys || []).includes(c.key),
-                  );
-                  return (
-                  <div key={c.key} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-start">
-                    <div className="pt-1">
-                      <Checkbox
-                        checked={selectedClientKeys.includes(c.key)}
-                        onCheckedChange={() => toggleClientSelected(c.key)}
-                        aria-label={`Select ${c.client.name}`}
-                      />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-slate-900 text-base">{c.client.name}</div>
-                      <div className="text-sm text-slate-600 mt-1 space-y-0.5">
-                        {c.client.number && <div>Phone: {c.client.number}</div>}
-                        {c.client.location && <div>Location: {c.client.location}</div>}
-                        {c.client.email && <div>Email: {c.client.email}</div>}
-                      </div>
-                      {(c.contacts || []).length > 0 ? (
-                        <div className="mt-2 flex flex-wrap gap-1.5">
-                          {c.contacts.map((person: any, idx: number) => (
-                            <Badge key={`${person.role}-${idx}`} variant="secondary" className="font-normal">
-                              {person.role}: {person.name}
-                              {person.phone ? ` · ${person.phone}` : ""}
-                              {person.email ? ` · ${person.email}` : ""}
-                            </Badge>
-                          ))}
-                        </div>
-                      ) : c.client.contactPerson ? (
-                        <div className="mt-2 text-sm text-slate-600">
-                          Contact: {c.client.contactPerson}
-                        </div>
-                      ) : null}
-                      <div className="mt-2 text-xs text-muted-foreground flex gap-2 flex-wrap">
-                        {c.isSavedClient ? <Badge variant="secondary">Saved Client</Badge> : <Badge variant="outline">From Invoices</Badge>}
-                        {memberships.map((g) => (
-                          <Badge key={g._id} variant="outline">{g.name}</Badge>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="flex flex-col sm:flex-row gap-2 shrink-0">
-                      <Button size="sm" variant="default" className="gap-2 bg-slate-900" onClick={() => openCallDialog(c, false)}>
-                        <PhoneCall className="h-3 w-3" /> Log Call
-                      </Button>
-                      <Button size="sm" variant="outline" className="gap-2 bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100" onClick={() => openCallDialog(c, true)}>
-                        <FileText className="h-3 w-3" /> Request Quote
-                      </Button>
-                      <Button size="sm" variant="outline" className="gap-2 text-slate-700" onClick={() => openContactsDialog(c)}>
-                        <Users className="h-3 w-3" /> Add Contacts
-                      </Button>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button size="sm" variant="outline" className="gap-2">
-                            Add to group
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          {clientGroups.length === 0 ? (
-                            <DropdownMenuItem
-                              onClick={() => setShowCreateGroupDialog(true)}
-                            >
-                              Create a group first…
-                            </DropdownMenuItem>
-                          ) : (
-                            clientGroups.map((g) => (
-                              <DropdownMenuItem
-                                key={g._id}
-                                onClick={() => addSingleClientToGroup(c.key, g._id)}
-                              >
-                                {g.name}
-                              </DropdownMenuItem>
-                            ))
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                      <Button size="sm" variant="outline" className="gap-2 text-slate-700" onClick={() => openHistoryDialog(c)}>
-                        <MessageSquare className="h-3 w-3" /> History
-                      </Button>
-                    </div>
-                  </div>
-                  );
-                })}
-              </div>
-            )}
+          <CardContent className="space-y-4 p-6">
+            <p className="text-sm text-muted-foreground max-w-xl">
+              Client directory, contacts, groups, call logs, quote requests, and
+              financial history now live in the main Client CRM centre.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild>
+                <a href="/admin/clients/clients-list">Open Client CRM</a>
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setSection("machines")}
+              >
+                Back to machines
+              </Button>
+            </div>
           </CardContent>
         </Card>
       )}

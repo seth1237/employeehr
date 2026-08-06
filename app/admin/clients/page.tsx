@@ -13,15 +13,17 @@ import {
 export default function ClientsHubPage() {
   const sections = [
     {
-      title: "Clients",
-      description: "Manage client information, view their quotations, invoices, and financial history",
+      title: "Client CRM",
+      description:
+        "Main CRM centre — directory, contacts, groups, call logs, quote requests, activities, and statements",
       href: "/admin/clients/clients-list",
       icon: Users,
       color: "bg-blue-100 text-blue-700",
     },
     {
       title: "Installed Machines",
-      description: "Track and manage medical/equipment machines sold to clients and their installation details",
+      description:
+        "Track machines, services, and tickets. Client CRM is in the Client CRM centre.",
       href: "/admin/clients/installed-machines",
       icon: Zap,
       color: "bg-purple-100 text-purple-700",

@@ -764,6 +764,7 @@ export const stockApi = {
       phone?: string
       email?: string
       notes?: string
+      isActive?: boolean
     }>
   }) => client.put<any>("/api/stock/clients/contacts", data),
   getClientGroups: () => client.get<any[]>("/api/stock/clients/groups"),

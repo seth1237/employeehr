@@ -4,20 +4,59 @@ import { StockClient, DEFAULT_CONTACT_ROLES } from "../models/StockClient"
 import { StockClientGroup } from "../models/StockClientGroup"
 
 function clientKey(name: string, number: string, location: string) {
-  return `${String(name || "").trim().toLowerCase()}|${String(number || "").trim().toLowerCase()}|${String(location || "").trim().toLowerCase()}`
+  return `${String(name || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")}|${String(number || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")}|${String(location || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")}`
+}
+
+function escapeRegex(value: string) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
 
 function normalizeContact(raw: any) {
   const role = String(raw?.role || "").trim()
   const name = String(raw?.name || "").trim()
   if (!role || !name) return null
+  const phone = String(raw?.phone || "").trim()
+  const email = String(raw?.email || "").trim()
+  const notes = String(raw?.notes || "").trim()
   return {
     role,
     name,
-    phone: raw?.phone ? String(raw.phone).trim() : undefined,
-    email: raw?.email ? String(raw.email).trim() : undefined,
-    notes: raw?.notes ? String(raw.notes).trim() : undefined,
+    ...(phone ? { phone } : {}),
+    ...(email ? { email } : {}),
+    ...(notes ? { notes } : {}),
+    isActive: Boolean(raw?.isActive),
   }
+}
+
+async function findClientProfile(
+  org_id: string,
+  sourceName: string,
+  sourceNumber: string,
+  sourceLocation: string,
+) {
+  const exact = await StockClient.findOne({
+    org_id,
+    sourceName,
+    sourceNumber,
+    sourceLocation,
+  })
+  if (exact) return exact
+
+  return StockClient.findOne({
+    org_id,
+    sourceName: new RegExp(`^${escapeRegex(sourceName)}$`, "i"),
+    sourceNumber: new RegExp(`^${escapeRegex(sourceNumber)}$`, "i"),
+    sourceLocation: new RegExp(`^${escapeRegex(sourceLocation)}$`, "i"),
+  })
 }
 
 export class ClientCrmController {
@@ -44,51 +83,81 @@ export class ClientCrmController {
         contacts,
       } = req.body || {}
 
-      if (!sourceName || !sourceNumber || !sourceLocation) {
+      const name = String(sourceName || "").trim()
+      const number = String(sourceNumber || "").trim()
+      const location = String(sourceLocation || "").trim()
+
+      if (!name || !number || !location) {
         return res.status(400).json({
           success: false,
           message: "sourceName, sourceNumber and sourceLocation are required",
         })
       }
 
-      const normalized = Array.isArray(contacts)
-        ? contacts.map(normalizeContact).filter(Boolean)
-        : []
+      const normalized = (
+        Array.isArray(contacts) ? contacts.map(normalizeContact) : []
+      ).filter(Boolean) as Array<{
+        role: string
+        name: string
+        phone?: string
+        email?: string
+        notes?: string
+        isActive: boolean
+      }>
 
-      const primary = normalized[0] as
-        | { name?: string; phone?: string; email?: string }
-        | undefined
+      if (normalized.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Add at least one contact with a role and name before saving",
+        })
+      }
 
-      const profile = await StockClient.findOneAndUpdate(
-        {
+      // Deduplicate by role+name; keep last occurrence
+      const contactMap = new Map<string, (typeof normalized)[number]>()
+      for (const contact of normalized) {
+        contactMap.set(
+          `${contact.role.toLowerCase()}|${contact.name.toLowerCase()}`,
+          contact,
+        )
+      }
+      const uniqueContacts = Array.from(contactMap.values())
+      // Multiple contacts may be active — do not force a single active person
+      const actives = uniqueContacts.filter((c) => c.isActive)
+      const primary = actives[0] || uniqueContacts[0]
+
+      let profile = await findClientProfile(org_id, name, number, location)
+      if (profile) {
+        profile.legalName = String(legalName || name).trim()
+        profile.contacts = uniqueContacts as any
+        profile.contactPerson = actives.map((c) => c.name).join("; ") || primary?.name
+        if (primary?.email) profile.email = primary.email
+        profile.updatedBy = String(actorId)
+        await profile.save()
+      } else {
+        profile = await StockClient.create({
           org_id,
-          sourceName: String(sourceName).trim(),
-          sourceNumber: String(sourceNumber).trim(),
-          sourceLocation: String(sourceLocation).trim(),
-        },
-        {
-          $set: {
-            legalName: String(legalName || sourceName).trim(),
-            contacts: normalized,
-            contactPerson: primary?.name,
-            email: primary?.email,
-            updatedBy: String(actorId),
-          },
-          $setOnInsert: {
-            org_id,
-            sourceName: String(sourceName).trim(),
-            sourceNumber: String(sourceNumber).trim(),
-            sourceLocation: String(sourceLocation).trim(),
-            hasKraDetails: false,
-            groupIds: [],
-            createdBy: String(actorId),
-          },
-        },
-        { upsert: true, new: true },
-      )
+          sourceName: name,
+          sourceNumber: number,
+          sourceLocation: location,
+          legalName: String(legalName || name).trim(),
+          contacts: uniqueContacts,
+          contactPerson: actives.map((c) => c.name).join("; ") || primary?.name,
+          email: primary?.email,
+          hasKraDetails: false,
+          groupIds: [],
+          createdBy: String(actorId),
+          updatedBy: String(actorId),
+        })
+      }
 
-      return res.status(200).json({ success: true, data: profile })
+      return res.status(200).json({
+        success: true,
+        data: profile,
+        message: `Saved ${uniqueContacts.length} contact${uniqueContacts.length === 1 ? "" : "s"}`,
+      })
     } catch (error: any) {
+      console.error("upsertClientContacts failed:", error)
       return res.status(500).json({
         success: false,
         message: error.message || "Failed to save contacts",
@@ -337,8 +406,4 @@ export class ClientCrmController {
       })
     }
   }
-}
-
-function escapeRegex(value: string) {
-  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }

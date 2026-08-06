@@ -1573,13 +1573,11 @@ export class StockController {
         .lean();
 
       const clients = profiles.map((profile: any) => ({
-        key: `${String(profile.sourceName || "")
-          .trim()
-          .toLowerCase()}|${String(profile.sourceNumber || "")
-          .trim()
-          .toLowerCase()}|${String(profile.sourceLocation || "")
-          .trim()
-          .toLowerCase()}`,
+        key: [
+          normalizeClientValue(String(profile.sourceName || "")),
+          normalizeClientValue(String(profile.sourceNumber || "")),
+          normalizeClientValue(String(profile.sourceLocation || "")),
+        ].join("|"),
         _id: String(profile._id),
         name: String(profile.sourceName || profile.legalName || "").trim(),
         number: String(profile.sourceNumber || "").trim(),
@@ -2506,106 +2504,256 @@ export class StockController {
           .json({ success: false, message: "CSV file is empty" });
       }
 
-      let createdCount = 0;
-      let updatedCount = 0;
+      const parseTruthy = (value: unknown) => {
+        const raw = String(value ?? "")
+          .trim()
+          .toLowerCase();
+        return ["1", "true", "yes", "y", "active"].includes(raw);
+      };
+
+      const cell = (row: Record<string, string>, keys: string[]) => {
+        for (const key of keys) {
+          if (row[key] !== undefined && String(row[key]).trim() !== "") {
+            return String(row[key]).trim();
+          }
+        }
+        return "";
+      };
+
+      type ContactDraft = {
+        role: string;
+        name: string;
+        phone?: string;
+        email?: string;
+        isActive: boolean;
+      };
+
+      type ClientDraft = {
+        sourceName: string;
+        sourceNumber: string;
+        sourceLocation: string;
+        legalName: string;
+        kraPin?: string;
+        email?: string;
+        branchId?: string;
+        legacyContactPerson?: string;
+        contacts: ContactDraft[];
+        rowIndexes: number[];
+      };
+
+      const drafts = new Map<string, ClientDraft>();
       const errors: string[] = [];
+
+      // Carry facility fields down when continuation rows leave them blank
+      // (same layout as the exported multi-contact sheet).
+      let lastSourceName = "";
+      let lastSourceNumber = "";
+      let lastSourceLocation = "";
 
       for (let index = 0; index < rows.length; index += 1) {
         try {
           const row = rows[index];
-          const sourceName = String(
-            row.client_name ||
-              row["Client Name"] ||
-              row.sourceName ||
-              row["Source Name"] ||
-              "",
-          ).trim();
-          const sourceNumber = String(
-            row.client_number ||
-              row["Client Number"] ||
-              row.sourceNumber ||
-              row["Source Number"] ||
-              row.client_phone ||
-              row["Client Phone"] ||
-              "",
-          ).trim();
-          const sourceLocation = String(
-            row.client_location ||
-              row["Client Location"] ||
-              row.sourceLocation ||
-              row["Source Location"] ||
-              row.client_address_1 ||
-              row["Client Address"] ||
-              "",
-          ).trim();
-          const contactPerson = String(
-            row.contact_person ||
-              row["Contact Person"] ||
-              row.contactPerson ||
-              "",
-          ).trim();
-          const legalName = String(
-            row.legalName || row["Legal Name"] || sourceName,
-          ).trim();
-          const kraPin = String(
-            row.kraPin || row["KRA PIN"] || row.pin_no || row["PIN No"] || "",
-          )
-            .trim()
-            .toUpperCase();
-          const email = String(
-            row.email ||
-              row["Email"] ||
-              row.client_email ||
-              row["Client Email"] ||
-              "",
-          ).trim();
-          const branchId = String(
-            row.branchId || row["Branch ID"] || "",
-          ).trim();
+          let sourceName = cell(row, [
+            "client_name",
+            "Client Name",
+            "sourceName",
+            "Source Name",
+          ]);
+          let sourceNumber = cell(row, [
+            "client_number",
+            "Client Number",
+            "sourceNumber",
+            "Source Number",
+            "client_phone",
+            "Client Phone",
+          ]);
+          let sourceLocation = cell(row, [
+            "client_location",
+            "Client Location",
+            "Region/Location",
+            "sourceLocation",
+            "Source Location",
+            "client_address_1",
+            "Client Address",
+          ]);
+
+          if (!sourceName && lastSourceName) sourceName = lastSourceName;
+          if (!sourceNumber && lastSourceNumber) sourceNumber = lastSourceNumber;
+          if (!sourceLocation && lastSourceLocation)
+            sourceLocation = lastSourceLocation;
 
           if (!sourceName || !sourceNumber || !sourceLocation) {
             errors.push(
-              `Row ${index + 1}: Missing required fields (Client Name, Client Number, Client Location)`,
+              `Row ${index + 1}: Missing required fields (Client Name, Client Number, Region/Location). Fill them on the first contact row for each facility.`,
             );
             continue;
           }
 
-          const profile = await StockClient.findOneAndUpdate(
-            {
-              org_id,
+          lastSourceName = sourceName;
+          lastSourceNumber = sourceNumber;
+          lastSourceLocation = sourceLocation;
+
+          const legalName = cell(row, ["legalName", "Legal Name"]) || sourceName;
+          const kraPin = cell(row, ["kraPin", "KRA PIN", "pin_no", "PIN No"]).toUpperCase();
+          const facilityEmail = cell(row, [
+            "email",
+            "Email",
+            "client_email",
+            "Client Email",
+          ]);
+          const branchId = cell(row, ["branchId", "Branch ID"]);
+          const legacyContactPerson = cell(row, [
+            "contact_person",
+            "Contact Person",
+            "contactPerson",
+          ]);
+
+          const contactRole = cell(row, [
+            "contact_role",
+            "Contact Role",
+            "contactRole",
+          ]);
+          const contactName = cell(row, [
+            "contact_name",
+            "Contact Name",
+            "contactName",
+          ]);
+          const contactPhone = cell(row, [
+            "contact_phone",
+            "Contact Phone",
+            "contactPhone",
+          ]);
+          const contactEmail = cell(row, [
+            "contact_email",
+            "Contact Email",
+            "contactEmail",
+          ]);
+          const contactActiveRaw = cell(row, [
+            "contact_active",
+            "Contact Active",
+            "contactActive",
+            "Active",
+          ]);
+
+          const key = `${sourceName.toLowerCase()}|${sourceNumber.toLowerCase()}|${sourceLocation.toLowerCase()}`;
+          let draft = drafts.get(key);
+          if (!draft) {
+            draft = {
               sourceName,
               sourceNumber,
               sourceLocation,
+              legalName,
+              kraPin: kraPin || undefined,
+              email: facilityEmail || undefined,
+              branchId: branchId || undefined,
+              legacyContactPerson: legacyContactPerson || undefined,
+              contacts: [],
+              rowIndexes: [index + 1],
+            };
+            drafts.set(key, draft);
+          } else {
+            draft.rowIndexes.push(index + 1);
+            if (legalName) draft.legalName = legalName;
+            if (kraPin) draft.kraPin = kraPin;
+            if (facilityEmail) draft.email = facilityEmail;
+            if (branchId) draft.branchId = branchId;
+            if (legacyContactPerson)
+              draft.legacyContactPerson = legacyContactPerson;
+          }
+
+          if (contactName) {
+            draft.contacts.push({
+              role: contactRole || "Contact",
+              name: contactName,
+              phone: contactPhone || undefined,
+              email: contactEmail || undefined,
+              isActive: parseTruthy(contactActiveRaw),
+            });
+          } else if (legacyContactPerson) {
+            draft.contacts.push({
+              role: contactRole || "Contact",
+              name: legacyContactPerson,
+              phone: contactPhone || undefined,
+              email: contactEmail || facilityEmail || undefined,
+              isActive: parseTruthy(contactActiveRaw),
+            });
+          }
+        } catch (rowError: any) {
+          errors.push(
+            `Row ${index + 1}: ${rowError?.message || "Unknown error"}`,
+          );
+        }
+      }
+
+      let createdCount = 0;
+      let updatedCount = 0;
+
+      for (const draft of drafts.values()) {
+        try {
+          // Deduplicate contacts by role+name; keep last occurrence
+          const contactMap = new Map<string, ContactDraft>();
+          for (const contact of draft.contacts) {
+            const contactKey = `${contact.role.toLowerCase()}|${contact.name.toLowerCase()}`;
+            contactMap.set(contactKey, contact);
+          }
+          const contacts = Array.from(contactMap.values());
+          // Multiple contacts may be marked active
+          const actives = contacts.filter((c) => c.isActive);
+          const primary = actives[0] || contacts[0] || undefined;
+          const contactPerson =
+            actives.map((c) => c.name).join("; ") ||
+            primary?.name ||
+            draft.legacyContactPerson ||
+            undefined;
+          const email = primary?.email || draft.email || undefined;
+
+          const existing = await StockClient.findOne({
+            org_id,
+            sourceName: draft.sourceName,
+            sourceNumber: draft.sourceNumber,
+            sourceLocation: draft.sourceLocation,
+          });
+
+          const $set: Record<string, unknown> = {
+            legalName: draft.legalName,
+            contactPerson,
+            kraPin: draft.kraPin || undefined,
+            email,
+            branchId: draft.branchId || undefined,
+            hasKraDetails: Boolean(draft.kraPin),
+            updatedBy: String(actorId),
+          };
+
+          if (contacts.length > 0) {
+            $set.contacts = contacts;
+          }
+
+          await StockClient.findOneAndUpdate(
+            {
+              org_id,
+              sourceName: draft.sourceName,
+              sourceNumber: draft.sourceNumber,
+              sourceLocation: draft.sourceLocation,
             },
             {
-              $set: {
-                legalName,
-                contactPerson: contactPerson || undefined,
-                kraPin: kraPin || undefined,
-                email: email || undefined,
-                branchId: branchId || undefined,
-                hasKraDetails: Boolean(kraPin),
-                updatedBy: String(actorId),
-              },
+              $set,
               $setOnInsert: {
                 org_id,
-                sourceName,
-                sourceNumber,
-                sourceLocation,
+                sourceName: draft.sourceName,
+                sourceNumber: draft.sourceNumber,
+                sourceLocation: draft.sourceLocation,
                 createdBy: String(actorId),
+                ...(contacts.length === 0 ? { contacts: [] } : {}),
               },
             },
             { upsert: true, new: true },
           );
 
-          if (profile.isNew || !profile.updatedAt) {
-            createdCount += 1;
-          } else {
-            updatedCount += 1;
-          }
-        } catch (rowError: any) {
+          if (existing) updatedCount += 1;
+          else createdCount += 1;
+        } catch (draftError: any) {
           errors.push(
-            `Row ${index + 1}: ${rowError?.message || "Unknown error"}`,
+            `Client ${draft.sourceName}: ${draftError?.message || "Unknown error"}`,
           );
         }
       }
@@ -2622,6 +2770,7 @@ export class StockController {
         message: `Bulk upload completed: ${createdCount} created, ${updatedCount} updated${errors.length > 0 ? `, ${errors.length} errors` : ""}`,
         data: {
           totalRows: rows.length,
+          uniqueClients: drafts.size,
           createdCount,
           updatedCount,
           errorCount: errors.length,
@@ -2860,6 +3009,7 @@ export class StockController {
             },
             quotationsCount: 0,
             quotationsValue: 0,
+            pendingQuotationsCount: 0,
             invoicesCount: 0,
             purchasesValue: 0,
             paidAmount: 0,
@@ -2883,6 +3033,10 @@ export class StockController {
 
         clientRecord.quotationsCount += 1;
         clientRecord.quotationsValue += subTotal;
+        const qStatus = String((quotation as any).status || "");
+        if (qStatus === "draft" || qStatus === "pending_approval") {
+          clientRecord.pendingQuotationsCount += 1;
+        }
         clientRecord.activities.push({
           type: "quotation",
           reference: (quotation as any).quotationNumber,
@@ -2988,22 +3142,56 @@ export class StockController {
         }
       }
 
+      const profiles = await StockClient.find({ org_id })
+        .select(
+          "sourceName sourceNumber sourceLocation legalName contactPerson email contacts groupIds",
+        )
+        .lean();
+
+      const profileByKey = new Map<string, any>();
+      for (const profile of profiles) {
+        const source = buildClientSourceKey(profile as any);
+        if (
+          !source.sourceName ||
+          !source.sourceNumber ||
+          !source.sourceLocation
+        ) {
+          continue;
+        }
+        profileByKey.set(
+          `${source.sourceName}|${source.sourceNumber}|${source.sourceLocation}`,
+          profile,
+        );
+      }
+
       const data = Array.from(clientsMap.values())
-        .map((row: any) => ({
-          ...row,
-          quotationsValue: Number(row.quotationsValue.toFixed(2)),
-          purchasesValue: Number(row.purchasesValue.toFixed(2)),
-          paidAmount: Number(row.paidAmount.toFixed(2)),
-          debtAmount: Number(row.debtAmount.toFixed(2)),
-          salesValue: Number(row.salesValue.toFixed(2)),
-          activities: (row.activities || [])
-            .sort(
-              (a: any, b: any) =>
-                new Date(b.date || 0).getTime() -
-                new Date(a.date || 0).getTime(),
-            )
-            .slice(0, 50),
-        }))
+        .map((row: any) => {
+          const profile = profileByKey.get(row.key);
+          return {
+            ...row,
+            client: {
+              ...row.client,
+              contactPerson:
+                profile?.contactPerson || row.client?.contactPerson,
+              email: profile?.email || row.client?.email,
+            },
+            contacts: Array.isArray(profile?.contacts) ? profile.contacts : [],
+            groupIds: Array.isArray(profile?.groupIds) ? profile.groupIds : [],
+            isSavedClient: Boolean(profile),
+            quotationsValue: Number(row.quotationsValue.toFixed(2)),
+            purchasesValue: Number(row.purchasesValue.toFixed(2)),
+            paidAmount: Number(row.paidAmount.toFixed(2)),
+            debtAmount: Number(row.debtAmount.toFixed(2)),
+            salesValue: Number(row.salesValue.toFixed(2)),
+            activities: (row.activities || [])
+              .sort(
+                (a: any, b: any) =>
+                  new Date(b.date || 0).getTime() -
+                  new Date(a.date || 0).getTime(),
+              )
+              .slice(0, 50),
+          };
+        })
         .sort(
           (a: any, b: any) =>
             new Date(b.lastActivityAt || 0).getTime() -

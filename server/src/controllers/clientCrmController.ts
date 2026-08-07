@@ -406,4 +406,183 @@ export class ClientCrmController {
       })
     }
   }
+
+  static async updateSavedClient(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id
+      const actorId = req.user?.userId
+      if (!org_id || !actorId) {
+        return res.status(401).json({ success: false, message: "Unauthorized" })
+      }
+
+      const originalName = String(req.body?.originalSourceName || "").trim()
+      const originalNumber = String(req.body?.originalSourceNumber || "").trim()
+      const originalLocation = String(
+        req.body?.originalSourceLocation || "",
+      ).trim()
+      const sourceName = String(req.body?.sourceName || "").trim()
+      const sourceNumber = String(req.body?.sourceNumber || "").trim()
+      const sourceLocation = String(req.body?.sourceLocation || "").trim()
+      const legalName = String(
+        req.body?.legalName || sourceName || "",
+      ).trim()
+      const contactPerson = String(req.body?.contactPerson || "").trim()
+      const email = String(req.body?.email || "").trim()
+
+      if (
+        !originalName ||
+        !originalNumber ||
+        !originalLocation ||
+        !sourceName ||
+        !sourceNumber ||
+        !sourceLocation
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Original and new client name, number, and location are required",
+        })
+      }
+
+      const profile = await findClientProfile(
+        org_id,
+        originalName,
+        originalNumber,
+        originalLocation,
+      )
+      if (!profile) {
+        return res.status(404).json({
+          success: false,
+          message: "Client not found. Save the client first, then edit.",
+        })
+      }
+
+      const oldKey = clientKey(
+        profile.sourceName,
+        profile.sourceNumber,
+        profile.sourceLocation,
+      )
+      const newKey = clientKey(sourceName, sourceNumber, sourceLocation)
+      const identityChanged = oldKey !== newKey
+
+      if (identityChanged) {
+        const clash = await findClientProfile(
+          org_id,
+          sourceName,
+          sourceNumber,
+          sourceLocation,
+        )
+        if (clash && String(clash._id) !== String(profile._id)) {
+          return res.status(409).json({
+            success: false,
+            message:
+              "Another client already uses that name, number, and location",
+          })
+        }
+      }
+
+      profile.sourceName = sourceName
+      profile.sourceNumber = sourceNumber
+      profile.sourceLocation = sourceLocation
+      profile.legalName = legalName || sourceName
+      if (contactPerson) profile.contactPerson = contactPerson
+      if (email) profile.email = email
+      profile.updatedBy = String(actorId)
+      await profile.save()
+
+      if (identityChanged) {
+        const groups = await StockClientGroup.find({
+          org_id,
+          memberKeys: oldKey,
+        })
+        for (const group of groups) {
+          group.memberKeys = Array.from(
+            new Set(
+              (group.memberKeys || [])
+                .map((key) => (key === oldKey ? newKey : key))
+                .filter(Boolean),
+            ),
+          )
+          group.updatedBy = String(actorId)
+          await group.save()
+        }
+      }
+
+      return res.status(200).json({
+        success: true,
+        data: profile,
+        key: newKey,
+      })
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to update client",
+      })
+    }
+  }
+
+  static async deleteSavedClient(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id
+      const actorId = req.user?.userId
+      if (!org_id || !actorId) {
+        return res.status(401).json({ success: false, message: "Unauthorized" })
+      }
+
+      const sourceName = String(
+        req.body?.sourceName || req.query?.sourceName || "",
+      ).trim()
+      const sourceNumber = String(
+        req.body?.sourceNumber || req.query?.sourceNumber || "",
+      ).trim()
+      const sourceLocation = String(
+        req.body?.sourceLocation || req.query?.sourceLocation || "",
+      ).trim()
+
+      if (!sourceName || !sourceNumber || !sourceLocation) {
+        return res.status(400).json({
+          success: false,
+          message: "sourceName, sourceNumber and sourceLocation are required",
+        })
+      }
+
+      const profile = await findClientProfile(
+        org_id,
+        sourceName,
+        sourceNumber,
+        sourceLocation,
+      )
+      if (!profile) {
+        return res.status(404).json({
+          success: false,
+          message: "Saved client profile not found",
+        })
+      }
+
+      const key = clientKey(
+        profile.sourceName,
+        profile.sourceNumber,
+        profile.sourceLocation,
+      )
+      await StockClient.deleteOne({ _id: profile._id, org_id })
+      await StockClientGroup.updateMany(
+        { org_id, memberKeys: key },
+        {
+          $pull: { memberKeys: key },
+          $set: { updatedBy: String(actorId) },
+        },
+      )
+
+      return res.status(200).json({
+        success: true,
+        message: "Client deleted",
+        key,
+      })
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to delete client",
+      })
+    }
+  }
 }

@@ -76,6 +76,8 @@ router.post("/tenders/:tenderId/convert", TenderController.convertTenderToInvoic
 router.get("/clients/saved", StockController.getSavedClients);
 router.get("/clients/contact-roles", ClientCrmController.listContactRoles);
 router.put("/clients/contacts", ClientCrmController.upsertClientContacts);
+router.put("/clients/profile", ClientCrmController.updateSavedClient);
+router.delete("/clients/profile", ClientCrmController.deleteSavedClient);
 router.get("/clients/groups", ClientCrmController.listGroups);
 router.post("/clients/groups", ClientCrmController.createGroup);
 router.put("/clients/groups/:groupId", ClientCrmController.updateGroup);

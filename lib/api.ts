@@ -767,6 +767,25 @@ export const stockApi = {
       isActive?: boolean
     }>
   }) => client.put<any>("/api/stock/clients/contacts", data),
+  updateSavedClient: (data: {
+    originalSourceName: string
+    originalSourceNumber: string
+    originalSourceLocation: string
+    sourceName: string
+    sourceNumber: string
+    sourceLocation: string
+    legalName?: string
+    contactPerson?: string
+    email?: string
+  }) => client.put<any>("/api/stock/clients/profile", data),
+  deleteSavedClient: (data: {
+    sourceName: string
+    sourceNumber: string
+    sourceLocation: string
+  }) =>
+    client.delete<any>(
+      `/api/stock/clients/profile?sourceName=${encodeURIComponent(data.sourceName)}&sourceNumber=${encodeURIComponent(data.sourceNumber)}&sourceLocation=${encodeURIComponent(data.sourceLocation)}`,
+    ),
   getClientGroups: () => client.get<any[]>("/api/stock/clients/groups"),
   createClientGroup: (data: {
     name: string

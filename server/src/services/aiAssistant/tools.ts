@@ -22,6 +22,9 @@ import { StockClientGroup } from "../../models/StockClientGroup"
 import { StockExpense } from "../../models/StockExpense"
 import { StockInvoicePayment } from "../../models/StockInvoicePayment"
 import { ClientComplaint } from "../../models/ClientComplaint"
+import { ClientConversation } from "../../models/ClientConversation"
+import { CallLog } from "../../models/CallLog"
+import { Ticket } from "../../models/Ticket"
 import type { AssistantOrgContext } from "./orgContext"
 import {
   endOfMonth,
@@ -140,6 +143,31 @@ function assertOrgId(orgId: string) {
   if (!orgId || orgId.trim() === "") {
     throw new Error("Organization context is missing. Cannot query the database.")
   }
+}
+
+/** Some providers (e.g. Gemini via OpenRouter) reject completely empty parameter schemas */
+const emptyArgsSchema = z.object({
+  note: z
+    .string()
+    .optional()
+    .describe("Optional unused note — leave empty"),
+})
+
+function normalizeClientKey(name: string, number: string, location: string) {
+  return `${String(name || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")}|${String(number || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")}|${String(location || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")}`
+}
+
+function escapeRegex(value: string) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
 
 // ─── Tool factory ─────────────────────────────────────────────────────────────
@@ -305,7 +333,7 @@ export function createAssistantTools(ctx: AssistantOrgContext) {
       name: "get_inventory_summary",
       description:
         "Current inventory: total products, stock value, low-stock alerts, expiring items, and category breakdown. Use for 'what products are low on stock?', 'inventory value?', or 'what's expiring soon?'.",
-      schema: z.object({}),
+      schema: emptyArgsSchema,
     },
   )
 
@@ -578,7 +606,7 @@ export function createAssistantTools(ctx: AssistantOrgContext) {
       name: "get_employee_summary",
       description:
         "Workforce overview: total employees, active/inactive counts, new hires last 30 days, breakdown by role and department. Use for 'how many employees do we have?' or 'staff headcount'.",
-      schema: z.object({}),
+      schema: emptyArgsSchema,
     },
   )
 
@@ -1140,7 +1168,7 @@ export function createAssistantTools(ctx: AssistantOrgContext) {
       name: "get_kpi_list",
       description:
         "List all configured KPIs for this company including name, category, weight, target, and unit. Use for 'what KPIs do we track?' or 'show me our performance metrics'.",
-      schema: z.object({}),
+      schema: emptyArgsSchema,
     },
   )
 
@@ -1342,7 +1370,7 @@ export function createAssistantTools(ctx: AssistantOrgContext) {
       name: "get_active_alerts",
       description:
         "Current unresolved system alerts by severity and type (contract expiry, low performance, attendance anomalies, incomplete PDPs, etc.). Use for 'what alerts are active?', 'urgent issues', or 'what needs attention?'.",
-      schema: z.object({}),
+      schema: emptyArgsSchema,
     },
   )
 
@@ -1417,41 +1445,68 @@ export function createAssistantTools(ctx: AssistantOrgContext) {
     async (input) => {
       assertOrgId(ctx.orgId)
       const q = String((input as any).query || "").trim().toLowerCase()
-      const limit = Math.min(Math.max(Number((input as any).limit || 20), 1), 50)
+      const limit = Math.min(Math.max(Number((input as any).limit || 20), 1), 80)
       const filter: Record<string, unknown> = { ...orgFilter }
       if (q) {
         filter.$or = [
-          { sourceName: new RegExp(q, "i") },
-          { legalName: new RegExp(q, "i") },
-          { sourceLocation: new RegExp(q, "i") },
-          { contactPerson: new RegExp(q, "i") },
-          { "contacts.name": new RegExp(q, "i") },
-          { "contacts.phone": new RegExp(q, "i") },
-          { "contacts.email": new RegExp(q, "i") },
+          { sourceName: new RegExp(escapeRegex(q), "i") },
+          { legalName: new RegExp(escapeRegex(q), "i") },
+          { sourceLocation: new RegExp(escapeRegex(q), "i") },
+          { sourceNumber: new RegExp(escapeRegex(q), "i") },
+          { contactPerson: new RegExp(escapeRegex(q), "i") },
+          { "contacts.name": new RegExp(escapeRegex(q), "i") },
+          { "contacts.role": new RegExp(escapeRegex(q), "i") },
+          { "contacts.phone": new RegExp(escapeRegex(q), "i") },
+          { "contacts.email": new RegExp(escapeRegex(q), "i") },
         ]
       }
-      const clients = await StockClient.find(filter)
-        .select("sourceName sourceNumber sourceLocation legalName contactPerson email contacts groupIds")
-        .limit(limit)
-        .lean()
-      const groups = await StockClientGroup.find(orgFilter).select("name memberKeys").lean()
+      const [clients, groups, total] = await Promise.all([
+        StockClient.find(filter)
+          .select(
+            "sourceName sourceNumber sourceLocation legalName contactPerson email contacts groupIds",
+          )
+          .sort({ updatedAt: -1 })
+          .limit(limit)
+          .lean(),
+        StockClientGroup.find(orgFilter).select("name memberKeys").lean(),
+        StockClient.countDocuments(filter),
+      ])
       return JSON.stringify({
-        count: clients.length,
-        clients: clients.map((c: any) => ({
-          name: c.legalName || c.sourceName,
-          phone: c.sourceNumber,
-          location: c.sourceLocation,
-          primaryContact: c.contactPerson,
-          email: c.email,
-          contacts: c.contacts || [],
-          groups: groups
-            .filter((g: any) =>
-              (g.memberKeys || []).includes(
-                `${String(c.sourceName).toLowerCase()}|${String(c.sourceNumber).toLowerCase()}|${String(c.sourceLocation).toLowerCase()}`,
-              ),
-            )
-            .map((g: any) => g.name),
-        })),
+        matched: clients.length,
+        totalMatching: total,
+        clients: clients.map((c: any) => {
+          const key = normalizeClientKey(
+            c.sourceName,
+            c.sourceNumber,
+            c.sourceLocation,
+          )
+          const actives = (c.contacts || []).filter((contact: any) => contact?.isActive)
+          return {
+            name: c.legalName || c.sourceName,
+            facilityNumber: c.sourceNumber,
+            location: c.sourceLocation,
+            primaryContact: c.contactPerson,
+            email: c.email,
+            activeContacts: actives.length
+              ? actives.map((contact: any) => ({
+                  role: contact.role,
+                  name: contact.name,
+                  phone: contact.phone,
+                  email: contact.email,
+                }))
+              : undefined,
+            contacts: (c.contacts || []).map((contact: any) => ({
+              role: contact.role,
+              name: contact.name,
+              phone: contact.phone,
+              email: contact.email,
+              isActive: Boolean(contact.isActive),
+            })),
+            groups: groups
+              .filter((g: any) => (g.memberKeys || []).includes(key))
+              .map((g: any) => g.name),
+          }
+        }),
       })
     },
     {
@@ -1459,7 +1514,10 @@ export function createAssistantTools(ctx: AssistantOrgContext) {
       description:
         "Search company clients/facilities including multi-role contacts (doctor, lab tech, etc.) and group membership. Use for 'list clients', 'find hospital X contacts', 'who is the lab technician at Y?'.",
       schema: z.object({
-        query: z.string().optional().describe("Optional name, location, contact, phone, or email search"),
+        query: z
+          .string()
+          .optional()
+          .describe("Optional name, location, contact, phone, or email search"),
         limit: z.number().optional().describe("Max results (default 20)"),
       }),
     },
@@ -1482,7 +1540,215 @@ export function createAssistantTools(ctx: AssistantOrgContext) {
       name: "get_client_groups_summary",
       description:
         "List client groups (e.g. Private, Public) and member counts for this company. Use for 'what client groups do we have?', 'how many private clients?'.",
-      schema: z.object({}),
+      schema: emptyArgsSchema,
+    },
+  )
+
+  const getClientHistory = tool(
+    async (input) => {
+      assertOrgId(ctx.orgId)
+      const query = String((input as any).query || "").trim()
+      const limit = Math.min(Math.max(Number((input as any).limit || 25), 1), 60)
+      if (!query) {
+        return JSON.stringify({
+          error: "Provide a client/facility name or phone number in query.",
+        })
+      }
+
+      const regex = new RegExp(escapeRegex(query), "i")
+      const clients = await StockClient.find({
+        ...orgFilter,
+        $or: [
+          { sourceName: regex },
+          { legalName: regex },
+          { sourceNumber: regex },
+          { contactPerson: regex },
+          { "contacts.name": regex },
+          { "contacts.phone": regex },
+        ],
+      })
+        .select(
+          "sourceName sourceNumber sourceLocation legalName contactPerson email contacts",
+        )
+        .limit(8)
+        .lean()
+
+      const phoneCandidates = new Set<string>()
+      for (const client of clients as any[]) {
+        if (client.sourceNumber) phoneCandidates.add(String(client.sourceNumber))
+        for (const contact of client.contacts || []) {
+          if (contact?.phone) phoneCandidates.add(String(contact.phone))
+        }
+      }
+      if (/^\+?\d[\d\s-]{6,}$/.test(query)) phoneCandidates.add(query)
+
+      const phoneRegexes = Array.from(phoneCandidates)
+        .map((phone) => phone.replace(/\D/g, ""))
+        .filter((digits) => digits.length >= 7)
+        .map((digits) => new RegExp(escapeRegex(digits.slice(-9))))
+
+      const conversationFilter: Record<string, unknown> = {
+        ...orgFilter,
+        $or: [{ clientName: regex }, { clientPhone: regex }, { note: regex }],
+      }
+      if (phoneRegexes.length > 0) {
+        ;(conversationFilter.$or as any[]).push(
+          ...phoneRegexes.map((phoneRegex) => ({ clientPhone: phoneRegex })),
+        )
+      }
+
+      const callFilter: Record<string, unknown> = { ...orgFilter }
+      if (phoneRegexes.length > 0) {
+        callFilter.$or = phoneRegexes.map((phoneRegex) => ({
+          phoneNumber: phoneRegex,
+        }))
+      } else {
+        callFilter.phoneNumber = regex
+      }
+
+      const [conversations, callLogs, quotations, invoices, machines, tickets] =
+        await Promise.all([
+          ClientConversation.find(conversationFilter)
+            .select(
+              "clientName clientPhone note status followUpDate roomName createdAt quotation_id",
+            )
+            .sort({ createdAt: -1 })
+            .limit(limit)
+            .lean(),
+          CallLog.find(callFilter)
+            .select(
+              "phoneNumber direction status durationSeconds notes createdAt",
+            )
+            .sort({ createdAt: -1 })
+            .limit(limit)
+            .lean(),
+          StockQuotation.find({
+            ...orgFilter,
+            $or: [
+              { "client.name": regex },
+              { "client.number": regex },
+              { "client.location": regex },
+            ],
+          })
+            .select("quotationNumber client status subTotal createdAt")
+            .sort({ createdAt: -1 })
+            .limit(15)
+            .lean(),
+          StockInvoice.find({
+            ...orgFilter,
+            $or: [
+              { "client.name": regex },
+              { "client.number": regex },
+              { "client.location": regex },
+            ],
+          })
+            .select("invoiceNumber client status subTotal createdAt")
+            .sort({ createdAt: -1 })
+            .limit(15)
+            .lean(),
+          InstalledMachine.find({
+            ...orgFilter,
+            isActive: true,
+            $or: [
+              { "client.name": regex },
+              { "client.number": regex },
+              { "client.location": regex },
+            ],
+          })
+            .select(
+              "productName serialNumber client status nextServiceDate installationLocation",
+            )
+            .limit(20)
+            .lean(),
+          Ticket.find({
+            ...orgFilter,
+            $or: [
+              { title: regex },
+              { description: regex },
+              { callerName: regex },
+              { callerPhone: regex },
+            ],
+          })
+            .select(
+              "title status callerName callerPhone resolutionType createdAt resolvedDate machine_id",
+            )
+            .sort({ createdAt: -1 })
+            .limit(15)
+            .lean(),
+        ])
+
+      return JSON.stringify({
+        query,
+        matchedClients: (clients as any[]).map((c) => ({
+          name: c.legalName || c.sourceName,
+          number: c.sourceNumber,
+          location: c.sourceLocation,
+          contactPerson: c.contactPerson,
+          contacts: c.contacts || [],
+        })),
+        conversations: (conversations as any[]).map((row) => ({
+          clientName: row.clientName,
+          clientPhone: row.clientPhone,
+          status: row.status,
+          note: row.note,
+          followUpDate: row.followUpDate,
+          room: row.roomName,
+          date: row.createdAt,
+        })),
+        callLogs: (callLogs as any[]).map((row) => ({
+          phoneNumber: row.phoneNumber,
+          direction: row.direction,
+          status: row.status,
+          durationSeconds: row.durationSeconds,
+          notes: row.notes,
+          date: row.createdAt,
+        })),
+        quotations: (quotations as any[]).map((row) => ({
+          number: row.quotationNumber,
+          client: row.client?.name,
+          status: row.status,
+          amount: row.subTotal,
+          date: row.createdAt,
+        })),
+        invoices: (invoices as any[]).map((row) => ({
+          number: row.invoiceNumber,
+          client: row.client?.name,
+          status: row.status,
+          amount: row.subTotal,
+          date: row.createdAt,
+        })),
+        installedMachines: (machines as any[]).map((row) => ({
+          product: row.productName,
+          serial: row.serialNumber,
+          client: row.client?.name,
+          status: row.status,
+          nextServiceDate: row.nextServiceDate,
+          location: row.installationLocation || row.client?.location,
+        })),
+        tickets: (tickets as any[]).map((row) => ({
+          title: row.title,
+          status: row.status,
+          callerName: row.callerName,
+          callerPhone: row.callerPhone,
+          resolutionType: row.resolutionType,
+          date: row.createdAt,
+          resolvedDate: row.resolvedDate,
+        })),
+      })
+    },
+    {
+      name: "get_client_history",
+      description:
+        "Full client/facility history: CRM conversation notes, call logs, quotations, invoices, installed machines, and service tickets. Use for 'client history', 'what did we discuss with X?', 'follow-ups for hospital Y', 'activity for client Z'.",
+      schema: z.object({
+        query: z
+          .string()
+          .describe("Client/facility name or phone number to look up"),
+        limit: z
+          .number()
+          .optional()
+          .describe("Max conversation/call rows (default 25)"),
+      }),
     },
   )
 
@@ -1490,27 +1756,53 @@ export function createAssistantTools(ctx: AssistantOrgContext) {
     async (input) => {
       assertOrgId(ctx.orgId)
       const status = String((input as any).status || "").trim()
+      const query = String((input as any).query || "").trim()
+      const limit = Math.min(Math.max(Number((input as any).limit || 50), 1), 150)
       const filter: Record<string, unknown> = { ...orgFilter, isActive: true }
       if (status) filter.status = status
-      const machines = await InstalledMachine.find(filter)
-        .select("productName serialNumber client status installationLocation nextServiceDate attendant attendantNumber")
-        .limit(50)
-        .lean()
+      if (query) {
+        const regex = new RegExp(escapeRegex(query), "i")
+        filter.$or = [
+          { productName: regex },
+          { serialNumber: regex },
+          { installationLocation: regex },
+          { attendant: regex },
+          { "client.name": regex },
+          { "client.number": regex },
+          { "client.location": regex },
+          { "client.contactPerson": regex },
+        ]
+      }
+      const [machines, total] = await Promise.all([
+        InstalledMachine.find(filter)
+          .select(
+            "productName serialNumber client status installationLocation nextServiceDate attendant attendantNumber installationDate warrantyUntil",
+          )
+          .sort({ updatedAt: -1 })
+          .limit(limit)
+          .lean(),
+        InstalledMachine.countDocuments(filter),
+      ])
       const byStatus: Record<string, number> = {}
       for (const m of machines as any[]) {
         const s = String(m.status || "active")
         byStatus[s] = (byStatus[s] || 0) + 1
       }
       return JSON.stringify({
-        total: machines.length,
+        matched: machines.length,
+        totalMatching: total,
         byStatus,
-        machines: machines.map((m: any) => ({
+        machines: (machines as any[]).map((m) => ({
           product: m.productName,
           serial: m.serialNumber,
           client: m.client?.name,
+          clientPhone: m.client?.number,
+          clientLocation: m.client?.location,
           location: m.installationLocation || m.client?.location,
           status: m.status,
           nextServiceDate: m.nextServiceDate,
+          installationDate: m.installationDate,
+          warrantyUntil: m.warrantyUntil,
           attendant: m.attendant,
           attendantPhone: m.attendantNumber,
         })),
@@ -1519,12 +1811,115 @@ export function createAssistantTools(ctx: AssistantOrgContext) {
     {
       name: "get_installed_machines_summary",
       description:
-        "Installed machines/facilities for this company: counts by status and recent machine list. Use for 'how many installed machines?', 'machines needing service', 'installations at hospital X'.",
+        "Search installed machines by facility, serial, product, attendant, or status. Use for 'how many installed machines?', 'machines at hospital X', 'machines needing service', 'find serial Y'.",
       schema: z.object({
+        query: z
+          .string()
+          .optional()
+          .describe("Facility, product, serial, attendant, or location search"),
         status: z
           .enum(["active", "maintenance", "ended", "installation_pending"])
           .optional()
           .describe("Optional status filter"),
+        limit: z.number().optional().describe("Max machines to return (default 50)"),
+      }),
+    },
+  )
+
+  const getMachineTicketsSummary = tool(
+    async (input) => {
+      assertOrgId(ctx.orgId)
+      const query = String((input as any).query || "").trim()
+      const status = String((input as any).status || "").trim()
+      const limit = Math.min(Math.max(Number((input as any).limit || 30), 1), 80)
+      const filter: Record<string, unknown> = { ...orgFilter }
+      if (status) filter.status = status
+      if (query) {
+        const regex = new RegExp(escapeRegex(query), "i")
+        filter.$or = [
+          { title: regex },
+          { description: regex },
+          { callerName: regex },
+          { callerPhone: regex },
+        ]
+      }
+      const [tickets, total] = await Promise.all([
+        Ticket.find(filter)
+          .select(
+            "title description status callerName callerPhone resolutionType resolutionNote machine_id createdAt resolvedDate quotationNumber",
+          )
+          .sort({ createdAt: -1 })
+          .limit(limit)
+          .lean(),
+        Ticket.countDocuments(filter),
+      ])
+
+      const machineIds = Array.from(
+        new Set(
+          (tickets as any[])
+            .map((ticket) => String(ticket.machine_id || ""))
+            .filter(Boolean),
+        ),
+      )
+      const machines = machineIds.length
+        ? await InstalledMachine.find({
+            ...orgFilter,
+            _id: { $in: machineIds },
+          })
+            .select("productName serialNumber client")
+            .lean()
+        : []
+      const machineMap = new Map(
+        (machines as any[]).map((machine) => [String(machine._id), machine]),
+      )
+
+      const byStatus: Record<string, number> = {}
+      for (const ticket of tickets as any[]) {
+        const s = String(ticket.status || "Open")
+        byStatus[s] = (byStatus[s] || 0) + 1
+      }
+
+      return JSON.stringify({
+        matched: tickets.length,
+        totalMatching: total,
+        byStatus,
+        tickets: (tickets as any[]).map((ticket) => {
+          const machine = machineMap.get(String(ticket.machine_id || ""))
+          return {
+            title: ticket.title,
+            status: ticket.status,
+            callerName: ticket.callerName,
+            callerPhone: ticket.callerPhone,
+            resolutionType: ticket.resolutionType,
+            resolutionNote: ticket.resolutionNote,
+            quotationNumber: ticket.quotationNumber,
+            date: ticket.createdAt,
+            resolvedDate: ticket.resolvedDate,
+            machine: machine
+              ? {
+                  product: machine.productName,
+                  serial: machine.serialNumber,
+                  client: machine.client?.name,
+                }
+              : undefined,
+          }
+        }),
+      })
+    },
+    {
+      name: "get_machine_tickets_summary",
+      description:
+        "Service tickets for installed machines: open/closed status, callers, linked machine/facility, and resolutions. Use for 'open tickets', 'machine issues', 'service tickets for hospital X'.",
+      schema: z.object({
+        query: z
+          .string()
+          .optional()
+          .describe("Optional search by title, caller, phone, or description"),
+        status: z
+          .string()
+          .optional()
+          .describe("Optional ticket status filter e.g. Open, Resolved"),
+        limit: z.number().optional().describe("Max tickets (default 30)"),
       }),
     },
   )
@@ -1619,7 +2014,7 @@ export function createAssistantTools(ctx: AssistantOrgContext) {
       name: "get_complaints_summary",
       description:
         "Client complaints summary for this company by status. Use for 'open complaints', 'customer issues'.",
-      schema: z.object({}),
+      schema: emptyArgsSchema,
     },
   )
 
@@ -1639,7 +2034,9 @@ export function createAssistantTools(ctx: AssistantOrgContext) {
     // Clients / CRM / Machines
     getClientDirectory,
     getClientGroupsSummary,
+    getClientHistory,
     getInstalledMachinesSummary,
+    getMachineTicketsSummary,
     getDispatchSummary,
     getPaymentsAndExpensesSummary,
     getComplaintsSummary,

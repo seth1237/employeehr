@@ -29,10 +29,13 @@ import { generateStatementOfAccountPdf } from "@/lib/stock-document-pdf";
 import {
   Download,
   FileText,
+  MapPin,
   MessageSquare,
+  Pencil,
   PhoneCall,
   Plus,
   RefreshCw,
+  Trash2,
   Users,
 } from "lucide-react";
 import * as XLSX from "xlsx";
@@ -167,6 +170,21 @@ export default function AccountsClientsPage() {
   const [newGroupName, setNewGroupName] = useState("");
   const [newGroupDescription, setNewGroupDescription] = useState("");
   const [addToGroupId, setAddToGroupId] = useState("");
+  const [showEditGroupDialog, setShowEditGroupDialog] = useState(false);
+  const [showManageGroupsDialog, setShowManageGroupsDialog] = useState(false);
+  const [editingGroupId, setEditingGroupId] = useState("");
+  const [editingGroupName, setEditingGroupName] = useState("");
+  const [editingGroupDescription, setEditingGroupDescription] = useState("");
+  const [showCountyDownloadPanel, setShowCountyDownloadPanel] = useState(false);
+  const [countyDownload, setCountyDownload] = useState("");
+  const [showEditClientDialog, setShowEditClientDialog] = useState(false);
+  const [editClientForm, setEditClientForm] = useState({
+    name: "",
+    number: "",
+    location: "",
+    contactPerson: "",
+    email: "",
+  });
   const [showContactsDialog, setShowContactsDialog] = useState(false);
   const [contactRoles, setContactRoles] = useState<string[]>([
     "Doctor",
@@ -460,11 +478,18 @@ export default function AccountsClientsPage() {
     let result = [...rows];
 
     if (groupFilter !== "all") {
-      const group = clientGroups.find(
-        (candidate) => String(candidate._id) === groupFilter,
-      );
-      const memberKeys = new Set((group?.memberKeys || []).map(String));
-      result = result.filter((row) => memberKeys.has(row.key));
+      if (groupFilter === "ungrouped") {
+        const groupedKeys = new Set(
+          clientGroups.flatMap((group) => group.memberKeys || []).map(String),
+        );
+        result = result.filter((row) => !groupedKeys.has(row.key));
+      } else {
+        const group = clientGroups.find(
+          (candidate) => String(candidate._id) === groupFilter,
+        );
+        const memberKeys = new Set((group?.memberKeys || []).map(String));
+        result = result.filter((row) => memberKeys.has(row.key));
+      }
     }
 
     if (locationFilter !== "all") {
@@ -502,6 +527,19 @@ export default function AccountsClientsPage() {
       if (sortBy === "location") {
         const loc = a.client.location.localeCompare(b.client.location);
         return loc !== 0 ? loc : a.client.name.localeCompare(b.client.name);
+      }
+      if (sortBy === "group") {
+        const groupName = (row: SavedClientRow) => {
+          const names = clientGroups
+            .filter((group) => (group.memberKeys || []).includes(row.key))
+            .map((group) => group.name)
+            .sort((left, right) => left.localeCompare(right));
+          return names[0] || "zzz_ungrouped";
+        };
+        const groupCompare = groupName(a).localeCompare(groupName(b));
+        return groupCompare !== 0
+          ? groupCompare
+          : a.client.name.localeCompare(b.client.name);
       }
       if (sortBy === "pending_quotations") {
         const diff = pendingQuotationsFor(b) - pendingQuotationsFor(a);
@@ -837,6 +875,36 @@ export default function AccountsClientsPage() {
   };
 
   const handleExportClientReport = () => {
+    downloadClientWorkbook(filteredRows, "Client_Directory_Report");
+  };
+
+  const handleExportCountyReport = () => {
+    const groupId = countyDownload.trim();
+    if (!groupId) {
+      window.alert("Choose a county (group) to download");
+      return;
+    }
+    const group = clientGroups.find(
+      (candidate) => String(candidate._id) === groupId,
+    );
+    if (!group) {
+      window.alert("Selected county group was not found");
+      return;
+    }
+    const memberKeys = new Set((group.memberKeys || []).map(String));
+    const countyRows = rows.filter((row) => memberKeys.has(row.key));
+    if (countyRows.length === 0) {
+      window.alert(`No clients found in ${group.name}`);
+      return;
+    }
+    const safeName = String(group.name || "county").replace(/[^\w\-]+/g, "_");
+    downloadClientWorkbook(countyRows, `Clients_${safeName}`);
+  };
+
+  const downloadClientWorkbook = (
+    rowsToExport: SavedClientRow[],
+    filePrefix: string,
+  ) => {
     const headers = [
       "Client Name",
       "Client Number",
@@ -853,7 +921,7 @@ export default function AccountsClientsPage() {
     const aoa: (string | number)[][] = [headers];
     const merges: XLSX.Range[] = [];
 
-    for (const row of filteredRows) {
+    for (const row of rowsToExport) {
       const memberships = clientGroups
         .filter((group) => (group.memberKeys || []).includes(row.key))
         .map((group) => group.name)
@@ -876,7 +944,7 @@ export default function AccountsClientsPage() {
             : []
       ).filter((contact) => contact?.role && contact?.name);
 
-      const startRow = aoa.length; // 0-based sheet row index
+      const startRow = aoa.length;
 
       if (contacts.length === 0) {
         aoa.push([
@@ -912,7 +980,6 @@ export default function AccountsClientsPage() {
 
       if (contacts.length > 1) {
         const endRow = startRow + contacts.length - 1;
-        // Merge facility columns so blank rows share one cell
         for (const col of [0, 1, 2, 8, 9]) {
           merges.push({
             s: { r: startRow, c: col },
@@ -950,11 +1017,147 @@ export default function AccountsClientsPage() {
     );
     const link = document.createElement("a");
     link.href = url;
-    link.download = `Client_Directory_Report_${new Date().toISOString().split("T")[0]}.xlsx`;
+    link.download = `${filePrefix}_${new Date().toISOString().split("T")[0]}.xlsx`;
     document.body.appendChild(link);
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
+  };
+
+  const openEditGroupDialog = (group: ClientGroup) => {
+    setEditingGroupId(String(group._id));
+    setEditingGroupName(group.name);
+    setEditingGroupDescription(group.description || "");
+    setShowManageGroupsDialog(false);
+    setShowEditGroupDialog(true);
+  };
+
+  const saveEditedGroup = async () => {
+    if (!editingGroupId || !editingGroupName.trim()) {
+      window.alert("Group name is required");
+      return;
+    }
+    try {
+      setSavingCrm(true);
+      const response = await stockApi.updateClientGroup(editingGroupId, {
+        name: editingGroupName.trim(),
+        description: editingGroupDescription.trim() || undefined,
+      });
+      if (response?.data) {
+        setClientGroups((current) =>
+          current.map((group) =>
+            String(group._id) === editingGroupId ? response.data : group,
+          ),
+        );
+      } else {
+        await loadData({ silent: true });
+      }
+      setShowEditGroupDialog(false);
+      setShowManageGroupsDialog(true);
+    } catch (error: any) {
+      window.alert(error?.message || "Failed to rename group");
+    } finally {
+      setSavingCrm(false);
+    }
+  };
+
+  const openEditClientDialog = (row: SavedClientRow) => {
+    setEditClientForm({
+      name: row.client.name || "",
+      number: row.client.number || "",
+      location: row.client.location || "",
+      contactPerson: row.client.contactPerson || "",
+      email: row.client.email || "",
+    });
+    setShowEditClientDialog(true);
+  };
+
+  const saveEditedClient = async () => {
+    if (!selectedClient) return;
+    const name = editClientForm.name.trim();
+    const number = editClientForm.number.trim();
+    const location = editClientForm.location.trim();
+    if (!name || !number || !location) {
+      window.alert("Client name, number, and location are required");
+      return;
+    }
+
+    try {
+      setSavingCrm(true);
+      if (selectedClient.isSavedClient) {
+        const response = await stockApi.updateSavedClient({
+          originalSourceName: selectedClient.client.name,
+          originalSourceNumber: selectedClient.client.number,
+          originalSourceLocation: selectedClient.client.location,
+          sourceName: name,
+          sourceNumber: number,
+          sourceLocation: location,
+          legalName: name,
+          contactPerson: editClientForm.contactPerson.trim() || undefined,
+          email: editClientForm.email.trim() || undefined,
+        });
+        if (response?.success === false) {
+          throw new Error(response?.message || "Failed to update client");
+        }
+      } else {
+        await stockApi.saveClient({
+          sourceName: name,
+          sourceNumber: number,
+          sourceLocation: location,
+          legalName: name,
+          contactPerson: editClientForm.contactPerson.trim() || undefined,
+          email: editClientForm.email.trim() || undefined,
+        });
+      }
+
+      const newKey = `${name.trim().toLowerCase().replace(/\s+/g, " ")}|${number
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, " ")}|${location
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, " ")}`;
+      setSelectedClientKey(newKey);
+      setShowEditClientDialog(false);
+      await loadData({ silent: true });
+    } catch (error: any) {
+      window.alert(error?.message || "Failed to update client");
+    } finally {
+      setSavingCrm(false);
+    }
+  };
+
+  const deleteSelectedClient = async () => {
+    if (!selectedClient) return;
+    const confirmed = window.confirm(
+      `Delete CRM profile for "${selectedClient.client.name}"?\n\nThis removes the saved client, contacts, and group membership. Invoice/quotation history stays in accounts.`,
+    );
+    if (!confirmed) return;
+
+    try {
+      setSavingCrm(true);
+      if (selectedClient.isSavedClient) {
+        await stockApi.deleteSavedClient({
+          sourceName: selectedClient.client.name,
+          sourceNumber: selectedClient.client.number,
+          sourceLocation: selectedClient.client.location,
+        });
+      } else {
+        window.alert(
+          "This client only exists from invoices/quotations and has no saved CRM profile to delete.",
+        );
+        return;
+      }
+      setSelectedClientKey("");
+      setSelectedClientKeys((current) =>
+        current.filter((key) => key !== selectedClient.key),
+      );
+      await loadData({ silent: true });
+    } catch (error: any) {
+      window.alert(error?.message || "Failed to delete client");
+    } finally {
+      setSavingCrm(false);
+    }
   };
 
   const handleAddClient = async () => {
@@ -1029,6 +1232,7 @@ export default function AccountsClientsPage() {
               onClick={() => {
                 setShowBulkUploadPanel((prev) => !prev);
                 setShowAddClientPanel(false);
+                setShowCountyDownloadPanel(false);
               }}
             >
               <FileText className="mr-2 h-4 w-4" />
@@ -1036,10 +1240,19 @@ export default function AccountsClientsPage() {
             </Button>
             <Button
               size="sm"
+              variant="outline"
+              onClick={() => setShowManageGroupsDialog(true)}
+            >
+              <Pencil className="mr-2 h-4 w-4" />
+              Edit groups
+            </Button>
+            <Button
+              size="sm"
               variant={showAddClientPanel ? "default" : "outline"}
               onClick={() => {
                 setShowAddClientPanel((prev) => !prev);
                 setShowBulkUploadPanel(false);
+                setShowCountyDownloadPanel(false);
               }}
             >
               <Plus className="mr-2 h-4 w-4" />
@@ -1052,6 +1265,18 @@ export default function AccountsClientsPage() {
             >
               <Users className="mr-2 h-4 w-4" />
               Create group
+            </Button>
+            <Button
+              size="sm"
+              variant={showCountyDownloadPanel ? "default" : "outline"}
+              onClick={() => {
+                setShowCountyDownloadPanel((prev) => !prev);
+                setShowAddClientPanel(false);
+                setShowBulkUploadPanel(false);
+              }}
+            >
+              <MapPin className="mr-2 h-4 w-4" />
+              Download by County
             </Button>
             <Button size="sm" variant="outline" onClick={handleExportClientReport}>
               <Download className="mr-2 h-4 w-4" />
@@ -1232,6 +1457,46 @@ export default function AccountsClientsPage() {
         </Card>
       ) : null}
 
+      {showCountyDownloadPanel ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Download by County</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Export clients that belong to a county group (for example Homabay
+              County or Kisii County). Multi-contact rows stay merged like the
+              full report.
+            </p>
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="min-w-[220px] flex-1">
+                <Label>County</Label>
+                <select
+                  className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
+                  value={countyDownload}
+                  onChange={(event) => setCountyDownload(event.target.value)}
+                >
+                  <option value="">Choose county…</option>
+                  {clientGroups.map((group) => (
+                    <option key={group._id} value={group._id}>
+                      {group.name} ({group.memberKeys?.length || 0})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <Button
+                size="sm"
+                disabled={!countyDownload}
+                onClick={handleExportCountyReport}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Download county file
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
@@ -1253,6 +1518,7 @@ export default function AccountsClientsPage() {
                 >
                   <option value="name_asc">Name: A–Z</option>
                   <option value="name_desc">Name: Z–A</option>
+                  <option value="group">Group name only</option>
                   <option value="location">Location / County</option>
                   <option value="pending_quotations">
                     Pending quotations
@@ -1280,6 +1546,7 @@ export default function AccountsClientsPage() {
                   aria-label="Filter clients by group"
                 >
                   <option value="all">All groups</option>
+                  <option value="ungrouped">Ungrouped only</option>
                   {clientGroups.map((group) => (
                     <option key={group._id} value={group._id}>
                       {group.name} ({group.memberKeys?.length || 0})
@@ -1329,6 +1596,11 @@ export default function AccountsClientsPage() {
                   const activeLabel = actives
                     .map((c) => `${c.name}${c.role ? ` (${c.role})` : ""}`)
                     .join(", ");
+                  const groupNames = clientGroups
+                    .filter((group) =>
+                      (group.memberKeys || []).includes(row.key),
+                    )
+                    .map((group) => group.name);
                   return (
                     <div
                       key={row.key}
@@ -1361,6 +1633,19 @@ export default function AccountsClientsPage() {
                             {row.client.location || "No location"}
                             {activeLabel ? ` · ${activeLabel}` : ""}
                           </div>
+                          {groupNames.length > 0 ? (
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {groupNames.map((name) => (
+                                <Badge
+                                  key={name}
+                                  variant="secondary"
+                                  className="text-[10px]"
+                                >
+                                  {name}
+                                </Badge>
+                              ))}
+                            </div>
+                          ) : null}
                           {pending > 0 ? (
                             <p className="mt-1 text-[11px] text-amber-700">
                               {pending} pending quotation
@@ -1462,6 +1747,29 @@ export default function AccountsClientsPage() {
                   >
                     <MessageSquare className="mr-2 h-4 w-4" />
                     History
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => openEditClientDialog(selectedClient)}
+                  >
+                    <Pencil className="mr-2 h-4 w-4" />
+                    Edit client
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-destructive hover:text-destructive"
+                    disabled={savingCrm || !selectedClient.isSavedClient}
+                    onClick={() => void deleteSelectedClient()}
+                    title={
+                      selectedClient.isSavedClient
+                        ? "Delete saved CRM profile"
+                        : "Save this client first to enable delete"
+                    }
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete
                   </Button>
                 </div>
                 <div className="grid gap-3 md:grid-cols-2">
@@ -1991,6 +2299,191 @@ export default function AccountsClientsPage() {
               disabled={savingCrm || !newGroupName.trim()}
             >
               {savingCrm ? "Creating…" : "Create group"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={showManageGroupsDialog}
+        onOpenChange={setShowManageGroupsDialog}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit groups</DialogTitle>
+          </DialogHeader>
+          {clientGroups.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No groups yet. Create a group first.
+            </p>
+          ) : (
+            <div className="max-h-[360px] space-y-2 overflow-y-auto">
+              {clientGroups.map((group) => (
+                <div
+                  key={group._id}
+                  className="flex items-center justify-between gap-2 rounded-md border p-2"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{group.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {group.memberKeys?.length || 0} member
+                      {(group.memberKeys?.length || 0) === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => openEditGroupDialog(group)}
+                  >
+                    <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                    Edit
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowManageGroupsDialog(false)}
+            >
+              Close
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowManageGroupsDialog(false);
+                setShowCreateGroupDialog(true);
+              }}
+            >
+              Create group
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showEditGroupDialog} onOpenChange={setShowEditGroupDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit group name</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Group name</Label>
+              <Input
+                value={editingGroupName}
+                onChange={(event) => setEditingGroupName(event.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Description (optional)</Label>
+              <Input
+                value={editingGroupDescription}
+                onChange={(event) =>
+                  setEditingGroupDescription(event.target.value)
+                }
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowEditGroupDialog(false)}
+              disabled={savingCrm}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void saveEditedGroup()}
+              disabled={savingCrm || !editingGroupName.trim()}
+            >
+              {savingCrm ? "Saving…" : "Save group"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={showEditClientDialog}
+        onOpenChange={setShowEditClientDialog}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit client details</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Client name</Label>
+              <Input
+                value={editClientForm.name}
+                onChange={(event) =>
+                  setEditClientForm((current) => ({
+                    ...current,
+                    name: event.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div>
+              <Label>Client number</Label>
+              <Input
+                value={editClientForm.number}
+                onChange={(event) =>
+                  setEditClientForm((current) => ({
+                    ...current,
+                    number: event.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div>
+              <Label>Location / county</Label>
+              <Input
+                value={editClientForm.location}
+                onChange={(event) =>
+                  setEditClientForm((current) => ({
+                    ...current,
+                    location: event.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div>
+              <Label>Contact person (optional)</Label>
+              <Input
+                value={editClientForm.contactPerson}
+                onChange={(event) =>
+                  setEditClientForm((current) => ({
+                    ...current,
+                    contactPerson: event.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div>
+              <Label>Email (optional)</Label>
+              <Input
+                type="email"
+                value={editClientForm.email}
+                onChange={(event) =>
+                  setEditClientForm((current) => ({
+                    ...current,
+                    email: event.target.value,
+                  }))
+                }
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowEditClientDialog(false)}
+              disabled={savingCrm}
+            >
+              Cancel
+            </Button>
+            <Button onClick={() => void saveEditedClient()} disabled={savingCrm}>
+              {savingCrm ? "Saving…" : "Save changes"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -24,7 +24,18 @@ const MAX_TOOL_ROUNDS = 10;
 
 // ─── Model Factory ───────────────────────────────────────────────────────────
 
-function getModel(): ChatOpenAI {
+function getMaxTokens() {
+  const configured = Number(
+    process.env.OPENROUTER_MAX_TOKENS ||
+      process.env.AI_ASSISTANT_MAX_TOKENS ||
+      1500,
+  );
+  if (!Number.isFinite(configured) || configured <= 0) return 1500;
+  // Keep reservation small enough for low-credit OpenRouter accounts
+  return Math.min(Math.max(Math.floor(configured), 256), 2500);
+}
+
+function getModel(maxTokens = getMaxTokens()): ChatOpenAI {
   const openRouterKey = process.env.OPENROUTER_API_KEY;
   const openAiKey = process.env.OPENAI_API_KEY;
 
@@ -35,12 +46,12 @@ function getModel(): ChatOpenAI {
   }
 
   if (openRouterKey) {
-    const model = process.env.OPENROUTER_MODEL || "google/gemini-2.5-flash";
+    const model = process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini";
     return new ChatOpenAI({
       model,
       apiKey: openRouterKey,
       temperature: 0.1,
-      maxTokens: 3000,
+      maxTokens,
       configuration: {
         baseURL: "https://openrouter.ai/api/v1",
         defaultHeaders: {
@@ -56,7 +67,7 @@ function getModel(): ChatOpenAI {
     model: "gpt-4o-mini",
     apiKey: openAiKey!,
     temperature: 0.1,
-    maxTokens: 3000,
+    maxTokens,
   });
 }
 
@@ -111,7 +122,9 @@ You are a trusted internal analyst. You always answer with real data from the co
 ### 🏥 Clients, Facilities & Machines
 - **get_client_directory** → Search clients/facilities and multi-role contacts (doctor, lab tech, email, phone). Use for "client contacts", "lab technician at X"
 - **get_client_groups_summary** → Client groups like Private/Public and member counts. Use for "client groups", "private clients"
-- **get_installed_machines_summary** → Installed machines by status and facility. Use for "installed machines", "machines needing service"
+- **get_client_history** → Call notes, conversation history, quotations, invoices, and payments for a facility/client. Use for "client history", "what did we discuss with X?", "follow-ups for hospital Y"
+- **get_installed_machines_summary** → Search installed machines by facility, serial, product, or status. Use for "installed machines", "machines at hospital X", "machines needing service"
+- **get_machine_tickets_summary** → Service tickets for installed machines. Use for "open tickets", "machine issues", "service tickets"
 - **get_complaints_summary** → Client complaints by status. Use for "open complaints"
 
 ### 👥 HR & Workforce
@@ -228,7 +241,7 @@ export class AiAssistantService {
     if (process.env.OPENROUTER_API_KEY) {
       return {
         provider: "openrouter",
-        model: process.env.OPENROUTER_MODEL || "google/gemini-2.5-flash",
+        model: process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini",
       };
     }
     return { provider: "openai", model: "gpt-4o-mini" };
@@ -243,13 +256,20 @@ export class AiAssistantService {
       throw new Error("Missing organization context — cannot process your request.");
     }
 
-    try {
+    const runChat = async (maxTokens: number) => {
       const tools = createAssistantTools(ctx);
       const toolMap = new Map(tools.map((t) => [t.name, t]));
-      const llm = getModel().bindTools(tools);
+      const llm = getModel(maxTokens).bindTools(tools);
 
       const systemPrompt = buildSystemPrompt(ctx);
-      const messages = toLangChainMessages(history, systemPrompt);
+      // Avoid duplicating the current user turn when the client already included it
+      const priorHistory =
+        history.length > 0 &&
+        history[history.length - 1]?.role === "user" &&
+        String(history[history.length - 1]?.content || "").trim() === trimmed
+          ? history.slice(0, -1)
+          : history;
+      const messages = toLangChainMessages(priorHistory, systemPrompt);
       messages.push(new HumanMessage(trimmed));
 
       const toolsUsed: string[] = [];
@@ -267,7 +287,6 @@ export class AiAssistantService {
           };
         }
 
-        // Execute all tool calls for this round in parallel
         const toolPromises = toolCalls.map(async (call) => {
           const toolName = call.name;
           toolsUsed.push(toolName);
@@ -303,8 +322,40 @@ export class AiAssistantService {
           "I needed more steps than expected to answer this. Please try a more specific question or narrow the time period.",
         toolsUsed: Array.from(new Set(toolsUsed)),
       };
+    };
+
+    try {
+      return await runChat(getMaxTokens());
     } catch (error) {
+      const messageText =
+        error instanceof Error ? error.message : String(error || "Unknown error");
       console.error("AI Assistant Error:", error);
+
+      // OpenRouter 402: reserved max_tokens exceeds remaining credit balance
+      if (
+        /\b402\b/i.test(messageText) ||
+        /credits|max_tokens|afford/i.test(messageText)
+      ) {
+        try {
+          return await runChat(Math.min(getMaxTokens(), 800));
+        } catch (retryError) {
+          console.error("AI Assistant retry failed:", retryError);
+          return {
+            answer:
+              "The AI service does not have enough credits right now. Ask your administrator to top up OpenRouter credits (or lower OPENROUTER_MAX_TOKENS), then try again.",
+            toolsUsed: [],
+          };
+        }
+      }
+
+      if (/\b401\b/i.test(messageText) || /invalid.*(api|key)/i.test(messageText)) {
+        return {
+          answer:
+            "The AI service API key looks invalid. Ask your administrator to update OPENROUTER_API_KEY or OPENAI_API_KEY.",
+          toolsUsed: [],
+        };
+      }
+
       return {
         answer:
           "I'm having trouble processing that request right now. Please try rephrasing your question or contact your administrator if you need specific data.",

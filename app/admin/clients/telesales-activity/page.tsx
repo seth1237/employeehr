@@ -18,6 +18,7 @@ import { PageLoadingSkeleton } from "@/components/admin/ui/page-states"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/hooks/use-toast"
@@ -135,6 +136,21 @@ interface TelesalesActivityData {
   }
 }
 
+function hexToRgb(hex: string) {
+  const normalized = hex.replace("#", "")
+  if (normalized.length !== 6) return { r: 15, g: 118, b: 110 }
+  return {
+    r: Number.parseInt(normalized.slice(0, 2), 16),
+    g: Number.parseInt(normalized.slice(2, 4), 16),
+    b: Number.parseInt(normalized.slice(4, 6), 16),
+  }
+}
+
+function hexToRgba(hex: string, alpha: number) {
+  const { r, g, b } = hexToRgb(hex)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
 function startOfDayIso(date: Date) {
   const d = new Date(date)
   d.setHours(0, 0, 0, 0)
@@ -207,7 +223,11 @@ export default function TelesalesActivityPage() {
   const [exportFrom, setExportFrom] = useState("")
   const [exportTo, setExportTo] = useState("")
 
-  const primary = branding.primaryColor || "#0f766e"
+  const primaryColor = branding.primaryColor || "#0f766e"
+  const secondaryColor = branding.secondaryColor || "#0ea5e9"
+  const primarySoftColor = hexToRgba(primaryColor, 0.08)
+  const secondarySoftColor = hexToRgba(secondaryColor, 0.08)
+  const primaryBorderColor = hexToRgba(primaryColor, 0.18)
 
   const periodLabel = useMemo(() => {
     if (!data?.period) return ""
@@ -372,87 +392,160 @@ export default function TelesalesActivityPage() {
   const activity = data?.activity
   const planner = data?.planner
 
-  return (
-    <div className="space-y-6 p-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-            <Link href="/admin/clients" className="hover:underline">
-              Clients
-            </Link>
-            <span>/</span>
-            <span>Telesales Activity</span>
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight">Telesales Activity</h1>
-          <p className="text-muted-foreground mt-1 max-w-2xl">
-            Performance, quotation activity, and the planner for services,
-            installations, and client follow-ups.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() =>
-              void load(
-                data?.period.from || presetRange(preset).from,
-                data?.period.to || presetRange(preset).to,
-              )
-            }
-          >
-            <RefreshCw className="h-4 w-4 mr-1.5" />
-            Refresh
-          </Button>
-          <Button
-            size="sm"
-            style={{ backgroundColor: primary }}
-            className="text-white hover:opacity-90"
-            disabled={!data || exporting}
-            onClick={() => void exportPdf()}
-          >
-            <Download className="h-4 w-4 mr-1.5" />
-            {exporting ? "Exporting…" : "Export PDF"}
-          </Button>
-          <Button asChild variant="outline" size="sm">
-            <Link href="/admin/clients/telesales">
-              <PhoneCall className="h-4 w-4 mr-1.5" />
-              Open Telesales
-            </Link>
-          </Button>
-        </div>
-      </div>
+  const kpis = [
+    {
+      label: "Calls logged",
+      value: perf?.callsLogged ?? activity?.callLogs?.length ?? 0,
+      hint: "Telesales call activities",
+      icon: PhoneCall,
+    },
+    {
+      label: "Quotes generated",
+      value: perf?.quotesGenerated ?? 0,
+      hint: formatMoney(perf?.quoteValue || 0),
+      icon: Quote,
+      highlight: true,
+    },
+    {
+      label: "Invoices converted",
+      value: perf?.invoicesConverted ?? 0,
+      hint: `${perf?.conversionRate ?? 0}% · ${formatMoney(perf?.convertedValue || 0)}`,
+      icon: ArrowRightLeft,
+    },
+    {
+      label: "New clients",
+      value: perf?.newClientsOnboarded ?? 0,
+      hint: "CRM directory additions",
+      icon: UserPlus,
+    },
+    {
+      label: "Follow-ups",
+      value: perf?.quotationFollowUps ?? 0,
+      hint: "Logged call / note follow-ups",
+      icon: Activity,
+    },
+  ]
 
-      <Card>
-        <CardContent className="pt-5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-          <div className="flex flex-wrap gap-2">
-            {(
-              [
-                ["day", "Today"],
-                ["week", "This week"],
-                ["month", "This month"],
-                ["quarter", "This quarter"],
-              ] as const
-            ).map(([key, label]) => (
-              <Button
-                key={key}
-                size="sm"
-                variant={preset === key ? "default" : "outline"}
-                style={
-                  preset === key
-                    ? { backgroundColor: primary, color: "#fff" }
-                    : undefined
-                }
-                onClick={() => applyPreset(key)}
-              >
-                {label}
-              </Button>
-            ))}
+  return (
+    <div className="space-y-5">
+      <div
+        className="rounded-2xl border px-4 py-3 shadow-sm"
+        style={{
+          borderColor: primaryBorderColor,
+          background: `linear-gradient(to right, ${primarySoftColor}, ${secondarySoftColor})`,
+        }}
+      >
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-0.5">
+            <p
+              className="text-sm font-medium tracking-wide"
+              style={{ color: primaryColor }}
+            >
+              Telesales
+            </p>
+            <h1 className="text-xl font-semibold tracking-tight text-foreground">
+              Activity dashboard
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Performance, quotation activity, and planner for services and follow-ups.
+            </p>
           </div>
-          <div className="flex flex-wrap items-end gap-2">
-            <div>
-              <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
-                From
-              </label>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                void load(
+                  data?.period.from || presetRange(preset).from,
+                  data?.period.to || presetRange(preset).to,
+                )
+              }
+            >
+              <RefreshCw className="h-4 w-4 mr-1.5" />
+              Refresh
+            </Button>
+            <Button
+              size="sm"
+              style={{ backgroundColor: primaryColor }}
+              className="text-white hover:opacity-90"
+              disabled={!data || exporting}
+              onClick={() => void exportPdf()}
+            >
+              <Download className="h-4 w-4 mr-1.5" />
+              {exporting ? "Exporting…" : "Export PDF"}
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link href="/admin/clients/telesales">
+                <PhoneCall className="h-4 w-4 mr-1.5" />
+                Open Telesales
+              </Link>
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+          {kpis.map((kpi) => {
+            const Icon = kpi.icon
+            return (
+              <Card key={kpi.label} className="shadow-sm">
+                <CardContent className="p-3">
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                    {kpi.label}
+                  </div>
+                  <div className="mt-1 flex items-center justify-between gap-2">
+                    <div
+                      className="text-xl font-semibold tabular-nums"
+                      style={kpi.highlight ? { color: secondaryColor } : undefined}
+                    >
+                      {kpi.value}
+                    </div>
+                    <div
+                      className="rounded-lg p-1.5"
+                      style={{ backgroundColor: primarySoftColor, color: primaryColor }}
+                    >
+                      <Icon className="h-4 w-4" />
+                    </div>
+                  </div>
+                  <div className="mt-1 text-[11px] text-muted-foreground truncate" title={kpi.hint}>
+                    {kpi.hint}
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
+
+        <div className="mt-3 rounded-xl border bg-white/90 p-3 shadow-sm backdrop-blur-sm">
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_160px_160px_auto] lg:items-end">
+            <div className="space-y-2">
+              <Label>Quick presets</Label>
+              <div className="flex flex-wrap gap-2">
+                {(
+                  [
+                    ["day", "Today"],
+                    ["week", "This week"],
+                    ["month", "This month"],
+                    ["quarter", "This quarter"],
+                  ] as const
+                ).map(([key, label]) => (
+                  <Button
+                    key={key}
+                    size="sm"
+                    variant={preset === key ? "default" : "outline"}
+                    style={
+                      preset === key
+                        ? { backgroundColor: primaryColor, color: "#fff" }
+                        : undefined
+                    }
+                    onClick={() => applyPreset(key)}
+                  >
+                    {label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>From</Label>
               <Input
                 type="date"
                 value={fromInput}
@@ -460,13 +553,11 @@ export default function TelesalesActivityPage() {
                   setPreset("custom")
                   setFromInput(e.target.value)
                 }}
-                className="h-9 w-[150px]"
+                className="h-9 w-full"
               />
             </div>
-            <div>
-              <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
-                To
-              </label>
+            <div className="space-y-2">
+              <Label>To</Label>
               <Input
                 type="date"
                 value={toInput}
@@ -474,76 +565,21 @@ export default function TelesalesActivityPage() {
                   setPreset("custom")
                   setToInput(e.target.value)
                 }}
-                className="h-9 w-[150px]"
+                className="h-9 w-full"
               />
             </div>
-            <Button size="sm" variant="outline" onClick={applyCustom}>
-              Apply
-            </Button>
+            <div className="flex gap-2">
+              <Button size="sm" onClick={applyCustom}>
+                Apply period
+              </Button>
+            </div>
           </div>
-        </CardContent>
-      </Card>
-
-      {periodLabel ? (
-        <p className="text-sm text-muted-foreground -mt-2">Period: {periodLabel}</p>
-      ) : null}
-
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        {[
-          {
-            label: "Calls logged",
-            value: perf?.callsLogged ?? activity?.callLogs?.length ?? 0,
-            hint: "Telesales call activities",
-            icon: PhoneCall,
-          },
-          {
-            label: "Quotes generated",
-            value: perf?.quotesGenerated ?? 0,
-            hint: formatMoney(perf?.quoteValue || 0),
-            icon: Quote,
-          },
-          {
-            label: "Invoices converted",
-            value: perf?.invoicesConverted ?? 0,
-            hint: `${perf?.conversionRate ?? 0}% conversion · ${formatMoney(perf?.convertedValue || 0)}`,
-            icon: ArrowRightLeft,
-          },
-          {
-            label: "New clients onboarded",
-            value: perf?.newClientsOnboarded ?? 0,
-            hint: "CRM directory additions",
-            icon: UserPlus,
-          },
-          {
-            label: "Quotation follow-ups",
-            value: perf?.quotationFollowUps ?? 0,
-            hint: "Logged call / note follow-ups",
-            icon: Activity,
-          },
-        ].map((kpi) => {
-          const Icon = kpi.icon
-          return (
-            <Card key={kpi.label} className="border-slate-200/80">
-              <CardContent className="pt-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      {kpi.label}
-                    </p>
-                    <p className="text-3xl font-bold mt-1 tabular-nums">{kpi.value}</p>
-                    <p className="text-xs text-muted-foreground mt-1">{kpi.hint}</p>
-                  </div>
-                  <div
-                    className="rounded-lg p-2.5"
-                    style={{ backgroundColor: `${primary}18`, color: primary }}
-                  >
-                    <Icon className="h-5 w-5" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )
-        })}
+          {periodLabel ? (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Showing activity for: <span className="font-medium text-foreground">{periodLabel}</span>
+            </p>
+          ) : null}
+        </div>
       </div>
 
       <Tabs defaultValue="performance" className="space-y-4">
@@ -612,14 +648,14 @@ export default function TelesalesActivityPage() {
 
         <TabsContent value="planner" className="space-y-4">
           <div className="grid gap-4 lg:grid-cols-3">
-            <Card>
-              <CardHeader className="pb-3">
+            <Card className="shadow-sm">
+              <CardHeader className="border-b bg-muted/30 pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
-                  <Wrench className="h-4 w-4" style={{ color: primary }} />
+                  <Wrench className="h-4 w-4" style={{ color: primaryColor }} />
                   Services
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3 max-h-[420px] overflow-y-auto">
+              <CardContent className="space-y-3 max-h-[420px] overflow-y-auto p-4">
                 {(planner?.services || []).length === 0 ? (
                   <p className="text-sm text-muted-foreground">No scheduled services.</p>
                 ) : (
@@ -638,14 +674,14 @@ export default function TelesalesActivityPage() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader className="pb-3">
+            <Card className="shadow-sm">
+              <CardHeader className="border-b bg-muted/30 pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
-                  <CalendarClock className="h-4 w-4" style={{ color: primary }} />
+                  <CalendarClock className="h-4 w-4" style={{ color: primaryColor }} />
                   Installations
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3 max-h-[420px] overflow-y-auto">
+              <CardContent className="space-y-3 max-h-[420px] overflow-y-auto p-4">
                 {(planner?.installations || []).length === 0 ? (
                   <p className="text-sm text-muted-foreground">No installations in range.</p>
                 ) : (
@@ -663,14 +699,14 @@ export default function TelesalesActivityPage() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader className="pb-3">
+            <Card className="shadow-sm">
+              <CardHeader className="border-b bg-muted/30 pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
-                  <PhoneCall className="h-4 w-4" style={{ color: primary }} />
+                  <PhoneCall className="h-4 w-4" style={{ color: primaryColor }} />
                   Client follow-ups
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3 max-h-[420px] overflow-y-auto">
+              <CardContent className="space-y-3 max-h-[420px] overflow-y-auto p-4">
                 {(planner?.followUps || []).length === 0 ? (
                   <p className="text-sm text-muted-foreground">No follow-ups scheduled.</p>
                 ) : (
@@ -697,14 +733,14 @@ export default function TelesalesActivityPage() {
         </TabsContent>
 
         <TabsContent value="reports" className="space-y-4">
-          <Card>
-            <CardHeader>
+          <Card className="shadow-sm">
+            <CardHeader className="border-b bg-muted/30 pb-3">
               <CardTitle className="text-base flex items-center gap-2">
-                <FileText className="h-4 w-4" style={{ color: primary }} />
+                <FileText className="h-4 w-4" style={{ color: primaryColor }} />
                 Export branded PDF report
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 p-4">
               <p className="text-sm text-muted-foreground max-w-2xl">
                 Download a statement-style report with performance summary, call
                 logs, planner activities, quotes, and conversions — using your
@@ -725,7 +761,7 @@ export default function TelesalesActivityPage() {
                     variant={exportMode === mode ? "default" : "outline"}
                     style={
                       exportMode === mode
-                        ? { backgroundColor: primary, color: "#fff" }
+                        ? { backgroundColor: primaryColor, color: "#fff" }
                         : undefined
                     }
                     onClick={() => setExportMode(mode)}
@@ -736,11 +772,11 @@ export default function TelesalesActivityPage() {
               </div>
 
               {exportMode === "custom" ? (
-                <div className="flex flex-wrap items-end gap-2">
-                  <div>
-                    <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+                <div className="flex flex-wrap items-end gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
                       From
-                    </label>
+                    </Label>
                     <Input
                       type="date"
                       value={exportFrom}
@@ -748,10 +784,10 @@ export default function TelesalesActivityPage() {
                       className="h-9 w-[150px]"
                     />
                   </div>
-                  <div>
-                    <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+                  <div className="space-y-1">
+                    <Label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
                       To
-                    </label>
+                    </Label>
                     <Input
                       type="date"
                       value={exportTo}
@@ -769,7 +805,7 @@ export default function TelesalesActivityPage() {
               )}
 
               <Button
-                style={{ backgroundColor: primary }}
+                style={{ backgroundColor: primaryColor }}
                 className="text-white hover:opacity-90"
                 disabled={exporting}
                 onClick={() => void exportPdf()}
@@ -870,19 +906,19 @@ function ActivityTable({
   rows: Array<Array<ReactNode>>
 }) {
   return (
-    <Card className="overflow-hidden">
-      <CardHeader className="pb-2">
+    <Card className="overflow-hidden shadow-sm">
+      <CardHeader className="border-b bg-muted/30 pb-3">
         <CardTitle className="text-base">{title}</CardTitle>
       </CardHeader>
       <CardContent className="p-0">
         <div className="max-h-[320px] overflow-auto">
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-slate-50 border-y">
-              <tr>
+          <table className="min-w-[600px] w-full text-[13px]">
+            <thead className="sticky top-0 z-10 bg-muted/80 text-left text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
+              <tr className="border-b">
                 {headers.map((h) => (
                   <th
                     key={h}
-                    className="text-left text-[10px] uppercase tracking-wider text-muted-foreground font-semibold px-3 py-2 whitespace-nowrap"
+                    className="px-3 py-2 font-medium whitespace-nowrap"
                   >
                     {h}
                   </th>
@@ -901,7 +937,7 @@ function ActivityTable({
                 </tr>
               ) : (
                 rows.map((row, idx) => (
-                  <tr key={idx} className="border-b last:border-0 hover:bg-slate-50/60">
+                  <tr key={idx} className="border-b last:border-0 hover:bg-muted/40 transition-colors">
                     {row.map((cell, i) => (
                       <td key={i} className="px-3 py-2 align-top whitespace-nowrap">
                         {cell}
@@ -934,15 +970,15 @@ function PlannerRow({
   meta?: string
 }) {
   return (
-    <div className="rounded-lg border border-slate-200 p-3 space-y-1.5">
+    <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-1.5 shadow-sm transition-colors hover:bg-muted/20">
       <div className="flex items-start justify-between gap-2">
-        <div>
-          <p className="text-sm font-semibold text-slate-900 leading-snug">{title}</p>
-          <p className="text-xs text-muted-foreground">{subtitle}</p>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-slate-900 leading-snug truncate">{title}</p>
+          <p className="text-xs text-muted-foreground truncate">{subtitle}</p>
         </div>
         <Badge
           variant="outline"
-          className={statusBadgeClass(overdue ? "overdue" : status)}
+          className={`flex-shrink-0 ${statusBadgeClass(overdue ? "overdue" : status)}`}
         >
           {overdue ? "overdue" : status}
         </Badge>

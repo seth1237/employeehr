@@ -1,4 +1,5 @@
 import type { Response } from "express"
+import { randomUUID } from "crypto"
 import type { AuthenticatedRequest } from "../middleware/auth"
 import { Company } from "../models/Company"
 import { User } from "../models/User"
@@ -10,7 +11,26 @@ import { StockQuotation } from "../models/StockQuotation"
 import { Attendance } from "../models/Attendance"
 import { Meeting } from "../models/Meeting"
 import { LeaveRequest } from "../models/LeaveRequest"
+import { OwnerActionOtp } from "../models/OwnerActionOtp"
 import { isPlatformOwner } from "../utils/platformOwner"
+import { emailService } from "../services/emailService"
+import { permanentlyDeleteCompany } from "../services/companyDeletionService"
+
+const COMPANY_DELETE_OTP_EMAIL = String(
+  process.env.COMPANY_DELETE_OTP_EMAIL || "info@elevatehub.co.ke",
+)
+  .trim()
+  .toLowerCase()
+
+const COMPANY_DELETE_OTP_MINUTES = 10
+
+function requireOwner(req: AuthenticatedRequest, res: Response) {
+  if (!isPlatformOwner(req.user?.email, req.user?.role)) {
+    res.status(403).json({ success: false, message: "Unauthorized: Owner access required" })
+    return false
+  }
+  return true
+}
 
 const BYTES_PER_DOC: Record<string, number> = {
   users: 2_500,
@@ -676,6 +696,182 @@ export class OwnerController {
         success: false,
         message: "Failed to build platform insights",
         error: process.env.NODE_ENV === "development" ? (error as any).message : undefined,
+      })
+    }
+  }
+
+  /**
+   * Who can access the owner console
+   */
+  static async getOwnerSession(req: AuthenticatedRequest, res: Response) {
+    try {
+      if (!requireOwner(req, res)) return
+      return res.json({
+        success: true,
+        data: {
+          email: req.user?.email,
+          role: req.user?.role,
+          deleteOtpEmail: COMPANY_DELETE_OTP_EMAIL,
+        },
+      })
+    } catch (error) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to verify owner session",
+      })
+    }
+  }
+
+  /**
+   * Step 1: request permanent company deletion — OTP emailed to info@elevatehub.co.ke
+   */
+  static async requestCompanyDelete(req: AuthenticatedRequest, res: Response) {
+    try {
+      if (!requireOwner(req, res)) return
+
+      const companyId = String(req.params.companyId || req.body?.companyId || "").trim()
+      if (!companyId) {
+        return res.status(400).json({ success: false, message: "companyId is required" })
+      }
+
+      const company = await Company.findById(companyId).lean()
+      if (!company) {
+        return res.status(404).json({ success: false, message: "Company not found" })
+      }
+
+      await OwnerActionOtp.updateMany(
+        {
+          action: "delete_company",
+          companyId,
+          used: false,
+        },
+        { $set: { used: true } },
+      )
+
+      const otp = String(Math.floor(100000 + Math.random() * 900000))
+      const challengeId = randomUUID()
+      const expiresAt = new Date(Date.now() + COMPANY_DELETE_OTP_MINUTES * 60 * 1000)
+
+      await OwnerActionOtp.create({
+        challengeId,
+        action: "delete_company",
+        companyId,
+        companyName: company.name,
+        companySlug: company.slug,
+        requestedByEmail: String(req.user?.email || "").toLowerCase(),
+        requestedByUserId: String(req.user?.userId || ""),
+        otpEmail: COMPANY_DELETE_OTP_EMAIL,
+        otp,
+        expiresAt,
+        used: false,
+      })
+
+      const html = `
+        <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto;">
+          <h2 style="color:#0f172a;">Company deletion verification</h2>
+          <p>A platform owner requested permanent deletion of:</p>
+          <ul>
+            <li><strong>Company:</strong> ${company.name}</li>
+            <li><strong>Slug:</strong> ${company.slug}</li>
+            <li><strong>ID:</strong> ${companyId}</li>
+            <li><strong>Requested by:</strong> ${req.user?.email || "unknown"}</li>
+          </ul>
+          <p style="font-size:28px;letter-spacing:6px;font-weight:bold;color:#b91c1c;">${otp}</p>
+          <p>This code expires in ${COMPANY_DELETE_OTP_MINUTES} minutes.</p>
+          <p style="color:#64748b;font-size:13px;">If you did not expect this, ignore the email and secure the owner account.</p>
+        </div>
+      `
+
+      const sent = await emailService.sendEmail({
+        to: COMPANY_DELETE_OTP_EMAIL,
+        subject: `Delete company OTP — ${company.name}`,
+        html,
+      })
+
+      if (!sent) {
+        return res.status(500).json({
+          success: false,
+          message: `Failed to send OTP to ${COMPANY_DELETE_OTP_EMAIL}`,
+        })
+      }
+
+      return res.json({
+        success: true,
+        message: `Verification code sent to ${COMPANY_DELETE_OTP_EMAIL}`,
+        data: {
+          challengeId,
+          companyId,
+          companyName: company.name,
+          companySlug: company.slug,
+          otpEmail: COMPANY_DELETE_OTP_EMAIL,
+          expiresInMinutes: COMPANY_DELETE_OTP_MINUTES,
+        },
+      })
+    } catch (error: any) {
+      console.error("requestCompanyDelete failed:", error)
+      return res.status(500).json({
+        success: false,
+        message: error?.message || "Failed to start company deletion",
+      })
+    }
+  }
+
+  /**
+   * Step 2: confirm OTP + typed slug, then permanently wipe company data
+   */
+  static async confirmCompanyDelete(req: AuthenticatedRequest, res: Response) {
+    try {
+      if (!requireOwner(req, res)) return
+
+      const companyId = String(req.params.companyId || req.body?.companyId || "").trim()
+      const challengeId = String(req.body?.challengeId || "").trim()
+      const otp = String(req.body?.otp || "").trim()
+      const confirmSlug = String(req.body?.confirmSlug || "").trim().toLowerCase()
+
+      if (!companyId || !challengeId || !otp || !confirmSlug) {
+        return res.status(400).json({
+          success: false,
+          message: "companyId, challengeId, otp, and confirmSlug are required",
+        })
+      }
+
+      const challenge = await OwnerActionOtp.findOne({
+        challengeId,
+        action: "delete_company",
+        companyId,
+        used: false,
+        expiresAt: { $gt: new Date() },
+      })
+
+      if (!challenge || challenge.otp !== otp) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid or expired verification code",
+        })
+      }
+
+      if (String(challenge.companySlug || "").toLowerCase() !== confirmSlug) {
+        return res.status(400).json({
+          success: false,
+          message: "Confirm slug does not match the company slug",
+        })
+      }
+
+      challenge.used = true
+      await challenge.save()
+
+      const result = await permanentlyDeleteCompany(companyId)
+
+      return res.json({
+        success: true,
+        message: `Company "${result.companyName}" permanently deleted`,
+        data: result,
+      })
+    } catch (error: any) {
+      console.error("confirmCompanyDelete failed:", error)
+      return res.status(500).json({
+        success: false,
+        message: error?.message || "Failed to delete company",
       })
     }
   }

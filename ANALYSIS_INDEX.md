@@ -1,208 +1,260 @@
-# Backend Requirements — Machine Services Module
+something like this:
 
-The updated Installed Machines page adds a **Services** module (Pending / Due /
-Coming Soon / Done) on top of the existing `InstalledMachine` model. This
-requires one new collection/model (`MachineService`) plus a handful of new
-API routes and `stockApi` client methods. Nothing about the existing
-Installed Machines endpoints needs to change.
+```
+Clients
+├── Telesales Activity   ⭐ NEW
+
+
+```
+
+The **Telesales Activity** page becomes the central workspace for all telesales agents, where they can manage every client they're responsible for.
+
+# Telesales Activity
+
+This page should have four main sections.
 
 ---
 
-## 1. New data model: `MachineService`
+## 1. Today's Planner
 
-Each row represents a single service/maintenance event tied to one installed
-machine — either scheduled (pending) or already completed.
+At the top, show what the agent needs to do today.
 
-```ts
-interface MachineService {
-  _id: string;
-  machineId: string;          // ref -> InstalledMachine._id (required)
-  serviceType?: string;       // free text, e.g. "Routine maintenance", "Repair"
-  scheduledDate?: string;     // ISO date — when the service is due/planned
-  completedDate?: string;     // ISO date — set once the service is done
-  technician?: string;        // who performed / will perform the service
-  cost?: number;              // optional cost of the service
-  notes?: string;             // free text notes / parts used / observations
-  createdAt: string;
-  updatedAt: string;
-}
+```
+Today's Calls          35
+Completed              12
+Remaining              23
+
+Follow-ups Due         18
+Overdue                 5
+
+Meetings Today          3
+
+
 ```
 
-### Suggested Mongoose schema
+Buttons:
 
-```js
-const machineServiceSchema = new Schema(
-  {
-    machineId: { type: Schema.Types.ObjectId, ref: "InstalledMachine", required: true, index: true },
-    serviceType: { type: String, default: "" },
-    scheduledDate: { type: Date },
-    completedDate: { type: Date },
-    technician: { type: String, default: "" },
-    cost: { type: Number },
-    notes: { type: String, default: "" },
-  },
-  { timestamps: true },
-);
-```
+- 
 
-### Status logic (computed, not stored)
+- Start Calling
 
-The frontend derives status from dates rather than a stored enum, so the
-backend does not need to maintain a status field — just return the raw dates.
-For reference, the frontend classifies each service as:
+- 
 
-- **Done** — `completedDate` is set.
-- **Due** — no `completedDate`, and `scheduledDate` is today or in the past.
-- **Coming Soon** — no `completedDate`, and `scheduledDate` is within the
-  selected look-ahead window (7 days or 30 days) from today.
-- **Pending** — the umbrella bucket of every service without a
-  `completedDate` (this includes Due + Coming Soon + anything with no date
-  yet set).
+- Add Follow-up
 
-If you'd prefer this computed on the backend instead (e.g. for use in other
-reports), replicate the same rules server-side and return a `status` field
-alongside the raw dates — but keep the raw dates too, since the UI still
-needs them for display.
+- 
+
+- Create Task
+
+- 
+
+- View Calendar
 
 ---
 
-## 2. New API endpoints
+## 2. Call Queue
 
-Suggested REST routes (adjust prefix to match the existing API, e.g.
-`/api/stock/...`):
+A working list of clients to call.
 
-| Method | Route                                   | Purpose                                   |
-|--------|------------------------------------------|--------------------------------------------|
-| GET    | `/machine-services`                       | List all services (see query params below) |
-| GET    | `/machine-services/:id`                   | Get a single service                        |
-| POST   | `/machine-services`                       | Create a new service record                 |
-| PUT    | `/machine-services/:id`                   | Update a service (incl. marking it done)    |
-| DELETE | `/machine-services/:id`                   | Delete a service record                     |
-| GET    | `/installed-machines/:id/services`        | (Optional) list services for one machine    |
 
-### `GET /machine-services` — query params
+| Client            | Contact | Last Call  | Priority  | Next Action |
+| ----------------- | ------- | ---------- | --------- | ----------- |
+| Aga Khan Hospital | John    | 3 days ago | 🔴 High   | Call        |
+| Coast General     | Mary    | Yesterday  | 🟡 Medium | Follow-up   |
+| Labcare Ltd       | Peter   | Never      | 🔴 High   | First Call  |
 
-- `machineId` — filter to a single machine.
-- `status` — optional server-side filter: `pending` \| `due` \| `coming-soon` \| `done`.
-- `withinDays` — used with `status=coming-soon` to set the look-ahead window (`7` or `30`).
 
-If server-side filtering isn't implemented, it's fine to just return **all**
-services and let the frontend bucket them client-side (this is what the
-current frontend code assumes/does).
+Filters:
 
-### Response shape
+- Assigned to Me
+- Today
+- Overdue
+- New Leads
+- High Priority
+- Quotations Pending
+- No Answer
+- Lost Opportunities
 
-Each service should come back **populated** with enough machine/client info
-to render the list without another round trip:
+Each row should have quick actions:
 
-```json
-{
-  "data": [
-    {
-      "_id": "665f...",
-      "machineId": "664a...",
-      "machine": {
-        "productName": "Industrial Mixer X200",
-        "serialNumber": "SN-2024-001",
-        "client": { "name": "Acme Foods Ltd", "location": "Nairobi" }
-      },
-      "serviceType": "Routine maintenance",
-      "scheduledDate": "2026-07-10T00:00:00.000Z",
-      "completedDate": null,
-      "technician": "John Otieno",
-      "cost": 3500,
-      "notes": "Replace filter",
-      "createdAt": "2026-06-01T08:00:00.000Z",
-      "updatedAt": "2026-06-01T08:00:00.000Z"
-    }
-  ]
-}
+- 📞 Call
+- 📝 Add Note
+- 📧 Email
+- 💬 WhatsApp
+- 📄 Quote
+- 📅 Schedule
+
+---
+
+## 3. Planner & Calendar
+
+A daily/weekly planner.
+
+```
+9:00
+Call Aga Khan
+
+9:30
+Call Avenue Hospital
+
+10:00
+Follow up quotation
+
+11:00
+Demo Meeting
+
+2:00
+Call Labcare
+
+4:00
+Send quotations
+
 ```
 
-### POST /machine-services — body
+Tasks can be dragged to different times if needed.
 
-```json
-{
-  "machineId": "664a...",
-  "serviceType": "Routine maintenance",
-  "scheduledDate": "2026-07-10T00:00:00.000Z",
-  "technician": "John Otieno",
-  "cost": 3500,
-  "notes": "Replace filter",
-  "completedDate": null
-}
+---
+
+## 4. Performance Dashboard
+
+This measures the telesales agent's productivity.
+
+```
+Calls Made           47
+
+Connected            33
+
+Average Duration     6m 18s
+
+Interested           18
+
+Quotes Sent          9
+
+Meetings             4
+
+Sales Closed         2
+
+Conversion Rate      12%
+
+Revenue Generated    KES 2.4M
+
 ```
 
-### PUT /machine-services/:id — body
+Managers can filter by:
 
-Same shape as POST, partial updates allowed. The "Mark done" quick action
-from the UI sends just:
+- Today
+- This Week
+- This Month
+- Custom Date
 
-```json
-{ "completedDate": "2026-07-07T10:00:00.000Z" }
+---
+
+## 5. Activity Feed
+
+A live stream of recent telesales actions.
+
+```
+09:15
+John called Aga Khan Hospital
+
+09:30
+Quotation sent to Coast General
+
+10:10
+Follow-up scheduled for Mediheal
+
+11:00
+Meeting booked with Nairobi Hospital
+
+11:45
+Sale closed for Chemistry Analyzer
+
 ```
 
 ---
 
-## 3. `stockApi` client additions (`lib/api.ts`)
+## 6. Follow-up Board
 
-The page calls the following methods, which need to be added next to the
-existing `getInstalledMachines` / `createInstalledMachine` / etc.:
+```
+Overdue (8)
 
-```ts
-export const stockApi = {
-  // ...existing methods (getInstalledMachines, getInstallableCandidates,
-  // createInstalledMachine, updateInstalledMachine, deleteInstalledMachine)...
+Today (15)
 
-  getMachineServices: (params?: { machineId?: string; status?: string; withinDays?: number }) =>
-    apiClient.get("/machine-services", { params }),
+Tomorrow (22)
 
-  getMachineService: (id: string) =>
-    apiClient.get(`/machine-services/${id}`),
+This Week (40)
 
-  createMachineService: (data: Partial<MachineService>) =>
-    apiClient.post("/machine-services", data),
+Completed (120)
 
-  updateMachineService: (id: string, data: Partial<MachineService>) =>
-    apiClient.put(`/machine-services/${id}`, data),
-
-  deleteMachineService: (id: string) =>
-    apiClient.delete(`/machine-services/${id}`),
-};
 ```
 
-The frontend guards the initial load with
-`stockApi.getMachineServices ? stockApi.getMachineServices() : Promise.resolve({ data: [] })`,
-so the page won't crash before these methods exist — it will just show empty
-service lists until the backend and client methods are wired up.
+Clicking a section opens the relevant client list.
 
 ---
 
-## 4. Optional: keep `InstalledMachine.nextServiceDate` in sync
+## 7. KPIs
 
-The existing `InstalledMachine` model already has a `nextServiceDate` field
-used for the old single-date reminder. Two options going forward:
+```
+Clients Assigned
+320
 
-1. **Deprecate it** in favor of the new `MachineService` records (recommended
-   — one source of truth), and stop displaying/editing it once the Services
-   module is live for all machines.
-2. **Keep both**, and when a new `MachineService` is created for a machine,
-   also update that machine's `nextServiceDate` to the soonest open
-   (`!completedDate`) `scheduledDate` across its services, so any other part
-   of the app still reading `nextServiceDate` stays accurate.
+Active Clients
+214
 
-Either is fine functionally — just pick one so the two don't drift out of
-sync.
+Clients Contacted Today
+27
+
+Clients Awaiting Follow-up
+39
+
+Clients with Quotes
+21
+
+Clients in Negotiation
+14
+
+Won This Month
+9
+
+Lost This Month
+5
+
+```
 
 ---
 
-## 5. Suggested indexes
+## 8. Manager View
 
-```js
-machineServiceSchema.index({ machineId: 1 });
-machineServiceSchema.index({ completedDate: 1 });
-machineServiceSchema.index({ scheduledDate: 1 });
+Managers should also be able to see performance by salesperson.
+
+
+| Salesperson | Calls | Connected | Quotes | Sales | Conversion |
+| ----------- | ----- | --------- | ------ | ----- | ---------- |
+| John        | 54    | 41        | 10     | 3     | 7.4%       |
+| Mary        | 49    | 35        | 8      | 2     | 5.7%       |
+| Peter       | 61    | 44        | 12     | 4     | 9.1%       |
+
+
+---
+
+### Suggested Navigation
+
+```
+Clients
+├── All Clients
+├── Leads
+├── Telesales Activity
+│   ├── Dashboard
+│   ├── Call Queue
+│   ├── Planner
+│   ├── Calendar
+│   ├── Follow-ups
+│   ├── Activity Feed
+│   ├── Performance
+│   └── Reports
+├── Client Groups
+└── Reports
+
 ```
 
-These keep the Pending/Due/Coming Soon/Done queries fast as the services
-collection grows.
+This layout keeps **all client-related work under the Clients module** while giving telesales agents a dedicated operational workspace. Individual client records remain focused on customer details, and **Telesales Activity** becomes the place where agents plan their day, make calls, track follow-ups, and managers monitor team performance.

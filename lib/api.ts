@@ -1276,6 +1276,9 @@ export const crmApi = {
     return client.get<any[]>(`/api/crm/conversations?${params.toString()}`)
   },
   createConversation: (data: any) => client.post<any>("/api/crm/conversations", data),
+  getCallPurposes: () => client.get<any>("/api/crm/call-purposes"),
+  addCallPurpose: (purpose: string) =>
+    client.post<any>("/api/crm/call-purposes", { purpose }),
   getCustomers: () => client.get<any[]>("/api/crm/customers"),
   createCustomer: (data: any) => client.post<any>("/api/crm/customers", data),
   getLeads: () => client.get<any[]>("/api/crm/leads"),
@@ -1302,6 +1305,13 @@ export const crmApi = {
       cost?: number | string
     },
   ) => client.post<any>(`/api/crm/tickets/${id}/resolve`, data),
+  getTelesalesActivity: (query?: { from?: string; to?: string }) => {
+    const params = new URLSearchParams()
+    if (query?.from) params.append("from", query.from)
+    if (query?.to) params.append("to", query.to)
+    const qs = params.toString()
+    return client.get<any>(`/api/crm/telesales/activity${qs ? `?${qs}` : ""}`)
+  },
 };
 
 // Export all APIs

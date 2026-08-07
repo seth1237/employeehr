@@ -126,7 +126,9 @@ export default function CompanyLoginPage() {
         })
 
         const role = data.data.user.role
-        if (role === "company_admin" || role === "hr") {
+        if (role === "super_admin") {
+          router.push("/owner")
+        } else if (role === "company_admin" || role === "hr") {
           router.push("/admin")
         } else if (role === "manager") {
           router.push("/manager")

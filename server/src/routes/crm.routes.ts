@@ -15,6 +15,11 @@ router.post("/customers", CrmController.createCustomer)
 // Conversations / Telesales Rooms
 router.get("/conversations", CrmController.getConversations)
 router.post("/conversations", CrmController.createConversation)
+router.get("/call-purposes", CrmController.getCallPurposes)
+router.post("/call-purposes", CrmController.addCallPurpose)
+
+// Telesales Activity (performance + planner)
+router.get("/telesales/activity", CrmController.getTelesalesActivity)
 
 // Leads
 router.get("/leads", CrmController.getLeads)

@@ -33,6 +33,7 @@ import {
   Clock3,
   Truck,
   PhoneCall,
+  Activity,
   Star,
 } from "lucide-react";
 import { getUser, logout } from "@/lib/auth";
@@ -165,6 +166,12 @@ const adminMenuItems = [
     icon: Stamp,
     href: "/admin/stock/services",
     section: "INVENTORY MANAGER",
+  },
+  {
+    label: "Telesales Activity",
+    icon: Activity,
+    href: "/admin/clients/telesales-activity",
+    section: "CLIENTS",
   },
   {
     label: "Telesales",

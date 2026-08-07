@@ -8,6 +8,7 @@ import {
   MessageSquare,
   Mail,
   Zap,
+  Activity,
 } from "lucide-react"
 
 export default function ClientsHubPage() {
@@ -19,6 +20,14 @@ export default function ClientsHubPage() {
       href: "/admin/clients/clients-list",
       icon: Users,
       color: "bg-blue-100 text-blue-700",
+    },
+    {
+      title: "Telesales Activity",
+      description:
+        "Performance, quotes, conversions, new clients, follow-ups, and the services / installations planner",
+      href: "/admin/clients/telesales-activity",
+      icon: Activity,
+      color: "bg-teal-100 text-teal-700",
     },
     {
       title: "Installed Machines",

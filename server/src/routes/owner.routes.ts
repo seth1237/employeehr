@@ -1,11 +1,14 @@
 import { Router } from "express"
 import { OwnerController } from "../controllers/ownerController"
 import { authMiddleware } from "../middleware/auth"
+import { ActivityController } from "../controllers/activityController"
 
 const router = Router()
 
 // All owner routes require authentication
 router.use(authMiddleware)
+
+router.get("/me", OwnerController.getOwnerSession)
 
 // Get all companies
 router.get("/companies", OwnerController.getAllCompanies)
@@ -34,8 +37,17 @@ router.put("/companies/:companyId/pages", (req, res) => {
   OwnerController.updateCompanyPages(req as any, res)
 })
 
+// Permanent company deletion (OTP to info@elevatehub.co.ke)
+router.post(
+  "/companies/:companyId/delete/request",
+  OwnerController.requestCompanyDelete,
+)
+router.post(
+  "/companies/:companyId/delete/confirm",
+  OwnerController.confirmCompanyDelete,
+)
+
 // User activity logs across all organizations
-import { ActivityController } from "../controllers/activityController"
 router.get("/user-activity", ActivityController.getOwnerActivitySummary)
 
 export default router

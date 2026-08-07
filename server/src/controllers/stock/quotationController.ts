@@ -1,10 +1,21 @@
 import type { Response } from "express"
 import type { AuthenticatedRequest } from "../../middleware/auth"
+import { Types } from "mongoose"
 import { StockQuotation } from "../../models/StockQuotation"
 import { QuotationFollowUp } from "../../models/QuotationFollowUp"
 import { Branch } from "../../models/Branch"
 import { User } from "../../models/User"
 import { buildQuotationItems, generateDocumentNumber, isAdminRole } from "./stockShared"
+
+function toValidObjectIds(values: Array<string | undefined | null>) {
+  return [
+    ...new Set(
+      values
+        .map((value) => String(value || "").trim())
+        .filter((value) => value.length > 0 && Types.ObjectId.isValid(value)),
+    ),
+  ]
+}
 
 export class QuotationController {
   static async createQuotation(req: AuthenticatedRequest, res: Response) {
@@ -107,15 +118,15 @@ export class QuotationController {
       }
 
       const quotations = await StockQuotation.find(query).sort({ createdAt: -1 }).lean()
-      const creatorIds = [
-        ...new Set(quotations.map((quotation) => String(quotation.createdBy || "")).filter(Boolean)),
-      ]
-      const ownerIds = [
-        ...new Set(quotations.map((quotation) => String(quotation.ownerUserId || "")).filter(Boolean)),
-      ]
-      const branchIds = [
-        ...new Set(quotations.map((quotation) => String(quotation.branchId || "")).filter(Boolean)),
-      ]
+      const creatorIds = toValidObjectIds(
+        quotations.map((quotation) => quotation.createdBy),
+      )
+      const ownerIds = toValidObjectIds(
+        quotations.map((quotation) => quotation.ownerUserId),
+      )
+      const branchIds = toValidObjectIds(
+        quotations.map((quotation) => quotation.branchId),
+      )
 
       const [creators, owners, branches] = await Promise.all([
         creatorIds.length
@@ -139,12 +150,17 @@ export class QuotationController {
         branches.map((branch) => [String(branch._id), `${branch.name || ""} (${branch.code || ""})`.trim()]),
       )
 
-      const enriched = quotations.map((quotation) => ({
-        ...quotation,
-        createdByName: creatorMap.get(String(quotation.createdBy || "")) || undefined,
-        ownerUserName: ownerMap.get(String(quotation.ownerUserId || "")) || undefined,
-        branchName: branchMap.get(String(quotation.branchId || "")) || undefined,
-      }))
+      const enriched = quotations.map((quotation) => {
+        const createdByKey = String(quotation.createdBy || "")
+        return {
+          ...quotation,
+          createdByName:
+            creatorMap.get(createdByKey) ||
+            (createdByKey === "website" ? "Website" : undefined),
+          ownerUserName: ownerMap.get(String(quotation.ownerUserId || "")) || undefined,
+          branchName: branchMap.get(String(quotation.branchId || "")) || undefined,
+        }
+      })
 
       return res.status(200).json({ success: true, data: enriched })
     } catch (error: unknown) {
@@ -176,16 +192,19 @@ export class QuotationController {
       }
 
       const [creator, owner, branch] = await Promise.all([
-        quotation.createdBy
+        Types.ObjectId.isValid(String(quotation.createdBy || ""))
           ? User.findById(quotation.createdBy).select("firstName lastName").lean()
           : null,
-        quotation.ownerUserId
+        Types.ObjectId.isValid(String(quotation.ownerUserId || ""))
           ? User.findById(quotation.ownerUserId).select("firstName lastName").lean()
           : null,
-        quotation.branchId
+        Types.ObjectId.isValid(String(quotation.branchId || ""))
           ? Branch.findById(quotation.branchId).select("name code").lean()
           : null,
       ])
+
+      const websiteLabel =
+        String(quotation.createdBy || "") === "website" ? "Website" : undefined
 
       return res.status(200).json({
         success: true,
@@ -193,7 +212,7 @@ export class QuotationController {
           ...quotation,
           createdByName: creator
             ? `${creator.firstName || ""} ${creator.lastName || ""}`.trim()
-            : undefined,
+            : websiteLabel,
           ownerUserName: owner
             ? `${owner.firstName || ""} ${owner.lastName || ""}`.trim()
             : undefined,

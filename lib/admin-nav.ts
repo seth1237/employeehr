@@ -34,6 +34,7 @@ export const ADMIN_NAV_ITEMS: AdminNavItem[] = [
   { label: "Debts", href: "/admin/accounts/debts", section: "ACCOUNTS" },
   { label: "Expenses", href: "/admin/accounts/expenses", section: "ACCOUNTS" },
   { label: "Client CRM", href: "/admin/clients/clients-list", section: "CLIENTS", keywords: ["customers", "crm", "contacts", "groups", "directory"] },
+  { label: "Telesales Activity", href: "/admin/clients/telesales-activity", section: "CLIENTS", keywords: ["performance", "planner", "follow-ups", "quotes", "conversions"] },
   { label: "Telesales", href: "/admin/clients/telesales", section: "CLIENTS", keywords: ["crm", "calls", "field"] },
   { label: "Installed Machines", href: "/admin/clients/installed-machines", section: "CLIENTS", keywords: ["machines", "service", "tickets"] },
   { label: "Complaints", href: "/admin/clients/complaints", section: "CLIENTS" },

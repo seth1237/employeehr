@@ -213,6 +213,9 @@ const companySchema = new Schema<ICompany>(
     stockSettings: {
       bypassWebsiteQuotationApproval: { type: Boolean, default: false },
     },
+    crmSettings: {
+      callPurposes: { type: [String], default: [] },
+    },
     setupProgress: {
       completed: { type: Boolean, default: false },
       currentStep: { type: String, default: "companyInfo" },

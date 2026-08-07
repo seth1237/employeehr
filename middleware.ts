@@ -38,7 +38,8 @@ export function middleware(request: NextRequest) {
   const isProtected =
     pathname.startsWith("/admin") ||
     pathname.startsWith("/employee") ||
-    pathname.startsWith("/manager")
+    pathname.startsWith("/manager") ||
+    pathname.startsWith("/owner")
 
   if (!isProtected) {
     return NextResponse.next()
@@ -66,9 +67,17 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/auth/login", request.url))
   }
 
+  // /owner: authenticated only — page + API enforce platform owner
   return NextResponse.next()
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/employee/:path*", "/manager/:path*", "/dashboard/:path*"],
+  matcher: [
+    "/admin/:path*",
+    "/employee/:path*",
+    "/manager/:path*",
+    "/dashboard/:path*",
+    "/owner",
+    "/owner/:path*",
+  ],
 }

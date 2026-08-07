@@ -2691,3 +2691,367 @@ export function generateStatementOfAccountPdf(params: {
 
   return doc;
 }
+
+export function generateTelesalesActivityPdf(params: {
+  performance: {
+    quotesGenerated: number;
+    invoicesConverted: number;
+    newClientsOnboarded: number;
+    quotationFollowUps: number;
+    callsLogged?: number;
+    quoteValue: number;
+    convertedValue: number;
+    conversionRate: number;
+  };
+  activity: {
+    quotations: Array<{
+      quotationNumber: string;
+      clientName: string;
+      status: string;
+      subTotal: number;
+      createdByName: string;
+      createdAt?: string | Date;
+    }>;
+    conversions: Array<{
+      quotationNumber: string;
+      invoiceNumber: string;
+      clientName: string;
+      subTotal: number;
+      createdByName: string;
+      convertedAt?: string | Date;
+    }>;
+    newClients: Array<{
+      name: string;
+      phone: string;
+      location: string;
+      createdByName: string;
+      createdAt?: string | Date;
+    }>;
+    followUps: Array<{
+      quotationNumber: string;
+      clientName: string;
+      note: string;
+      outcome: string;
+      createdByName: string;
+      createdAt?: string | Date;
+    }>;
+    callLogs?: Array<{
+      clientName: string;
+      callPurpose: string;
+      focusCategories?: string[];
+      outcome: string;
+      note: string;
+      followUpDate?: string | Date;
+      createdByName: string;
+      createdAt?: string | Date;
+      hasLead?: boolean;
+    }>;
+  };
+  planner: {
+    services: Array<{
+      title: string;
+      clientName: string;
+      scheduledDate?: string | Date;
+      status: string;
+    }>;
+    installations: Array<{
+      title: string;
+      clientName: string;
+      status: string;
+      installationDate?: string | Date;
+      nextServiceDate?: string | Date;
+    }>;
+    followUps: Array<{
+      title: string;
+      clientName: string;
+      callPurpose?: string;
+      focusCategories?: string[];
+      followUpDate?: string | Date;
+      status: string;
+      assignedToName: string;
+    }>;
+  };
+  branding?: TenantBranding;
+  periodStr?: string;
+  reportTitle?: string;
+  autoSave?: boolean;
+}) {
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const primary = params.branding?.primaryColor || DEFAULT_PRIMARY;
+  const title = (params.reportTitle || "TELESALES ACTIVITY REPORT").toUpperCase();
+  const formatMoney = (n: number) => formatAmount(Number(n || 0));
+  const formatDate = (value?: string | Date) => {
+    if (!value) return "—";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "—";
+    return d.toLocaleDateString("en-GB");
+  };
+
+  // Header — same visual language as statement of account
+  if (params.branding?.logo) {
+    try {
+      const lower = params.branding.logo.toLowerCase();
+      const format =
+        lower.includes("jpg") || lower.includes("jpeg") ? "JPEG" : "PNG";
+      doc.addImage(params.branding.logo, format, 12, 12, 44, 20);
+    } catch {}
+  } else if (params.branding?.name) {
+    doc.setFontSize(22);
+    doc.setFont("helvetica", "bold");
+    setColorFromHex(doc, DEFAULT_TEXT, "text");
+    doc.text(params.branding.name, 12, 24);
+  }
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(params.reportTitle && params.reportTitle.length > 22 ? 18 : 22);
+  setColorFromHex(doc, primary, "text");
+  doc.text(title, 198, 22, { align: "right" });
+
+  if (params.periodStr) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    setColorFromHex(doc, DEFAULT_GRAY, "text");
+    doc.text(params.periodStr, 198, 30, { align: "right" });
+  }
+
+  // Summary band
+  setColorFromHex(doc, DEFAULT_LIGHT, "fill");
+  doc.rect(12, 38, 186, 28, "F");
+
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "bold");
+  setColorFromHex(doc, DEFAULT_TEXT, "text");
+  doc.text("PERFORMANCE SUMMARY", 15, 46);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.5);
+  const summaryLines = [
+    `Calls logged: ${params.performance.callsLogged ?? 0}`,
+    `Quotes generated: ${params.performance.quotesGenerated} (${formatMoney(params.performance.quoteValue)})`,
+    `Invoices converted: ${params.performance.invoicesConverted} (${formatMoney(params.performance.convertedValue)}) · ${params.performance.conversionRate}%`,
+    `New clients: ${params.performance.newClientsOnboarded} · Quotation follow-ups: ${params.performance.quotationFollowUps}`,
+  ];
+  summaryLines.forEach((line, i) => {
+    doc.text(line, 15, 53 + i * 4);
+  });
+
+  let y = 76;
+
+  const ensureSpace = (needed: number) => {
+    if (y + needed > 275) {
+      doc.addPage();
+      y = 20;
+    }
+  };
+
+  const drawSectionHeading = (label: string) => {
+    ensureSpace(16);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    setColorFromHex(doc, DEFAULT_TEXT, "text");
+    doc.text(label.toUpperCase(), 12, y);
+    y += 3;
+    setColorFromHex(doc, "#e2e8f0", "draw");
+    doc.setLineWidth(0.3);
+    doc.line(12, y, 198, y);
+    y += 5;
+  };
+
+  const drawTable = (
+    columns: Array<{ h: string; w: number; align?: "left" | "right" }>,
+    rows: string[][],
+  ) => {
+    ensureSpace(14);
+    setColorFromHex(doc, primary, "fill");
+    doc.rect(12, y, 186, 9, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "bold");
+
+    let cx = 12;
+    columns.forEach((col) => {
+      const align = col.align || "left";
+      const off = align === "right" ? col.w - 3 : 3;
+      doc.text(col.h, cx + off, y + 6, { align });
+      cx += col.w;
+    });
+    y += 9;
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+
+    if (!rows.length) {
+      setColorFromHex(doc, DEFAULT_GRAY, "text");
+      doc.text("No records in this period.", 15, y + 5);
+      y += 10;
+      return;
+    }
+
+    rows.forEach((row, rowIndex) => {
+      const lineSets = row.map((cell, i) =>
+        doc.splitTextToSize(String(cell || "—"), columns[i].w - 4),
+      );
+      const rh = Math.max(8, ...lineSets.map((lines) => lines.length * 3.6 + 4));
+      ensureSpace(rh + 2);
+
+      if (rowIndex % 2 === 0) {
+        doc.setFillColor(248, 250, 252);
+        doc.rect(12, y, 186, rh, "F");
+      }
+
+      setColorFromHex(doc, DEFAULT_TEXT, "text");
+      cx = 12;
+      lineSets.forEach((lines, i) => {
+        const align = columns[i].align || "left";
+        const off = align === "right" ? columns[i].w - 3 : 2;
+        doc.text(lines, cx + off, y + 5, { align });
+        cx += columns[i].w;
+      });
+      y += rh;
+    });
+    y += 6;
+  };
+
+  drawSectionHeading("Call log activity");
+  drawTable(
+    [
+      { h: "Date", w: 22 },
+      { h: "Client", w: 40 },
+      { h: "Purpose", w: 36 },
+      { h: "Focus", w: 34 },
+      { h: "Outcome", w: 28 },
+      { h: "By", w: 26 },
+    ],
+    (params.activity.callLogs || []).map((c) => [
+      formatDate(c.createdAt),
+      c.clientName,
+      c.callPurpose,
+      (c.focusCategories || []).join(", ") || "—",
+      c.outcome + (c.hasLead ? " · Lead" : ""),
+      c.createdByName,
+    ]),
+  );
+
+  drawSectionHeading("Planner — services & installations");
+  drawTable(
+    [
+      { h: "Date", w: 28 },
+      { h: "Type", w: 28 },
+      { h: "Activity", w: 52 },
+      { h: "Client", w: 48 },
+      { h: "Status", w: 30 },
+    ],
+    [
+      ...params.planner.services.map((s) => [
+        formatDate(s.scheduledDate),
+        "Service",
+        s.title,
+        s.clientName,
+        s.status,
+      ]),
+      ...params.planner.installations.map((s) => [
+        formatDate(s.installationDate || s.nextServiceDate),
+        "Installation",
+        s.title,
+        s.clientName,
+        s.status,
+      ]),
+    ],
+  );
+
+  drawSectionHeading("Planner — client follow-ups");
+  drawTable(
+    [
+      { h: "Date", w: 28 },
+      { h: "Client", w: 44 },
+      { h: "Purpose", w: 40 },
+      { h: "Assigned", w: 40 },
+      { h: "Status", w: 34 },
+    ],
+    params.planner.followUps.map((s) => [
+      formatDate(s.followUpDate),
+      s.clientName,
+      s.callPurpose || s.title,
+      s.assignedToName,
+      s.status,
+    ]),
+  );
+
+  drawSectionHeading("Quotations generated");
+  drawTable(
+    [
+      { h: "Date", w: 22 },
+      { h: "Quote #", w: 28 },
+      { h: "Client", w: 48 },
+      { h: "Status", w: 28 },
+      { h: "Amount", w: 28, align: "right" },
+      { h: "By", w: 32 },
+    ],
+    params.activity.quotations.map((q) => [
+      formatDate(q.createdAt),
+      q.quotationNumber,
+      q.clientName,
+      q.status,
+      formatMoney(q.subTotal),
+      q.createdByName,
+    ]),
+  );
+
+  drawSectionHeading("Invoices converted");
+  drawTable(
+    [
+      { h: "Date", w: 22 },
+      { h: "Quote #", w: 26 },
+      { h: "Invoice #", w: 28 },
+      { h: "Client", w: 44 },
+      { h: "Amount", w: 28, align: "right" },
+      { h: "By", w: 38 },
+    ],
+    params.activity.conversions.map((c) => [
+      formatDate(c.convertedAt),
+      c.quotationNumber,
+      c.invoiceNumber,
+      c.clientName,
+      formatMoney(c.subTotal),
+      c.createdByName,
+    ]),
+  );
+
+  drawSectionHeading("New clients onboarded");
+  drawTable(
+    [
+      { h: "Date", w: 24 },
+      { h: "Client", w: 50 },
+      { h: "Phone", w: 34 },
+      { h: "Location", w: 44 },
+      { h: "By", w: 34 },
+    ],
+    params.activity.newClients.map((c) => [
+      formatDate(c.createdAt),
+      c.name,
+      c.phone || "—",
+      c.location || "—",
+      c.createdByName,
+    ]),
+  );
+
+  const timeStr = new Date().toLocaleString("en-KE");
+  ensureSpace(10);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  setColorFromHex(doc, DEFAULT_GRAY, "text");
+  doc.text(`Generated on ${timeStr}`, 198, 287, { align: "right" });
+  if (params.branding?.name) {
+    doc.text(String(params.branding.name), 12, 287);
+  }
+
+  if (params.autoSave !== false) {
+    const slug = (params.periodStr || "report")
+      .replace(/[^\w]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .toLowerCase();
+    doc.save(`telesales-activity-${slug || "report"}.pdf`);
+  }
+
+  return doc;
+}

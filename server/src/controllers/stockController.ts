@@ -58,6 +58,17 @@ function isCatalogProductIdentifier(value?: string) {
   return Types.ObjectId.isValid(candidate);
 }
 
+/** Filter out sentinel strings like "website" / "none" before ObjectId queries. */
+function toValidObjectIds(values: Array<string | undefined | null>) {
+  return [
+    ...new Set(
+      values
+        .map((value) => String(value || "").trim())
+        .filter((value) => value.length > 0 && Types.ObjectId.isValid(value)),
+    ),
+  ];
+}
+
 function buildClientSourceKey(client: {
   name?: string;
   number?: string;
@@ -6192,12 +6203,8 @@ export class StockController {
       let manufacturerMap = new Map();
       if (!lite) {
         try {
-          const manufacturerIds = Array.from(
-            new Set(
-              products
-                .map((p) => String((p as any).manufacturer))
-                .filter(Boolean),
-            ),
+          const manufacturerIds = toValidObjectIds(
+            products.map((p) => String((p as any).manufacturer || "")),
           );
           const manufacturers = manufacturerIds.length
             ? await StockManufacturer.find({
@@ -7247,20 +7254,17 @@ export class StockController {
       const productIds = [
         ...new Set(sales.map((sale) => sale.productId).filter(Boolean)),
       ];
-      const userIds = [
-        ...new Set(
-          sales
-            .flatMap((sale) => [sale.soldBy, sale.salesEmployeeId])
-            .filter(Boolean)
-            .map(String),
-        ),
-      ];
+      const userIds = toValidObjectIds(
+        sales.flatMap((sale) => [sale.soldBy, sale.salesEmployeeId]),
+      );
 
       const [products, users] = await Promise.all([
         StockProduct.find({ _id: { $in: productIds }, org_id }).lean(),
-        User.find({ _id: { $in: userIds }, org_id })
-          .select("firstName lastName email")
-          .lean(),
+        userIds.length
+          ? User.find({ _id: { $in: userIds }, org_id })
+              .select("firstName lastName email")
+              .lean()
+          : Promise.resolve([]),
       ]);
 
       const productMap = new Map(
@@ -7268,16 +7272,22 @@ export class StockController {
       );
       const userMap = new Map(users.map((user) => [String(user._id), user]));
 
-      const data = sales.map((sale) => ({
-        ...sale,
-        product: productMap.get(String(sale.productId)) || null,
-        soldByUser: sale.soldBy
-          ? userMap.get(String(sale.soldBy)) || null
-          : null,
-        salesEmployee: sale.salesEmployeeId
-          ? userMap.get(String(sale.salesEmployeeId)) || null
-          : null,
-      }));
+      const data = sales.map((sale) => {
+        const soldByKey = String(sale.soldBy || "");
+        const soldByUser =
+          userMap.get(soldByKey) ||
+          (soldByKey === "website"
+            ? { firstName: "Website", lastName: "", email: "" }
+            : null);
+        return {
+          ...sale,
+          product: productMap.get(String(sale.productId)) || null,
+          soldByUser,
+          salesEmployee: sale.salesEmployeeId
+            ? userMap.get(String(sale.salesEmployeeId)) || null
+            : null,
+        };
+      });
 
       return res.status(200).json({ success: true, data });
     } catch (error: any) {
@@ -7417,27 +7427,23 @@ export class StockController {
       const warehouseIds = [
         String(stockCheck.warehouseId || stockCheck.warehouse?._id || ""),
       ].filter(Boolean);
-      const userIds = Array.from(
-        new Set(
-          [
-            stockCheck.createdBy,
-            stockCheck.supervisor,
-            ...(Array.isArray(stockCheck.assignedCounters)
-              ? stockCheck.assignedCounters
-              : []),
-          ]
-            .filter(Boolean)
-            .map(String),
-        ),
-      );
+      const userIds = toValidObjectIds([
+        stockCheck.createdBy,
+        stockCheck.supervisor,
+        ...(Array.isArray(stockCheck.assignedCounters)
+          ? stockCheck.assignedCounters
+          : []),
+      ]);
 
       const [warehouses, users] = await Promise.all([
         Warehouse.find({ org_id, _id: { $in: warehouseIds } })
           .select("name")
           .lean(),
-        User.find({ org_id, _id: { $in: userIds } })
-          .select("firstName lastName email")
-          .lean(),
+        userIds.length
+          ? User.find({ org_id, _id: { $in: userIds } })
+              .select("firstName lastName email")
+              .lean()
+          : Promise.resolve([]),
       ]);
 
       const warehouseMap = new Map(
@@ -7588,20 +7594,16 @@ export class StockController {
         });
       }
 
-      const userIds = Array.from(
-        new Set(
-          [
-            stockCheck.createdBy,
-            stockCheck.supervisor,
-            stockCheck.closedBy,
-          ]
-            .filter(Boolean)
-            .map(String),
-        ),
-      );
-      const users = await User.find({ org_id, _id: { $in: userIds } })
-        .select("firstName lastName email")
-        .lean();
+      const userIds = toValidObjectIds([
+        stockCheck.createdBy,
+        stockCheck.supervisor,
+        stockCheck.closedBy,
+      ]);
+      const users = userIds.length
+        ? await User.find({ org_id, _id: { $in: userIds } })
+            .select("firstName lastName email")
+            .lean()
+        : [];
       const userMap = new Map(users.map((user) => [String(user._id), user]));
 
       const buildActor = (actorId?: string) => {
@@ -7674,23 +7676,23 @@ export class StockController {
         ),
       );
 
-      const userIds = Array.from(
-        new Set(
-          stockChecks.flatMap((check) => [
-            check.createdBy,
-            check.supervisor,
-            ...(Array.isArray(check.assignedCounters) ? check.assignedCounters : []),
-          ]).filter(Boolean).map(String),
-        ),
+      const userIds = toValidObjectIds(
+        stockChecks.flatMap((check) => [
+          check.createdBy,
+          check.supervisor,
+          ...(Array.isArray(check.assignedCounters) ? check.assignedCounters : []),
+        ]),
       );
 
       const [warehouses, users] = await Promise.all([
         Warehouse.find({ org_id, _id: { $in: warehouseIds } })
           .select("name")
           .lean(),
-        User.find({ org_id, _id: { $in: userIds } })
-          .select("firstName lastName email")
-          .lean(),
+        userIds.length
+          ? User.find({ org_id, _id: { $in: userIds } })
+              .select("firstName lastName email")
+              .lean()
+          : Promise.resolve([]),
       ]);
 
       const warehouseMap = new Map(

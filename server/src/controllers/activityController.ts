@@ -2,6 +2,8 @@ import type { Response } from "express"
 import type { AuthenticatedRequest } from "../middleware/auth"
 import { User } from "../models/User"
 import AuditLog from "../models/AuditLog"
+import { Company } from "../models/Company"
+import { isPlatformOwner } from "../utils/platformOwner"
 
 export class ActivityController {
   /**
@@ -50,17 +52,14 @@ export class ActivityController {
    */
   static async getOwnerActivitySummary(req: AuthenticatedRequest, res: Response) {
     try {
-      const userEmail = req.user?.email || ""
-      const OWNER_EMAIL = "bellarinseth@gmail.com"
-
-      if (userEmail.toLowerCase() !== OWNER_EMAIL.toLowerCase()) {
+      if (!isPlatformOwner(req.user?.email, req.user?.role)) {
         return res.status(403).json({ success: false, message: "Unauthorized: Owner access required" })
       }
 
       // Fetch all users and companies
       const [users, companies] = await Promise.all([
         User.find({}, "firstName lastName email role lastLoginAt lastActiveAt org_id").lean(),
-        import("../models/Company").then(m => m.Company.find({}, "name").lean())
+        Company.find({}, "name").lean(),
       ])
 
       const companyMap = new Map(companies.map((c: any) => [c._id.toString(), c.name]))

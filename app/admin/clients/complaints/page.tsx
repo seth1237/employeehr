@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
@@ -17,9 +18,15 @@ import {
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
-import { API_URL } from "@/lib/apiBase"
+import API_URL from "@/lib/apiBase"
 import { getToken } from "@/lib/auth"
 import { AlertCircle, CheckCircle2, Clock, AlertTriangle, Plus, MessageSquare } from "lucide-react"
+
+interface TenantBranding {
+  primaryColor?: string
+  secondaryColor?: string
+  email?: string
+}
 
 interface Complaint {
   _id: string
@@ -39,6 +46,21 @@ interface Complaint {
   }
   createdAt: string
   dueDate?: string
+}
+
+function hexToRgb(hex: string) {
+  const normalized = hex.replace("#", "")
+  if (normalized.length !== 6) return { r: 15, g: 118, b: 110 }
+  return {
+    r: Number.parseInt(normalized.slice(0, 2), 16),
+    g: Number.parseInt(normalized.slice(2, 4), 16),
+    b: Number.parseInt(normalized.slice(4, 6), 16),
+  }
+}
+
+function hexToRgba(hex: string, alpha: number) {
+  const { r, g, b } = hexToRgb(hex)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }
 
 export default function ComplaintsPage() {
@@ -61,12 +83,34 @@ export default function ComplaintsPage() {
     resolved: 0,
     escalated: 0,
   })
+  const [branding, setBranding] = useState<TenantBranding>({})
   const { toast } = useToast()
 
   const getAuthHeaders = () => ({
     Authorization: `Bearer ${getToken()}`,
     "Content-Type": "application/json",
   })
+
+  useEffect(() => {
+    const fetchBranding = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/company/branding`, { headers: getAuthHeaders() })
+        if (res.ok) {
+          const data = await res.json()
+          setBranding(data.data || {})
+        }
+      } catch (e) {
+        console.error("Failed to load branding", e)
+      }
+    }
+    fetchBranding()
+  }, [])
+
+  const primaryColor = branding.primaryColor || "#0f766e"
+  const secondaryColor = branding.secondaryColor || "#0ea5e9"
+  const primarySoftColor = hexToRgba(primaryColor, 0.08)
+  const secondarySoftColor = hexToRgba(secondaryColor, 0.08)
+  const primaryBorderColor = hexToRgba(primaryColor, 0.18)
 
   const loadComplaints = async (opts?: SilentLoadOptions) => {
     const silent = startDataLoad(opts, setLoading, setRefreshing)
@@ -188,167 +232,198 @@ export default function ComplaintsPage() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case "new":
-        return "bg-blue-100 text-blue-800"
+        return "bg-blue-100 text-blue-800 border-blue-200"
       case "under_review":
-        return "bg-purple-100 text-purple-800"
+        return "bg-purple-100 text-purple-800 border-purple-200"
       case "assigned":
-        return "bg-indigo-100 text-indigo-800"
+        return "bg-indigo-100 text-indigo-800 border-indigo-200"
       case "in_progress":
-        return "bg-yellow-100 text-yellow-800"
+        return "bg-yellow-100 text-yellow-800 border-yellow-200"
       case "pending_client_feedback":
-        return "bg-orange-100 text-orange-800"
+        return "bg-orange-100 text-orange-800 border-orange-200"
       case "escalated":
-        return "bg-red-100 text-red-800"
+        return "bg-red-100 text-red-800 border-red-200"
       case "resolved":
-        return "bg-green-100 text-green-800"
+        return "bg-green-100 text-green-800 border-green-200"
       case "closed":
-        return "bg-gray-100 text-gray-800"
+        return "bg-gray-100 text-gray-800 border-gray-200"
       default:
-        return "bg-gray-100 text-gray-800"
+        return "bg-gray-100 text-gray-800 border-gray-200"
     }
   }
 
   if (loading && complaints.length === 0) return <PageLoadingSkeleton title="Loading complaints" rows={8} />
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Client Complaints</h1>
-          <p className="text-sm text-muted-foreground">
-            Manage and track all client complaints, assignments, and resolutions
-          </p>
+    <div className="space-y-5">
+      {/* Header Banner with Gradient Branding */}
+      <div
+        className="rounded-2xl border px-4 py-3 shadow-sm"
+        style={{
+          borderColor: primaryBorderColor,
+          background: `linear-gradient(to right, ${primarySoftColor}, ${secondarySoftColor})`,
+        }}
+      >
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-0.5">
+            <p
+              className="text-sm font-medium tracking-wide"
+              style={{ color: primaryColor }}
+            >
+              Support
+            </p>
+            <h1 className="text-xl font-semibold tracking-tight text-foreground">
+              Client Complaints
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Manage and track all client complaints, assignments, and resolutions.
+            </p>
+          </div>
+          <Button asChild>
+            <Link href="/admin/accounts/complaints/new">
+              <Plus className="h-4 w-4 mr-2" />
+              New Complaint
+            </Link>
+          </Button>
         </div>
-        <Button asChild>
-          <Link href="/admin/accounts/complaints/new">
-            <Plus className="h-4 w-4 mr-2" />
-            New Complaint
-          </Link>
-        </Button>
-      </div>
 
-      {/* Stats Dashboard */}
-      <div className="grid gap-4 md:grid-cols-5">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-center">
-              <div className="text-3xl font-bold">{stats.total}</div>
-              <p className="text-sm text-muted-foreground">Total Complaints</p>
+        {/* Stats Dashboard */}
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+          <Card className="shadow-sm">
+            <CardContent className="p-3">
+              <div className="text-xs uppercase tracking-wide text-muted-foreground">Total</div>
+              <div className="mt-1 text-xl font-semibold">{stats.total}</div>
+            </CardContent>
+          </Card>
+          <Card className="shadow-sm">
+            <CardContent className="p-3">
+              <div className="text-xs uppercase tracking-wide text-muted-foreground">Open</div>
+              <div className="mt-1 text-xl font-semibold" style={{ color: secondaryColor }}>
+                {stats.open}
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="shadow-sm">
+            <CardContent className="p-3">
+              <div className="text-xs uppercase tracking-wide text-muted-foreground">Pending</div>
+              <div className="mt-1 text-xl font-semibold">{stats.pending}</div>
+            </CardContent>
+          </Card>
+          <Card className="shadow-sm">
+            <CardContent className="p-3">
+              <div className="text-xs uppercase tracking-wide text-muted-foreground">Resolved</div>
+              <div className="mt-1 text-xl font-semibold text-green-600">{stats.resolved}</div>
+            </CardContent>
+          </Card>
+          <Card className="shadow-sm">
+            <CardContent className="p-3">
+              <div className="text-xs uppercase tracking-wide text-muted-foreground">Escalated</div>
+              <div className="mt-1 text-xl font-semibold text-red-600">{stats.escalated}</div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Search & Filters */}
+        <div className="mt-3 rounded-xl border bg-white/90 p-3 shadow-sm backdrop-blur-sm">
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_200px_200px_150px] lg:items-end">
+            <div className="space-y-2">
+              <Label>Search</Label>
+              <Input
+                placeholder="Search by ID, title, client..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
             </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-center">
-              <div className="text-3xl font-bold text-blue-600">{stats.open}</div>
-              <p className="text-sm text-muted-foreground">Open</p>
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <Select
+                value={statusFilter}
+                onValueChange={(value) => setStatusFilter(value === "all" ? "" : value)}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Filter by status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="new">New</SelectItem>
+                  <SelectItem value="under_review">Under Review</SelectItem>
+                  <SelectItem value="assigned">Assigned</SelectItem>
+                  <SelectItem value="in_progress">In Progress</SelectItem>
+                  <SelectItem value="pending_client_feedback">Pending Feedback</SelectItem>
+                  <SelectItem value="escalated">Escalated</SelectItem>
+                  <SelectItem value="resolved">Resolved</SelectItem>
+                  <SelectItem value="closed">Closed</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-center">
-              <div className="text-3xl font-bold text-orange-600">{stats.pending}</div>
-              <p className="text-sm text-muted-foreground">Pending Feedback</p>
+            <div className="space-y-2">
+              <Label>Priority</Label>
+              <Select
+                value={priorityFilter}
+                onValueChange={(value) => setPriorityFilter(value === "all" ? "" : value)}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Filter by priority" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Priorities</SelectItem>
+                  <SelectItem value="urgent">Urgent</SelectItem>
+                  <SelectItem value="high">High</SelectItem>
+                  <SelectItem value="medium">Medium</SelectItem>
+                  <SelectItem value="low">Low</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-center">
-              <div className="text-3xl font-bold text-green-600">{stats.resolved}</div>
-              <p className="text-sm text-muted-foreground">Resolved</p>
+            <div className="flex gap-2">
+              <Button className="w-full" onClick={() => loadComplaints({ silent: true })}>
+                Apply
+              </Button>
             </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-center">
-              <div className="text-3xl font-bold text-red-600">{stats.escalated}</div>
-              <p className="text-sm text-muted-foreground">Escalated</p>
-            </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
 
       {/* Main Content */}
       <div className="grid gap-6 lg:grid-cols-3">
-        <Card className="lg:col-span-1">
-          <CardHeader>
-            <CardTitle>Complaints List</CardTitle>
+        <Card className="lg:col-span-1 shadow-sm overflow-hidden">
+          <CardHeader className="border-b bg-muted/30 pb-3">
+            <CardTitle className="text-base">Complaints List</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Showing {filteredComplaints.length} of {complaints.length}
+            </p>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <Input
-              placeholder="Search by ID, title, client..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-
-            <Select
-              value={statusFilter}
-              onValueChange={(value) => setStatusFilter(value === "all" ? "" : value)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Filter by status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="new">New</SelectItem>
-                <SelectItem value="under_review">Under Review</SelectItem>
-                <SelectItem value="assigned">Assigned</SelectItem>
-                <SelectItem value="in_progress">In Progress</SelectItem>
-                <SelectItem value="pending_client_feedback">Pending Feedback</SelectItem>
-                <SelectItem value="escalated">Escalated</SelectItem>
-                <SelectItem value="resolved">Resolved</SelectItem>
-                <SelectItem value="closed">Closed</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select
-              value={priorityFilter}
-              onValueChange={(value) => setPriorityFilter(value === "all" ? "" : value)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Filter by priority" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Priorities</SelectItem>
-                <SelectItem value="urgent">Urgent</SelectItem>
-                <SelectItem value="high">High</SelectItem>
-                <SelectItem value="medium">Medium</SelectItem>
-                <SelectItem value="low">Low</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <div className="max-h-[600px] overflow-auto space-y-2">
+          <CardContent className="p-0">
+            <div className="max-h-[600px] overflow-auto divide-y">
               {filteredComplaints.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No complaints found.</p>
+                <div className="p-4 text-center text-sm text-muted-foreground">No complaints found.</div>
               ) : (
                 filteredComplaints.map((complaint) => (
                   <button
                     key={complaint._id}
                     onClick={() => setSelectedComplaint(complaint)}
-                    className={`w-full rounded border p-3 text-left transition hover:bg-muted/50 ${
+                    className={`w-full p-3 text-left transition hover:bg-muted/40 border-l-4 ${
                       selectedComplaint?._id === complaint._id
-                        ? "border-primary bg-muted/40"
-                        : "border-border"
+                        ? "bg-muted/60 border-l-primary"
+                        : "border-l-transparent"
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
-                        <div className="font-medium text-sm">{complaint.complaintId}</div>
-                        <div className="text-xs text-muted-foreground truncate">{complaint.title}</div>
-                        <div className="text-xs mt-1">{complaint.clientName}</div>
+                        <div className="font-medium text-sm truncate">{complaint.complaintId}</div>
+                        <div className="text-xs text-muted-foreground truncate mt-0.5">{complaint.title}</div>
+                        <div className="text-xs text-foreground mt-1 font-medium">{complaint.clientName}</div>
                       </div>
-                      {getPriorityIcon(complaint.priority)}
+                      <div className="flex-shrink-0 mt-0.5">
+                        {getPriorityIcon(complaint.priority)}
+                      </div>
                     </div>
-                    <div className="mt-2 flex items-center justify-between gap-1">
-                      <Badge variant="secondary" className="text-xs">
-                        {complaint.status}
+                    <div className="mt-2 flex items-center gap-2 flex-wrap">
+                      <Badge variant="outline" className={`text-[10px] px-1.5 py-0 h-4 border ${getStatusColor(complaint.status)}`}>
+                        {complaint.status.replace(/_/g, " ")}
                       </Badge>
-                      <Badge className={`text-xs ${getStatusColor(complaint.status)}`}>
-                        {complaint.status}
-                      </Badge>
+                      <span className="text-[10px] text-muted-foreground">
+                        {new Date(complaint.createdAt).toLocaleDateString()}
+                      </span>
                     </div>
                   </button>
                 ))
@@ -357,116 +432,136 @@ export default function ComplaintsPage() {
           </CardContent>
         </Card>
 
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Complaint Details</CardTitle>
+        <Card className="lg:col-span-2 shadow-sm">
+          <CardHeader className="border-b bg-muted/30 pb-3">
+            <CardTitle className="text-base">Complaint Details</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 sm:p-6">
             {!selectedComplaint ? (
-              <p className="text-sm text-muted-foreground">Select a complaint to view details.</p>
+              <div className="flex items-center justify-center h-64 text-sm text-muted-foreground">
+                Select a complaint to view details.
+              </div>
             ) : (
               <div className="space-y-6">
                 {/* Header Info */}
-                <div className="rounded border bg-muted/30 p-4 space-y-2">
-                  <div className="flex items-center justify-between">
+                <div className="rounded-xl border bg-muted/20 p-4 space-y-3">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
                     <div>
-                      <p className="text-xs text-muted-foreground">Complaint ID</p>
-                      <p className="font-semibold">{selectedComplaint.complaintId}</p>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide">Complaint ID</p>
+                      <p className="font-semibold text-lg">{selectedComplaint.complaintId}</p>
                     </div>
-                    <Badge className={getStatusColor(selectedComplaint.status)}>
-                      {selectedComplaint.status}
+                    <Badge className={`${getStatusColor(selectedComplaint.status)} capitalize border`}>
+                      {selectedComplaint.status.replace(/_/g, " ")}
                     </Badge>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 gap-4 pt-2 border-t">
                     <div>
-                      <p className="text-xs text-muted-foreground">Priority</p>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide">Priority</p>
                       <div className="flex items-center gap-2 mt-1">
                         {getPriorityIcon(selectedComplaint.priority)}
                         <span className="font-medium capitalize">{selectedComplaint.priority}</span>
                       </div>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground">Category</p>
-                      <p className="font-medium capitalize">{selectedComplaint.complaintCategory.replace(/_/g, " ")}</p>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide">Category</p>
+                      <p className="font-medium capitalize mt-1">{selectedComplaint.complaintCategory.replace(/_/g, " ")}</p>
                     </div>
                   </div>
                 </div>
 
                 {/* Client Info */}
-                <div>
-                  <h3 className="font-semibold mb-3">Client Information</h3>
-                  <div className="space-y-2 text-sm">
-                    <p>
-                      <span className="text-muted-foreground">Name:</span> {selectedComplaint.clientName}
-                    </p>
-                    <p>
-                      <span className="text-muted-foreground">Number:</span> {selectedComplaint.clientNumber}
-                    </p>
+                <div className="space-y-2">
+                  <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Client Information</h3>
+                  <div className="rounded-lg border p-3 space-y-1.5 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Name:</span>
+                      <span className="font-medium">{selectedComplaint.clientName}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Number:</span>
+                      <span className="font-medium">{selectedComplaint.clientNumber}</span>
+                    </div>
+                    {selectedComplaint.clientLocation && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Location:</span>
+                        <span className="font-medium">{selectedComplaint.clientLocation}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 {/* Complaint Details */}
-                <div>
-                  <h3 className="font-semibold mb-3">Complaint Details</h3>
-                  <div className="space-y-3 text-sm">
-                    <div>
-                      <p className="font-medium">{selectedComplaint.title}</p>
-                      <p className="text-muted-foreground mt-1">{selectedComplaint.description}</p>
-                    </div>
+                <div className="space-y-2">
+                  <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Complaint Details</h3>
+                  <div className="rounded-lg border p-3 space-y-2 text-sm">
+                    <p className="font-semibold text-base">{selectedComplaint.title}</p>
+                    <p className="text-muted-foreground leading-relaxed">{selectedComplaint.description}</p>
                   </div>
                 </div>
 
-                {/* Assignment */}
-                {selectedComplaint.assignedToName && (
-                  <div>
-                    <h3 className="font-semibold mb-3">Assigned To</h3>
-                    <p className="text-sm">{selectedComplaint.assignedToName}</p>
-                  </div>
-                )}
-
-                {/* Resolution */}
-                {selectedComplaint.resolution?.resolvedByName && (
-                  <div>
-                    <h3 className="font-semibold mb-3">Resolution</h3>
-                    <div className="space-y-2 text-sm">
-                      <p>
-                        <span className="text-muted-foreground">Resolved By:</span> {selectedComplaint.resolution.resolvedByName}
-                      </p>
-                      {selectedComplaint.resolution.satisfactionRating && (
-                        <p>
-                          <span className="text-muted-foreground">Satisfaction Rating:</span> {selectedComplaint.resolution.satisfactionRating}/5 ⭐
-                        </p>
-                      )}
+                {/* Assignment & Resolution Grid */}
+                <div className="grid md:grid-cols-2 gap-4">
+                  {selectedComplaint.assignedToName && (
+                    <div className="space-y-2">
+                      <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Assigned To</h3>
+                      <div className="rounded-lg border p-3 text-sm flex items-center gap-2">
+                        <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-xs font-bold">
+                          {selectedComplaint.assignedToName.charAt(0)}
+                        </div>
+                        <span className="font-medium">{selectedComplaint.assignedToName}</span>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+
+                  {selectedComplaint.resolution?.resolvedByName && (
+                    <div className="space-y-2">
+                      <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Resolution</h3>
+                      <div className="rounded-lg border p-3 text-sm space-y-1.5">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Resolved By:</span>
+                          <span className="font-medium">{selectedComplaint.resolution.resolvedByName}</span>
+                        </div>
+                        {selectedComplaint.resolution.satisfactionRating && (
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Rating:</span>
+                            <span className="font-medium">{selectedComplaint.resolution.satisfactionRating}/5 ⭐</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
 
                 {/* SMS Composer */}
-                <div className="rounded border p-4">
-                  <div className="flex items-center justify-between gap-2">
+                <div className="rounded-xl border p-4 bg-muted/10">
+                  <div className="flex items-center justify-between gap-2 mb-3">
                     <div>
-                      <h3 className="font-semibold">Send SMS to client</h3>
+                      <h3 className="font-semibold flex items-center gap-2">
+                        <MessageSquare className="h-4 w-4" />
+                        Send SMS to client
+                      </h3>
                       <p className="text-xs text-muted-foreground">Use the existing bulk SMS route inline.</p>
                     </div>
                     <Button size="sm" variant="outline" onClick={handleToggleSms}>
-                      {smsOpen ? "Hide" : "Show"}
+                      {smsOpen ? "Hide" : "Compose"}
                     </Button>
                   </div>
 
                   {smsOpen && (
-                    <div className="mt-4 space-y-3">
+                    <div className="mt-2 space-y-3 border-t pt-3">
                       <Textarea
                         value={smsMessage}
                         onChange={(e) => setSmsMessage(e.target.value)}
                         rows={4}
                         placeholder={`Hi ${selectedComplaint.clientName}, `}
+                        className="resize-none"
                       />
                       {smsResult && (
-                        <p className={`text-sm ${smsResult.includes("success") ? "text-green-600" : "text-red-600"}`}>
+                        <p className={`text-sm font-medium ${smsResult.includes("success") ? "text-green-600" : "text-red-600"}`}>
                           {smsResult}
                         </p>
                       )}
-                      <Button onClick={handleSendSms} disabled={smsSending} className="w-full">
+                      <Button onClick={handleSendSms} disabled={smsSending} className="w-full" style={{ backgroundColor: primaryColor }}>
                         <MessageSquare className="h-4 w-4 mr-2" />
                         {smsSending ? "Sending SMS..." : "Send SMS"}
                       </Button>
@@ -480,8 +575,9 @@ export default function ComplaintsPage() {
                     (window.location.href = `/admin/accounts/complaints/${selectedComplaint._id}`)
                   }
                   className="w-full"
+                  size="lg"
                 >
-                  View Full Details
+                  View Full Details & Manage Workflow
                 </Button>
               </div>
             )}

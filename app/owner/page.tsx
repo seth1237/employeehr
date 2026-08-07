@@ -30,6 +30,7 @@ import {
   BarChart3,
   MapPin,
   RefreshCw,
+  Trash2,
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { getToken, getUser } from "@/lib/auth"
@@ -141,7 +142,13 @@ const FEATURE_SECTIONS = {
   ],
 }
 
-const OWNER_EMAIL = "bellarinseth@gmail.com"
+const OWNER_EMAILS = ["bellarinseth@gmail.com", "info@elevatehub.co.ke"]
+
+function canAccessOwnerConsole(user: { email?: string; role?: string } | null) {
+  if (!user) return false
+  if (user.role === "super_admin") return true
+  return OWNER_EMAILS.includes(String(user.email || "").toLowerCase())
+}
 
 function growthLabel(n: number) {
   if (n > 0) return `+${n}%`
@@ -184,16 +191,75 @@ export default function OwnerPage() {
   const [expandedCompanies, setExpandedCompanies] = useState<Set<string>>(new Set())
   const [freezeReason, setFreezeReason] = useState("")
   const [searchTerm, setSearchTerm] = useState("")
+  const [deleteChallengeId, setDeleteChallengeId] = useState("")
+  const [deleteOtp, setDeleteOtp] = useState("")
+  const [deleteConfirmSlug, setDeleteConfirmSlug] = useState("")
+  const [deleteOtpEmail, setDeleteOtpEmail] = useState("info@elevatehub.co.ke")
+  const [deleteStep, setDeleteStep] = useState<"idle" | "otp" | "deleting">("idle")
+  const [deletingCompany, setDeletingCompany] = useState(false)
+  const [deleteError, setDeleteError] = useState("")
 
   const user = getUser()
   const token = getToken()
 
+  const showError = (message: string) => {
+    const text = String(message || "Something went wrong").trim() || "Something went wrong"
+    setDeleteError(text)
+    toast({
+      title: "Error",
+      description: text,
+      variant: "destructive",
+    })
+  }
+
+  const parseApiResponse = async (res: Response) => {
+    const raw = await res.text()
+    let result: any = null
+    if (raw) {
+      try {
+        result = JSON.parse(raw)
+      } catch {
+        throw new Error(
+          raw.slice(0, 180).trim() || `Request failed (${res.status} ${res.statusText})`,
+        )
+      }
+    }
+    if (!res.ok || !result?.success) {
+      throw new Error(
+        result?.message ||
+          result?.error ||
+          `Request failed (${res.status}${res.statusText ? ` ${res.statusText}` : ""})`,
+      )
+    }
+    return result
+  }
+
   useEffect(() => {
-    if (!user || !token || user.email?.toLowerCase() !== OWNER_EMAIL.toLowerCase()) {
+    if (!user || !token || !canAccessOwnerConsole(user)) {
       router.push("/auth/login")
       return
     }
-    loadData()
+
+    const verifyOwner = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/owner/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const result = await res.json()
+        if (!res.ok || !result.success) {
+          router.push("/auth/login")
+          return
+        }
+        if (result.data?.deleteOtpEmail) {
+          setDeleteOtpEmail(result.data.deleteOtpEmail)
+        }
+        loadData()
+      } catch {
+        router.push("/auth/login")
+      }
+    }
+
+    void verifyOwner()
   }, [activeTab])
 
   const loadData = async () => {
@@ -257,6 +323,106 @@ export default function OwnerPage() {
       }
     } catch {
       toast({ description: "Action failed", variant: "destructive" })
+    }
+  }
+
+  const resetDeleteFlow = () => {
+    setDeleteStep("idle")
+    setDeleteChallengeId("")
+    setDeleteOtp("")
+    setDeleteConfirmSlug("")
+    setDeletingCompany(false)
+    setDeleteError("")
+  }
+
+  const requestCompanyDelete = async () => {
+    if (!selectedCompany) return
+    const confirmed = window.confirm(
+      `Request permanent deletion of "${selectedCompany.name}"?\n\nAn OTP will be sent to ${deleteOtpEmail}. This cannot be undone after confirmation.`,
+    )
+    if (!confirmed) return
+
+    try {
+      setDeletingCompany(true)
+      setDeleteError("")
+      const res = await fetch(
+        `${API_URL}/api/owner/companies/${selectedCompany._id}/delete/request`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      )
+      const result = await parseApiResponse(res)
+      const challengeId = String(result.data?.challengeId || "").trim()
+      if (!challengeId) {
+        throw new Error("Server did not return a verification challenge. Please try again.")
+      }
+      setDeleteChallengeId(challengeId)
+      setDeleteOtpEmail(result.data?.otpEmail || deleteOtpEmail)
+      setDeleteOtp("")
+      setDeleteConfirmSlug("")
+      setDeleteStep("otp")
+      toast({
+        title: "OTP sent",
+        description: result.message || `OTP sent to ${deleteOtpEmail}`,
+      })
+    } catch (error: any) {
+      showError(error?.message || "Failed to start deletion")
+    } finally {
+      setDeletingCompany(false)
+    }
+  }
+
+  const confirmCompanyDelete = async () => {
+    if (!selectedCompany) return
+
+    const otp = deleteOtp.trim()
+    const confirmSlug = deleteConfirmSlug.trim()
+    if (!deleteChallengeId) {
+      showError("Verification session missing. Request a new OTP first.")
+      setDeleteStep("idle")
+      return
+    }
+    if (!otp || !confirmSlug) {
+      showError("Enter the OTP and company slug to confirm deletion.")
+      return
+    }
+
+    try {
+      setDeletingCompany(true)
+      setDeleteError("")
+      setDeleteStep("deleting")
+      const res = await fetch(
+        `${API_URL}/api/owner/companies/${selectedCompany._id}/delete/confirm`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            challengeId: deleteChallengeId,
+            otp,
+            confirmSlug,
+          }),
+        },
+      )
+      const result = await parseApiResponse(res)
+      toast({
+        title: "Company deleted",
+        description: result.message || "Company permanently deleted",
+      })
+      resetDeleteFlow()
+      setSelectedCompany(null)
+      loadData()
+    } catch (error: any) {
+      setDeleteStep("otp")
+      showError(error?.message || "Delete failed")
+    } finally {
+      setDeletingCompany(false)
     }
   }
 
@@ -978,7 +1144,15 @@ export default function OwnerPage() {
                   </p>
                 </div>
               </div>
-              <Button variant="ghost" size="icon" onClick={() => setSelectedCompany(null)} className="h-8 w-8">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                  resetDeleteFlow()
+                  setSelectedCompany(null)
+                }}
+                className="h-8 w-8"
+              >
                 <X className="h-4 w-4" />
               </Button>
             </div>
@@ -1070,10 +1244,100 @@ export default function OwnerPage() {
                   </div>
                 )}
               </div>
+
+              <div className="p-5 rounded-lg border-l-4 bg-red-50 border-red-700 space-y-3">
+                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-widest flex items-center gap-2">
+                  <Trash2 className="h-4 w-4 text-red-700" />
+                  Permanently delete company
+                </h3>
+                <p className="text-[11px] text-red-900/80">
+                  This removes the company and all tenant data (users, stock,
+                  CRM, machines, HR records, etc.). An OTP is sent to{" "}
+                  <strong>{deleteOtpEmail}</strong> before deletion runs.
+                </p>
+
+                {deleteStep === "idle" ? (
+                  <Button
+                    className="w-full bg-red-700 hover:bg-red-800 h-9 text-xs font-bold"
+                    disabled={deletingCompany}
+                    onClick={() => void requestCompanyDelete()}
+                  >
+                    {deletingCompany ? "Sending OTP…" : "Request delete OTP"}
+                  </Button>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-[11px] text-red-800 font-medium">
+                      Enter the code sent to {deleteOtpEmail}, then type the
+                      company slug <strong>{selectedCompany.slug}</strong> to
+                      confirm.
+                    </p>
+                    <Input
+                      placeholder="6-digit OTP"
+                      value={deleteOtp}
+                      onChange={(e) => {
+                        setDeleteError("")
+                        setDeleteOtp(e.target.value.replace(/\D/g, "").slice(0, 6))
+                      }}
+                      className="h-9 text-sm"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      disabled={deletingCompany}
+                    />
+                    <Input
+                      placeholder={`Type slug: ${selectedCompany.slug}`}
+                      value={deleteConfirmSlug}
+                      onChange={(e) => {
+                        setDeleteError("")
+                        setDeleteConfirmSlug(e.target.value)
+                      }}
+                      className="h-9 text-sm"
+                      disabled={deletingCompany}
+                    />
+                    {deleteError ? (
+                      <p className="text-[11px] text-red-800 bg-red-100 border border-red-300 rounded px-3 py-2 font-medium">
+                        {deleteError}
+                      </p>
+                    ) : null}
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="flex-1 h-9 text-xs"
+                        disabled={deletingCompany}
+                        onClick={resetDeleteFlow}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="button"
+                        className="flex-1 bg-red-700 hover:bg-red-800 h-9 text-xs font-bold"
+                        disabled={
+                          deletingCompany ||
+                          !deleteChallengeId ||
+                          deleteOtp.trim().length < 6 ||
+                          !deleteConfirmSlug.trim()
+                        }
+                        onClick={() => void confirmCompanyDelete()}
+                      >
+                        {deleteStep === "deleting"
+                          ? "Deleting…"
+                          : "Confirm delete"}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="p-4 bg-slate-50 border-t flex justify-end">
-              <Button variant="outline" size="sm" onClick={() => setSelectedCompany(null)}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  resetDeleteFlow()
+                  setSelectedCompany(null)
+                }}
+              >
                 Close
               </Button>
             </div>

@@ -210,9 +210,30 @@ export default function AccountsClientsPage() {
   const [showHistoryDialog, setShowHistoryDialog] = useState(false);
   const [callForm, setCallForm] = useState({
     note: "",
-    status: "Interested",
+    callPurpose: "Company introduction",
+    focusCategoryIds: [] as string[],
+    outcome: "Interested",
+    createLead: true,
+    followUpNeeded: false,
     followUpDate: "",
   });
+  const [callPurposes, setCallPurposes] = useState<string[]>([
+    "Company introduction",
+    "Quotation follow up",
+    "Debt collection",
+    "Delivery inquiry",
+    "Project inquiry",
+  ]);
+  const [sellingPurposes, setSellingPurposes] = useState<string[]>([
+    "Company introduction",
+    "Quotation follow up",
+    "Project inquiry",
+  ]);
+  const [stockCategories, setStockCategories] = useState<
+    Array<{ _id: string; name: string }>
+  >([]);
+  const [newPurpose, setNewPurpose] = useState("");
+  const [addingPurpose, setAddingPurpose] = useState(false);
   const [clientHistory, setClientHistory] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
@@ -828,28 +849,137 @@ export default function AccountsClientsPage() {
     }
   };
 
-  const openCallDialog = (quoteRequested = false) => {
+  const isSellingPurpose = sellingPurposes.includes(callForm.callPurpose);
+
+  const openCallDialog = async (quoteRequested = false) => {
     setCallForm({
       note: quoteRequested ? "Client requested a quotation." : "",
-      status: quoteRequested ? "Quote Requested" : "Interested",
+      callPurpose: quoteRequested
+        ? "Quotation follow up"
+        : "Company introduction",
+      focusCategoryIds: [],
+      outcome: quoteRequested ? "Quote Requested" : "Interested",
+      createLead: !quoteRequested,
+      followUpNeeded: false,
       followUpDate: "",
     });
+    setNewPurpose("");
+    setAddingPurpose(false);
     setShowCallDialog(true);
+
+    try {
+      const [purposesRes, categoriesRes] = await Promise.all([
+        api.crm.getCallPurposes().catch(() => null),
+        fetch(`${API_URL}/api/stock/categories`, {
+          headers: { Authorization: `Bearer ${getToken()}` },
+        })
+          .then((r) => r.json())
+          .catch(() => null),
+      ]);
+      if (purposesRes?.success && purposesRes.data) {
+        setCallPurposes(purposesRes.data.purposes || callPurposes);
+        if (Array.isArray(purposesRes.data.sellingPurposes)) {
+          setSellingPurposes(purposesRes.data.sellingPurposes);
+        }
+      }
+      if (categoriesRes?.success && Array.isArray(categoriesRes.data)) {
+        setStockCategories(
+          categoriesRes.data.map((c: any) => ({
+            _id: String(c._id),
+            name: String(c.name || ""),
+          })),
+        );
+      }
+    } catch {
+      // keep defaults
+    }
+  };
+
+  const handleAddCallPurpose = async () => {
+    const purpose = newPurpose.trim();
+    if (!purpose) return;
+    try {
+      setSavingCrm(true);
+      const res = await api.crm.addCallPurpose(purpose);
+      const nextPurposes = res?.data?.purposes || [...callPurposes, purpose];
+      setCallPurposes(nextPurposes);
+      setCallForm((current) => ({ ...current, callPurpose: purpose }));
+      setNewPurpose("");
+      setAddingPurpose(false);
+    } catch (error: any) {
+      window.alert(error?.message || "Failed to add call purpose");
+    } finally {
+      setSavingCrm(false);
+    }
+  };
+
+  const toggleFocusCategory = (categoryId: string) => {
+    setCallForm((current) => {
+      const exists = current.focusCategoryIds.includes(categoryId);
+      return {
+        ...current,
+        focusCategoryIds: exists
+          ? current.focusCategoryIds.filter((id) => id !== categoryId)
+          : [...current.focusCategoryIds, categoryId],
+      };
+    });
   };
 
   const saveCall = async () => {
     if (!selectedClient || !callForm.note.trim()) return;
+    if (!callForm.callPurpose.trim()) {
+      window.alert("Select a call purpose");
+      return;
+    }
+    const followUpNeeded =
+      callForm.followUpNeeded || callForm.outcome === "Follow-up Needed";
+    if (followUpNeeded && !callForm.followUpDate) {
+      window.alert("Choose a follow-up date");
+      return;
+    }
+    if (
+      isSellingPurpose &&
+      callForm.focusCategoryIds.length === 0 &&
+      stockCategories.length > 0
+    ) {
+      const proceed = window.confirm(
+        "No stock categories selected for this selling call. Save anyway?",
+      );
+      if (!proceed) return;
+    }
+
     try {
       setSavingCrm(true);
-      await api.crm.createConversation({
+      const selectedCategories = stockCategories
+        .filter((c) => callForm.focusCategoryIds.includes(c._id))
+        .map((c) => ({ id: c._id, name: c.name }));
+
+      const res = await api.crm.createConversation({
         roomName: "Telesales",
         note: callForm.note.trim(),
-        status: callForm.status,
-        followUpDate: callForm.followUpDate || undefined,
+        callPurpose: callForm.callPurpose,
+        focusCategories: selectedCategories,
+        outcome: callForm.outcome,
+        status: callForm.outcome,
+        createLead:
+          callForm.outcome === "Interested" ? callForm.createLead : false,
+        followUpNeeded,
+        followUpDate: followUpNeeded ? callForm.followUpDate : undefined,
         clientName: selectedClient.client.name,
         clientPhone: selectedClient.client.number,
+        clientLocation: selectedClient.client.location,
+        contactPerson: selectedClient.client.contactPerson,
       });
+
       setShowCallDialog(false);
+      const leadCreated = Boolean(res?.data?.lead);
+      window.alert(
+        leadCreated
+          ? "Call logged and lead created. Follow-ups appear in Telesales Activity."
+          : followUpNeeded
+            ? "Call logged. Follow-up added to Telesales Activity planner."
+            : "Call logged successfully.",
+      );
     } catch (error: any) {
       window.alert(error?.message || "Failed to log call");
     } finally {
@@ -1939,7 +2069,7 @@ export default function AccountsClientsPage() {
       </div>
 
       <Dialog open={showCallDialog} onOpenChange={setShowCallDialog}>
-        <DialogContent>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               Log Call — {selectedClient?.client.name || "Client"}
@@ -1947,7 +2077,204 @@ export default function AccountsClientsPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-1">
-              <Label>Outcome / Notes</Label>
+              <Label>Call purpose</Label>
+              {!addingPurpose ? (
+                <div className="flex gap-2">
+                  <select
+                    className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                    value={callForm.callPurpose}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      if (value === "__add_new__") {
+                        setAddingPurpose(true);
+                        return;
+                      }
+                      setCallForm((current) => ({
+                        ...current,
+                        callPurpose: value,
+                        focusCategoryIds: sellingPurposes.includes(value)
+                          ? current.focusCategoryIds
+                          : [],
+                      }));
+                    }}
+                  >
+                    {callPurposes.map((purpose) => (
+                      <option key={purpose} value={purpose}>
+                        {purpose}
+                      </option>
+                    ))}
+                    <option value="__add_new__">Add new…</option>
+                  </select>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <Input
+                    value={newPurpose}
+                    onChange={(e) => setNewPurpose(e.target.value)}
+                    placeholder="New call purpose"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={savingCrm || !newPurpose.trim()}
+                    onClick={() => void handleAddCallPurpose()}
+                  >
+                    Add
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                      setAddingPurpose(false);
+                      setNewPurpose("");
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {isSellingPurpose ? (
+              <div className="space-y-2">
+                <Label>Department of focus (stock categories)</Label>
+                <p className="text-xs text-muted-foreground">
+                  Select one or more product categories this call focused on.
+                </p>
+                <div className="max-h-40 overflow-y-auto rounded-md border p-3 space-y-2">
+                  {stockCategories.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      No stock categories found.
+                    </p>
+                  ) : (
+                    stockCategories.map((category) => {
+                      const checked = callForm.focusCategoryIds.includes(
+                        category._id,
+                      );
+                      return (
+                        <label
+                          key={category._id}
+                          className="flex items-center gap-2 text-sm cursor-pointer"
+                        >
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={() =>
+                              toggleFocusCategory(category._id)
+                            }
+                          />
+                          <span>{category.name}</span>
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+                {callForm.focusCategoryIds.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {stockCategories
+                      .filter((c) =>
+                        callForm.focusCategoryIds.includes(c._id),
+                      )
+                      .map((c) => (
+                        <Badge key={c._id} variant="secondary">
+                          {c.name}
+                        </Badge>
+                      ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            <div className="space-y-1">
+              <Label>Outcome</Label>
+              <select
+                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                value={callForm.outcome}
+                onChange={(event) => {
+                  const outcome = event.target.value;
+                  setCallForm((current) => ({
+                    ...current,
+                    outcome,
+                    createLead:
+                      outcome === "Interested" ? true : current.createLead,
+                    followUpNeeded:
+                      outcome === "Follow-up Needed"
+                        ? true
+                        : current.followUpNeeded,
+                  }));
+                }}
+              >
+                <option value="Interested">Interested</option>
+                <option value="Follow-up Needed">Follow-up Needed</option>
+                <option value="Not Interested">Not Interested</option>
+                <option value="No Answer">No Answer</option>
+                <option value="Quote Requested">Quote Requested</option>
+                <option value="Pending">Pending</option>
+                <option value="Closed">Closed</option>
+              </select>
+            </div>
+
+            {callForm.outcome === "Interested" ? (
+              <label className="flex items-start gap-2 text-sm rounded-md border bg-emerald-50/60 border-emerald-100 p-3">
+                <Checkbox
+                  checked={callForm.createLead}
+                  onCheckedChange={(checked) =>
+                    setCallForm((current) => ({
+                      ...current,
+                      createLead: Boolean(checked),
+                    }))
+                  }
+                />
+                <span>
+                  <span className="font-medium text-emerald-900">
+                    Save as lead
+                  </span>
+                  <span className="block text-xs text-emerald-800/80 mt-0.5">
+                    Creates a CRM lead for this client so the team can nurture
+                    the opportunity.
+                  </span>
+                </span>
+              </label>
+            ) : null}
+
+            <div className="space-y-2 rounded-md border p-3">
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={
+                    callForm.followUpNeeded ||
+                    callForm.outcome === "Follow-up Needed"
+                  }
+                  onCheckedChange={(checked) =>
+                    setCallForm((current) => ({
+                      ...current,
+                      followUpNeeded: Boolean(checked),
+                    }))
+                  }
+                />
+                <span className="font-medium">Follow-up needed</span>
+              </label>
+              {(callForm.followUpNeeded ||
+                callForm.outcome === "Follow-up Needed") && (
+                <div className="space-y-1 pl-6">
+                  <Label>Follow-up date</Label>
+                  <Input
+                    type="date"
+                    value={callForm.followUpDate}
+                    onChange={(event) =>
+                      setCallForm((current) => ({
+                        ...current,
+                        followUpDate: event.target.value,
+                      }))
+                    }
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Appears in Telesales Activity planner.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-1">
+              <Label>Notes</Label>
               <Input
                 value={callForm.note}
                 onChange={(event) =>
@@ -1957,38 +2284,6 @@ export default function AccountsClientsPage() {
                   }))
                 }
                 placeholder="What was discussed?"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>Next Action Status</Label>
-              <select
-                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                value={callForm.status}
-                onChange={(event) =>
-                  setCallForm((current) => ({
-                    ...current,
-                    status: event.target.value,
-                  }))
-                }
-              >
-                <option value="Interested">Interested</option>
-                <option value="Follow-up Needed">Follow-up Needed</option>
-                <option value="Pending">Pending</option>
-                <option value="Quote Requested">Quote Requested</option>
-                <option value="Closed">Closed</option>
-              </select>
-            </div>
-            <div className="space-y-1">
-              <Label>Follow-up Date (optional)</Label>
-              <Input
-                type="date"
-                value={callForm.followUpDate}
-                onChange={(event) =>
-                  setCallForm((current) => ({
-                    ...current,
-                    followUpDate: event.target.value,
-                  }))
-                }
               />
             </div>
           </div>
@@ -2034,7 +2329,7 @@ export default function AccountsClientsPage() {
                 >
                   <div className="flex items-center justify-between gap-3">
                     <span className="font-medium">
-                      {item.roomName || "Telesales"}
+                      {item.callPurpose || item.roomName || "Telesales"}
                     </span>
                     <span className="text-xs text-muted-foreground">
                       {item.createdAt
@@ -2044,13 +2339,28 @@ export default function AccountsClientsPage() {
                   </div>
                   <p className="mt-2">{item.note || "-"}</p>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    {item.status ? (
-                      <Badge variant="outline">{item.status}</Badge>
+                    {item.outcome || item.status ? (
+                      <Badge variant="outline">
+                        {item.outcome || item.status}
+                      </Badge>
                     ) : null}
+                    {Array.isArray(item.focusCategories) &&
+                    item.focusCategories.length > 0
+                      ? item.focusCategories.map((cat: any, i: number) => (
+                          <Badge key={cat.id || i} variant="secondary">
+                            {cat.name || cat}
+                          </Badge>
+                        ))
+                      : null}
                     {item.followUpDate ? (
                       <Badge variant="secondary">
                         Follow-up:{" "}
                         {new Date(item.followUpDate).toLocaleDateString()}
+                      </Badge>
+                    ) : null}
+                    {item.lead_id ? (
+                      <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">
+                        Lead
                       </Badge>
                     ) : null}
                   </div>

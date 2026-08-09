@@ -786,6 +786,8 @@ export const stockApi = {
     client.delete<any>(
       `/api/stock/clients/profile?sourceName=${encodeURIComponent(data.sourceName)}&sourceNumber=${encodeURIComponent(data.sourceNumber)}&sourceLocation=${encodeURIComponent(data.sourceLocation)}`,
     ),
+  deleteAllSavedClients: (confirm: string) =>
+    client.post<any>("/api/stock/clients/purge-all", { confirm }),
   getClientGroups: () => client.get<any[]>("/api/stock/clients/groups"),
   createClientGroup: (data: {
     name: string

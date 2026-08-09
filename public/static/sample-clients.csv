@@ -1,7 +1,7 @@
-Client Name,Client Number,Region/Location,Contact Role,Contact Name,Contact Phone,Contact Email,Active
-Acme Medical,+254700123456,Westlands,Doctor,Jane Doe,+254700111222,jane@acme.co.ke,yes
-,,,Lab Technician,Seth Makori,+254700333444,seth@acme.co.ke,yes
-,,,Procurement,Mary Wanjiku,+254700555666,mary@acme.co.ke,no
-City Clinic,+254711234567,Ngara,Facility Manager,John Kamau,+254711555666,john@cityclinic.co.ke,yes
-,,,Nurse,Grace Achieng,+254711999000,grace@cityclinic.co.ke,no
-Solo Lab,+254722111222,Kisumu,Lab Technician,Peter Otieno,+254722333444,peter@sololab.co.ke,yes
+Client Name,Client Number,Region/Location,Contact Role,Contact Name,Contact Phone,Contact Email,Active,Groups
+Acme Medical,+254700123456,Westlands,Doctor,Jane Doe,+254700111222,jane@acme.co.ke,yes,Nairobi; Private Hospitals
+,,,Lab Technician,Seth Makori,+254700333444,seth@acme.co.ke,yes,
+,,,Procurement,Mary Wanjiku,+254700555666,mary@acme.co.ke,no,
+City Clinic,+254711234567,Ngara,Facility Manager,John Kamau,+254711555666,john@cityclinic.co.ke,yes,Nairobi
+,,,Nurse,Grace Achieng,+254711999000,grace@cityclinic.co.ke,no,
+Solo Lab,+254722111222,Kisumu,Lab Technician,Peter Otieno,+254722333444,peter@sololab.co.ke,yes,Kisumu; Homabay

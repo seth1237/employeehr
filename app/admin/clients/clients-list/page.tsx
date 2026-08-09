@@ -5,7 +5,7 @@ import api, { stockApi } from "@/lib/api";
 import { runDataLoad, type SilentLoadOptions } from "@/lib/silent-load";
 import { PageLoadingSkeleton } from "@/components/admin/ui/page-states";
 import API_URL from "@/lib/apiBase";
-import { getToken } from "@/lib/auth";
+import { getToken, getUser } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -166,6 +166,14 @@ export default function AccountsClientsPage() {
   });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [uploadingClients, setUploadingClients] = useState(false);
+  const [purgingClients, setPurgingClients] = useState(false);
+  const currentUser = getUser();
+  const canPurgeAllClients =
+    currentUser?.role === "company_admin" ||
+    String((currentUser as any)?.role || "") === "super_admin" ||
+    ["bellarinseth@gmail.com", "info@elevatehub.co.ke"].includes(
+      String(currentUser?.email || "").toLowerCase(),
+    );
   const [showCreateGroupDialog, setShowCreateGroupDialog] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
   const [newGroupDescription, setNewGroupDescription] = useState("");
@@ -1290,6 +1298,41 @@ export default function AccountsClientsPage() {
     }
   };
 
+  const purgeAllClients = async () => {
+    if (!canPurgeAllClients) return;
+    const first = window.confirm(
+      "Delete ALL saved CRM clients for this company?\n\nThis removes every client profile and clears group memberships.\nInvoice/quotation history is kept.\n\nThis cannot be undone.",
+    );
+    if (!first) return;
+
+    const typed = window.prompt(
+      'Type DELETE ALL CLIENTS to confirm (exact phrase):',
+    );
+    if (typed !== "DELETE ALL CLIENTS") {
+      window.alert("Cancelled — confirmation phrase did not match.");
+      return;
+    }
+
+    try {
+      setPurgingClients(true);
+      const res = await stockApi.deleteAllSavedClients("DELETE ALL CLIENTS");
+      if (!res?.success) {
+        throw new Error(res?.message || "Failed to delete all clients");
+      }
+      setSelectedClientKey("");
+      setSelectedClientKeys([]);
+      window.alert(
+        res.message ||
+          `Deleted ${res?.data?.deletedCount || 0} clients.`,
+      );
+      await loadData({ silent: true });
+    } catch (error: any) {
+      window.alert(error?.message || "Failed to delete all clients");
+    } finally {
+      setPurgingClients(false);
+    }
+  };
+
   const handleAddClient = async () => {
     const name = newClient.name.trim();
     const number = newClient.number.trim();
@@ -1356,6 +1399,17 @@ export default function AccountsClientsPage() {
           </div>
 
           <div className="flex flex-wrap gap-2">
+            {canPurgeAllClients ? (
+              <Button
+                size="sm"
+                variant="destructive"
+                disabled={purgingClients || savingCrm}
+                onClick={() => void purgeAllClients()}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                {purgingClients ? "Deleting…" : "Delete all clients"}
+              </Button>
+            ) : null}
             <Button
               size="sm"
               variant={showBulkUploadPanel ? "default" : "outline"}
@@ -1507,10 +1561,10 @@ export default function AccountsClientsPage() {
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">
               Download the sample CSV — it includes facilities with{" "}
-              <strong>multiple contact people</strong>. Required on the first
-              row of each facility:{" "}
-              <strong>Client Name, Region/Location</strong>. Client Number is
-              optional (Contact Phone is used when it is blank).
+              <strong>multiple contact people</strong> and{" "}
+              <strong>Groups</strong>. Required on the first row of each
+              facility: <strong>Client Name, Region/Location</strong>. Client
+              Number is optional (Contact Phone is used when it is blank).
             </p>
             <div className="rounded-md border bg-muted/30 p-3 text-xs space-y-2">
               <p className="font-medium text-foreground">
@@ -1518,8 +1572,9 @@ export default function AccountsClientsPage() {
               </p>
               <p>
                 Use <strong>one row per contact</strong>. On extra contacts for
-                the same facility, leave Client Name / Number / Location blank —
-                they inherit from the row above (like the merged export).
+                the same facility, leave Client Name / Number / Location /
+                Groups blank — they inherit from the row above (like the merged
+                export).
               </p>
               <p>
                 Contact columns:{" "}
@@ -1528,9 +1583,16 @@ export default function AccountsClientsPage() {
                 <code>Active</code> (yes/no). More than one contact can be
                 active.
               </p>
+              <p>
+                Groups column: put group names on the first facility row,
+                separated by <code>;</code> or <code>,</code> (example:{" "}
+                <code>Nairobi; Private Hospitals</code>). Matching groups are
+                reused; missing ones are created automatically.
+              </p>
               <p className="text-muted-foreground">
                 Example in the sample: Acme Medical has Doctor, Lab Technician,
-                and Procurement on three rows.
+                and Procurement on three rows, pre-assigned to Nairobi and
+                Private Hospitals.
               </p>
             </div>
             <div className="flex items-center gap-3">

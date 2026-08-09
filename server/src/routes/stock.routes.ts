@@ -78,6 +78,7 @@ router.get("/clients/contact-roles", ClientCrmController.listContactRoles);
 router.put("/clients/contacts", ClientCrmController.upsertClientContacts);
 router.put("/clients/profile", ClientCrmController.updateSavedClient);
 router.delete("/clients/profile", ClientCrmController.deleteSavedClient);
+router.post("/clients/purge-all", ClientCrmController.deleteAllSavedClients);
 router.get("/clients/groups", ClientCrmController.listGroups);
 router.post("/clients/groups", ClientCrmController.createGroup);
 router.put("/clients/groups/:groupId", ClientCrmController.updateGroup);

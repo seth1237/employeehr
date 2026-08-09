@@ -14,7 +14,8 @@ import { StockQuotation } from "../models/StockQuotation";
 import { QuotationFollowUp } from "../models/QuotationFollowUp";
 import { StockInvoice } from "../models/StockInvoice";
 import { StockCourier } from "../models/StockCourier";
-import { StockClient } from "../models/StockClient";
+import { StockClient, DEFAULT_CONTACT_ROLES } from "../models/StockClient";
+import { StockClientGroup } from "../models/StockClientGroup";
 import { StockExpense } from "../models/StockExpense";
 import { StockRepeatBill } from "../models/StockRepeatBill";
 import { StockInvoicePayment } from "../models/StockInvoicePayment";
@@ -69,6 +70,34 @@ function toValidObjectIds(values: Array<string | undefined | null>) {
   ];
 }
 
+function buildClientMemberKey(
+  name: string,
+  number: string,
+  location: string,
+) {
+  return `${String(name || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")}|${String(number || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")}|${String(location || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")}`;
+}
+
+function parseGroupNames(raw: string) {
+  return [
+    ...new Set(
+      String(raw || "")
+        .split(/[;|,]/)
+        .map((part) => part.trim())
+        .filter(Boolean),
+    ),
+  ];
+}
+
 function buildClientSourceKey(client: {
   name?: string;
   number?: string;
@@ -114,13 +143,33 @@ function uniqueStrings(values: string[]) {
   ).sort((a, b) => a.localeCompare(b));
 }
 
+function parseBulkSmsFilterList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return uniqueStrings(
+      value.flatMap((entry) => String(entry || "").split(/[;,]/)),
+    );
+  }
+  if (value == null || value === "") return [];
+  return uniqueStrings(String(value).split(/[;,]/));
+}
+
 type BulkSmsAudienceClient = {
   key: string;
   name: string;
   phone: string;
   location: string;
   contactPerson?: string;
+  contactRole?: string;
+  contactName?: string;
   branchId?: string;
+  groupIds?: string[];
+  memberKey?: string;
+  contacts?: Array<{
+    role?: string;
+    name?: string;
+    phone?: string;
+    isActive?: boolean;
+  }>;
   quotationsCount: number;
   pendingQuotationsCount: number;
   quotationNumbers: string[];
@@ -358,16 +407,30 @@ async function buildBulkSmsAudience(
   const map = new Map<string, BulkSmsAudienceClient>();
 
   savedClients.forEach((client: any) => {
-    upsertBulkSmsClient(
+    const row = upsertBulkSmsClient(
       map,
       {
         name: client.sourceName || client.legalName,
         number: client.sourceNumber,
         location: client.sourceLocation,
+        contactPerson: client.contactPerson,
         branchId: String(client.branchId || ""),
       },
       "saved_client",
     );
+    if (!row) return;
+    row.contacts = Array.isArray(client.contacts) ? client.contacts : [];
+    row.groupIds = Array.isArray(client.groupIds)
+      ? client.groupIds.map((id: any) => String(id))
+      : [];
+    row.memberKey = buildClientMemberKey(
+      client.sourceName || client.legalName || "",
+      client.sourceNumber || "",
+      client.sourceLocation || "",
+    );
+    if (!row.contactPerson && client.contactPerson) {
+      row.contactPerson = String(client.contactPerson);
+    }
   });
 
   quotations.forEach((quotation: any) => {
@@ -440,6 +503,14 @@ async function buildBulkSmsAudience(
   const region = String(filters.region || "")
     .trim()
     .toLowerCase();
+  const contactRolesFilter = uniqueStrings([
+    ...parseBulkSmsFilterList(filters.contactRoles),
+    ...parseBulkSmsFilterList(filters.contactRole),
+  ]).map((role) => role.toLowerCase());
+  const groupIdsFilter = uniqueStrings([
+    ...parseBulkSmsFilterList(filters.groupIds),
+    ...parseBulkSmsFilterList(filters.groupId),
+  ]);
   const quotationProductId = String(filters.quotationProductId || "").trim();
   const branchId = String(filters.branchId || "").trim();
   const inactiveDays = Math.max(1, Number(filters.inactiveDays || 90));
@@ -452,6 +523,26 @@ async function buildBulkSmsAudience(
     clients = clients.filter((client) =>
       client.location.toLowerCase().includes(region),
     );
+  }
+
+  if (groupIdsFilter.length > 0) {
+    const groups = await StockClientGroup.find({
+      _id: { $in: groupIdsFilter },
+      org_id: orgId,
+    })
+      .select("memberKeys")
+      .lean();
+    const memberKeys = new Set(
+      groups.flatMap((group) =>
+        (group?.memberKeys || []).map((key) => String(key).toLowerCase()),
+      ),
+    );
+    const groupIdSet = new Set(groupIdsFilter);
+    clients = clients.filter((client) => {
+      if ((client.groupIds || []).some((id) => groupIdSet.has(id))) return true;
+      if (client.memberKey && memberKeys.has(client.memberKey)) return true;
+      return false;
+    });
   }
 
   if (audienceType === "pending_quotations") {
@@ -481,6 +572,11 @@ async function buildBulkSmsAudience(
         client.location,
         client.contactPerson || "",
         client.quotationNumbers.join(" "),
+        ...(client.contacts || []).flatMap((contact) => [
+          contact.role || "",
+          contact.name || "",
+          contact.phone || "",
+        ]),
       ]
         .join(" ")
         .toLowerCase()
@@ -488,12 +584,75 @@ async function buildBulkSmsAudience(
     );
   }
 
-  clients = clients.sort((a, b) => a.name.localeCompare(b.name));
+  // Expand to contact-person recipients when one or more roles are selected
+  // (e.g. Lab Technicians + Directors across selected groups/regions).
+  if (contactRolesFilter.length > 0) {
+    const expanded: BulkSmsAudienceClient[] = [];
+    for (const facility of clients) {
+      const matchingContacts = (facility.contacts || []).filter((contact) => {
+        const role = String(contact.role || "")
+          .trim()
+          .toLowerCase();
+        return contactRolesFilter.some(
+          (selected) => role === selected || role.includes(selected),
+        );
+      });
+
+      for (const contact of matchingContacts) {
+        const contactName = String(contact.name || "").trim();
+        const phone = String(contact.phone || facility.phone || "").trim();
+        if (!phone || !contactName) continue;
+
+        const roleLabel = String(contact.role || "").trim();
+        expanded.push({
+          ...facility,
+          key: [
+            buildBulkSmsClientKey(phone, facility.name, facility.location),
+            normalizeClientValue(roleLabel),
+            normalizeClientValue(contactName),
+          ].join("|"),
+          phone,
+          contactPerson: contactName,
+          contactName,
+          contactRole: roleLabel,
+          sources: uniqueStrings([...(facility.sources || []), "contact"]),
+        });
+      }
+    }
+    clients = expanded;
+  }
+
+  clients = clients.sort((a, b) => {
+    const byName = a.name.localeCompare(b.name);
+    if (byName !== 0) return byName;
+    return String(a.contactName || a.contactPerson || "").localeCompare(
+      String(b.contactName || b.contactPerson || ""),
+    );
+  });
+
+  const allFacilityContacts = Array.from(map.values()).flatMap(
+    (client) => client.contacts || [],
+  );
+  const contactRoles = uniqueStrings([
+    ...DEFAULT_CONTACT_ROLES,
+    ...allFacilityContacts.map((contact) => String(contact.role || "")),
+  ]);
 
   return {
     clients: clients.map((client) => ({
-      ...client,
+      key: client.key,
+      name: client.name,
+      phone: client.phone,
+      location: client.location,
+      contactPerson: client.contactPerson,
+      contactRole: client.contactRole,
+      contactName: client.contactName,
+      quotationsCount: client.quotationsCount,
+      pendingQuotationsCount: client.pendingQuotationsCount,
       quotationNumbers: uniqueStrings(client.quotationNumbers),
+      invoicesCount: client.invoicesCount,
+      purchasesValue: client.purchasesValue,
+      lastPurchaseAt: client.lastPurchaseAt,
       sources: uniqueStrings(client.sources),
     })),
     meta: {
@@ -504,6 +663,7 @@ async function buildBulkSmsAudience(
       quotationNumbers: uniqueStrings(
         Array.from(map.values()).flatMap((client) => client.quotationNumbers),
       ),
+      contactRoles,
     },
   };
 }
@@ -2548,6 +2708,7 @@ export class StockController {
         email?: string;
         branchId?: string;
         legacyContactPerson?: string;
+        groupNames: string[];
         contacts: ContactDraft[];
         rowIndexes: number[];
       };
@@ -2560,6 +2721,7 @@ export class StockController {
       let lastSourceName = "";
       let lastSourceNumber = "";
       let lastSourceLocation = "";
+      let lastGroupNames: string[] = [];
 
       for (let index = 0; index < rows.length; index += 1) {
         try {
@@ -2587,6 +2749,16 @@ export class StockController {
             "client_address_1",
             "Client Address",
           ]);
+          const rawGroups = cell(row, [
+            "groups",
+            "Groups",
+            "group",
+            "Group",
+            "client_groups",
+            "Client Groups",
+            "county",
+            "County",
+          ]);
 
           // Continuation rows leave facility columns blank (export/sample layout).
           // Also inherit location when a new facility row omitted Region/Location.
@@ -2595,6 +2767,11 @@ export class StockController {
           let sourceNumber =
             rawNumber || (isContinuation ? lastSourceNumber : "");
           let sourceLocation = rawLocation || lastSourceLocation || "";
+          const groupNames = rawGroups
+            ? parseGroupNames(rawGroups)
+            : isContinuation
+              ? [...lastGroupNames]
+              : [];
 
           const legalName =
             cell(row, ["legalName", "Legal Name"]) || sourceName;
@@ -2660,6 +2837,7 @@ export class StockController {
           lastSourceName = sourceName;
           lastSourceNumber = sourceNumber;
           lastSourceLocation = sourceLocation;
+          if (groupNames.length > 0) lastGroupNames = groupNames;
 
           // Group by facility name + location so blank Client Number sheets still merge contacts.
           const facilityKey = `${sourceName.toLowerCase()}|${sourceLocation.toLowerCase()}`;
@@ -2674,6 +2852,7 @@ export class StockController {
               email: facilityEmail || undefined,
               branchId: branchId || undefined,
               legacyContactPerson: legacyContactPerson || undefined,
+              groupNames: [...groupNames],
               contacts: [],
               rowIndexes: [index + 1],
             };
@@ -2686,6 +2865,11 @@ export class StockController {
             if (branchId) draft.branchId = branchId;
             if (legacyContactPerson)
               draft.legacyContactPerson = legacyContactPerson;
+            if (groupNames.length > 0) {
+              draft.groupNames = [
+                ...new Set([...draft.groupNames, ...groupNames]),
+              ];
+            }
             if (
               (draft.sourceNumber === "n/a" || !draft.sourceNumber) &&
               sourceNumber &&
@@ -2721,6 +2905,32 @@ export class StockController {
 
       let createdCount = 0;
       let updatedCount = 0;
+      let groupsAssigned = 0;
+      const groupCache = new Map<string, any>();
+
+      const resolveGroup = async (groupName: string) => {
+        const cacheKey = groupName.toLowerCase();
+        if (groupCache.has(cacheKey)) return groupCache.get(cacheKey);
+
+        let group = await StockClientGroup.findOne({
+          org_id,
+          name: new RegExp(`^${groupName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i"),
+        });
+
+        if (!group) {
+          group = await StockClientGroup.create({
+            org_id,
+            name: groupName,
+            description: "Created from bulk client upload",
+            memberKeys: [],
+            createdBy: String(actorId),
+            updatedBy: String(actorId),
+          });
+        }
+
+        groupCache.set(cacheKey, group);
+        return group;
+      };
 
       for (const draft of drafts.values()) {
         try {
@@ -2748,6 +2958,19 @@ export class StockController {
             sourceLocation: draft.sourceLocation,
           });
 
+          const resolvedGroupIds: string[] = [];
+          for (const groupName of draft.groupNames) {
+            const group = await resolveGroup(groupName);
+            resolvedGroupIds.push(String(group._id));
+          }
+
+          const nextGroupIds = Array.from(
+            new Set([
+              ...((existing?.groupIds || []).map(String)),
+              ...resolvedGroupIds,
+            ]),
+          );
+
           const $set: Record<string, unknown> = {
             legalName: draft.legalName,
             contactPerson,
@@ -2761,8 +2984,11 @@ export class StockController {
           if (contacts.length > 0) {
             $set.contacts = contacts;
           }
+          if (resolvedGroupIds.length > 0) {
+            $set.groupIds = nextGroupIds;
+          }
 
-          await StockClient.findOneAndUpdate(
+          const saved = await StockClient.findOneAndUpdate(
             {
               org_id,
               sourceName: draft.sourceName,
@@ -2778,10 +3004,29 @@ export class StockController {
                 sourceLocation: draft.sourceLocation,
                 createdBy: String(actorId),
                 ...(contacts.length === 0 ? { contacts: [] } : {}),
+                ...(resolvedGroupIds.length === 0 ? { groupIds: [] } : {}),
               },
             },
             { upsert: true, new: true },
           );
+
+          if (resolvedGroupIds.length > 0 && saved) {
+            const memberKey = buildClientMemberKey(
+              saved.sourceName,
+              saved.sourceNumber,
+              saved.sourceLocation,
+            );
+            for (const groupId of resolvedGroupIds) {
+              await StockClientGroup.findOneAndUpdate(
+                { _id: groupId, org_id },
+                {
+                  $addToSet: { memberKeys: memberKey },
+                  $set: { updatedBy: String(actorId) },
+                },
+              );
+            }
+            groupsAssigned += 1;
+          }
 
           if (existing) updatedCount += 1;
           else createdCount += 1;
@@ -2801,12 +3046,13 @@ export class StockController {
 
       return res.status(200).json({
         success: true,
-        message: `Bulk upload completed: ${createdCount} created, ${updatedCount} updated${errors.length > 0 ? `, ${errors.length} errors` : ""}`,
+        message: `Bulk upload completed: ${createdCount} created, ${updatedCount} updated${groupsAssigned > 0 ? `, ${groupsAssigned} with groups` : ""}${errors.length > 0 ? `, ${errors.length} errors` : ""}`,
         data: {
           totalRows: rows.length,
           uniqueClients: drafts.size,
           createdCount,
           updatedCount,
+          groupsAssigned,
           errorCount: errors.length,
           errors: errors.slice(0, 10),
         },

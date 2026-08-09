@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
-import { History, MessageSquare, Search, Send, Users } from "lucide-react"
+import { History, MessageSquare, Search, Send, Users, ChevronDown, X } from "lucide-react"
 import { TableSkeleton } from "@/components/admin/ui/page-states"
 import {
   Dialog,
@@ -20,6 +20,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import { Checkbox } from "@/components/ui/checkbox"
 
 type AudienceType = "all" | "pending_quotations" | "quotation_product" | "branch" | "inactive"
 
@@ -29,6 +35,8 @@ interface BulkSmsClient {
   phone: string
   location: string
   contactPerson?: string
+  contactRole?: string
+  contactName?: string
   quotationsCount: number
   pendingQuotationsCount: number
   quotationNumbers: string[]
@@ -36,6 +44,12 @@ interface BulkSmsClient {
   purchasesValue: number
   lastPurchaseAt?: string
   sources: string[]
+}
+
+interface ClientGroupOption {
+  _id: string
+  name: string
+  memberKeys?: string[]
 }
 
 interface BulkSmsCampaign {
@@ -48,6 +62,87 @@ interface BulkSmsCampaign {
   skippedCount: number
   status: "completed" | "completed_with_errors" | "failed"
   createdAt: string
+}
+
+function MultiSelectFilter({
+  label,
+  emptyLabel,
+  options,
+  selected,
+  onChange,
+}: {
+  label: string
+  emptyLabel: string
+  options: Array<{ value: string; label: string }>
+  selected: string[]
+  onChange: (next: string[]) => void
+}) {
+  const selectedSet = useMemo(() => new Set(selected), [selected])
+  const summary =
+    selected.length === 0
+      ? emptyLabel
+      : selected.length === 1
+        ? options.find((option) => option.value === selected[0])?.label || `${selected.length} selected`
+        : `${selected.length} ${label.toLowerCase()} selected`
+
+  const toggle = (value: string) => {
+    if (selectedSet.has(value)) {
+      onChange(selected.filter((entry) => entry !== value))
+    } else {
+      onChange([...selected, value])
+    }
+  }
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          className="h-10 w-full justify-between px-3 font-normal"
+        >
+          <span className="truncate text-left">{summary}</span>
+          <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-60" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-[min(22rem,calc(100vw-2rem))] p-2">
+        <div className="mb-2 flex items-center justify-between gap-2 px-1">
+          <p className="text-xs font-medium text-muted-foreground">{label}</p>
+          {selected.length > 0 ? (
+            <button
+              type="button"
+              className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+              onClick={() => onChange([])}
+            >
+              Clear
+            </button>
+          ) : null}
+        </div>
+        <div className="max-h-64 space-y-1 overflow-y-auto">
+          {options.length === 0 ? (
+            <p className="px-2 py-3 text-sm text-muted-foreground">No options available.</p>
+          ) : (
+            options.map((option) => {
+              const checked = selectedSet.has(option.value)
+              return (
+                <label
+                  key={option.value}
+                  className="flex cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted/60"
+                >
+                  <Checkbox
+                    checked={checked}
+                    onCheckedChange={() => toggle(option.value)}
+                    className="mt-0.5"
+                  />
+                  <span className="leading-snug">{option.label}</span>
+                </label>
+              )
+            })
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
 }
 
 
@@ -75,6 +170,8 @@ export default function BulkSmsPage() {
     audienceType: "all" as AudienceType,
     search: "",
     region: "",
+    contactRoles: [] as string[],
+    groupIds: [] as string[],
     quotationProductId: "",
     branchId: "",
     inactiveDays: "90",
@@ -82,6 +179,8 @@ export default function BulkSmsPage() {
 
   const [products, setProducts] = useState<any[]>([])
   const [branches, setBranches] = useState<any[]>([])
+  const [contactRoles, setContactRoles] = useState<string[]>([])
+  const [clientGroups, setClientGroups] = useState<ClientGroupOption[]>([])
 
   const [campaign, setCampaign] = useState({
     name: "",
@@ -134,11 +233,25 @@ export default function BulkSmsPage() {
     params.set("audienceType", filters.audienceType)
     if (filters.search.trim()) params.set("search", filters.search.trim())
     if (filters.region.trim()) params.set("region", filters.region.trim())
+    filters.contactRoles.forEach((role) => {
+      if (role.trim()) params.append("contactRoles", role.trim())
+    })
+    filters.groupIds.forEach((groupId) => {
+      if (groupId.trim()) params.append("groupIds", groupId.trim())
+    })
     if (filters.audienceType === "quotation_product" && filters.quotationProductId.trim()) params.set("quotationProductId", filters.quotationProductId.trim())
     if (filters.audienceType === "branch" && filters.branchId.trim()) params.set("branchId", filters.branchId.trim())
     if (filters.inactiveDays.trim()) params.set("inactiveDays", filters.inactiveDays.trim())
     return params.toString()
   }, [filters])
+
+  const selectedGroupNames = useMemo(
+    () =>
+      filters.groupIds
+        .map((id) => clientGroups.find((group) => group._id === id)?.name || id)
+        .filter(Boolean),
+    [clientGroups, filters.groupIds],
+  )
 
   const selectedClients = useMemo(() => {
     return clients.filter((client) => selectedKeys.has(client.key))
@@ -167,6 +280,9 @@ export default function BulkSmsPage() {
       setClients(data)
       setRegions(json.meta?.regions || [])
       setQuotationNumbers(json.meta?.quotationNumbers || [])
+      if (Array.isArray(json.meta?.contactRoles) && json.meta.contactRoles.length > 0) {
+        setContactRoles(json.meta.contactRoles)
+      }
       setSelectedKeys((prev) => {
         const visible = new Set(data.map((client) => client.key))
         return new Set(Array.from(prev).filter((key) => visible.has(key)))
@@ -187,10 +303,12 @@ export default function BulkSmsPage() {
   useEffect(() => {
     const loadMetadata = async () => {
       try {
-        const [productsRes, branchesRes, brandingRes] = await Promise.all([
+        const [productsRes, branchesRes, brandingRes, rolesRes, groupsRes] = await Promise.all([
           fetch(`${API_URL}/api/stock/products`, { headers }),
           fetch(`${API_URL}/api/branches`, { headers }),
           fetch(`${API_URL}/api/company/branding`, { headers }),
+          fetch(`${API_URL}/api/stock/clients/contact-roles`, { headers }),
+          fetch(`${API_URL}/api/stock/clients/groups`, { headers }),
         ])
         if (productsRes.ok) {
           const productsJson = await productsRes.json()
@@ -203,6 +321,16 @@ export default function BulkSmsPage() {
         if (brandingRes.ok) {
           const brandingJson = await brandingRes.json()
           setBranding(brandingJson.data || {})
+        }
+        if (rolesRes.ok) {
+          const rolesJson = await rolesRes.json()
+          if (Array.isArray(rolesJson.data) && rolesJson.data.length > 0) {
+            setContactRoles(rolesJson.data)
+          }
+        }
+        if (groupsRes.ok) {
+          const groupsJson = await groupsRes.json()
+          setClientGroups((groupsJson.data || []) as ClientGroupOption[])
         }
       } catch (err) {
         console.error("Failed to load metadata", err)
@@ -277,7 +405,9 @@ export default function BulkSmsPage() {
           <div className="space-y-0.5">
             <p className="text-sm font-medium tracking-wide" style={{ color: primaryColor }}>Clients</p>
             <h1 className="text-xl font-semibold tracking-tight text-foreground">Bulk SMS campaigns</h1>
-            <p className="text-sm text-muted-foreground">Build an audience from clients, quotations, regions, and purchase history.</p>
+            <p className="text-sm text-muted-foreground">
+              Pick one or more groups and contact roles, then message those people directly.
+            </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
@@ -370,7 +500,7 @@ export default function BulkSmsPage() {
 
       <Card className="shadow-sm">
         <CardContent className="p-3">
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7">
             <select
               className="h-10 rounded-md border bg-background px-3 text-sm"
               value={filters.audienceType}
@@ -393,6 +523,25 @@ export default function BulkSmsPage() {
                 <option key={region} value={region}>{region}</option>
               ))}
             </select>
+
+            <MultiSelectFilter
+              label="Groups"
+              emptyLabel="All groups / counties"
+              options={clientGroups.map((group) => ({
+                value: group._id,
+                label: `${group.name} (${group.memberKeys?.length || 0})`,
+              }))}
+              selected={filters.groupIds}
+              onChange={(groupIds) => setFilters((prev) => ({ ...prev, groupIds }))}
+            />
+
+            <MultiSelectFilter
+              label="Contact roles"
+              emptyLabel="All contact roles"
+              options={contactRoles.map((role) => ({ value: role, label: role }))}
+              selected={filters.contactRoles}
+              onChange={(roles) => setFilters((prev) => ({ ...prev, contactRoles: roles }))}
+            />
 
             {filters.audienceType === "quotation_product" ? (
               <select
@@ -434,12 +583,80 @@ export default function BulkSmsPage() {
               <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
               <Input
                 className="pl-9"
-                placeholder="Search client, phone, region, quotation..."
+                placeholder="Search client, phone, region, role, quotation..."
                 value={filters.search}
                 onChange={(event) => setFilters((prev) => ({ ...prev, search: event.target.value }))}
               />
             </div>
           </div>
+
+          {(filters.contactRoles.length > 0 || filters.groupIds.length > 0) ? (
+            <div className="mt-3 space-y-2">
+              <div className="flex flex-wrap gap-1.5">
+                {filters.groupIds.map((groupId) => {
+                  const name = clientGroups.find((group) => group._id === groupId)?.name || groupId
+                  return (
+                    <Badge key={`group-${groupId}`} variant="outline" className="gap-1 pr-1">
+                      Group: {name}
+                      <button
+                        type="button"
+                        className="rounded-sm p-0.5 hover:bg-muted"
+                        onClick={() =>
+                          setFilters((prev) => ({
+                            ...prev,
+                            groupIds: prev.groupIds.filter((id) => id !== groupId),
+                          }))
+                        }
+                        aria-label={`Remove group ${name}`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  )
+                })}
+                {filters.contactRoles.map((role) => (
+                  <Badge key={`role-${role}`} variant="secondary" className="gap-1 pr-1">
+                    Role: {role}
+                    <button
+                      type="button"
+                      className="rounded-sm p-0.5 hover:bg-muted"
+                      onClick={() =>
+                        setFilters((prev) => ({
+                          ...prev,
+                          contactRoles: prev.contactRoles.filter((entry) => entry !== role),
+                        }))
+                      }
+                      aria-label={`Remove role ${role}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {filters.contactRoles.length > 0 ? (
+                  <>
+                    Showing contacts with role{filters.contactRoles.length === 1 ? "" : "s"}{" "}
+                    <strong>{filters.contactRoles.join(", ")}</strong>
+                    {filters.region ? <> in <strong>{filters.region}</strong></> : null}
+                    {selectedGroupNames.length > 0 ? (
+                      <> within group{selectedGroupNames.length === 1 ? "" : "s"}{" "}
+                        <strong>{selectedGroupNames.join(", ")}</strong>
+                      </>
+                    ) : null}
+                    . SMS goes to each contact&apos;s phone when available.
+                  </>
+                ) : (
+                  <>
+                    Showing facilities in group{selectedGroupNames.length === 1 ? "" : "s"}{" "}
+                    <strong>{selectedGroupNames.join(", ")}</strong>
+                    {filters.region ? <> and region <strong>{filters.region}</strong></> : null}.
+                    Add contact roles to target specific people (e.g. Lab Techs, Directors).
+                  </>
+                )}
+              </p>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -472,9 +689,22 @@ export default function BulkSmsPage() {
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div className="min-w-0">
                           <p className="truncate font-medium">{client.name}</p>
-                          <p className="text-xs text-muted-foreground">{client.phone} · {client.location || "No region"}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {client.phone} · {client.location || "No region"}
+                          </p>
+                          {client.contactRole || client.contactName || client.contactPerson ? (
+                            <p className="mt-1 text-xs font-medium text-foreground/80">
+                              {client.contactRole ? `${client.contactRole}: ` : ""}
+                              {client.contactName || client.contactPerson}
+                            </p>
+                          ) : null}
                         </div>
-                        <Badge variant="outline">{client.sources.join(", ")}</Badge>
+                        <div className="flex flex-wrap gap-1 justify-end">
+                          {client.contactRole ? (
+                            <Badge variant="secondary">{client.contactRole}</Badge>
+                          ) : null}
+                          <Badge variant="outline">{client.sources.join(", ")}</Badge>
+                        </div>
                       </div>
                       <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-4">
                         <span>Quotes: {client.quotationsCount}</span>
@@ -525,7 +755,7 @@ export default function BulkSmsPage() {
 
               <Button className="w-full" onClick={sendCampaign} disabled={sending} style={{ backgroundColor: primaryColor }}>
                 <Send className="mr-2 h-4 w-4" />
-                {sending ? "Sending Campaign..." : `Send to ${selectedCount} Client${selectedCount === 1 ? "" : "s"}`}
+                {sending ? "Sending Campaign..." : `Send to ${selectedCount} recipient${selectedCount === 1 ? "" : "s"}`}
               </Button>
             </CardContent>
           </Card>

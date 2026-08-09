@@ -74,6 +74,7 @@ export const StockClient = mongoose.model<IStockClient>(
 
 export const DEFAULT_CONTACT_ROLES = [
   "Doctor",
+  "Director",
   "Lab Technician",
   "Nurse",
   "Procurement",

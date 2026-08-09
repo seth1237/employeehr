@@ -2,6 +2,7 @@ import type { Response } from "express"
 import type { AuthenticatedRequest } from "../middleware/auth"
 import { StockClient, DEFAULT_CONTACT_ROLES } from "../models/StockClient"
 import { StockClientGroup } from "../models/StockClientGroup"
+import { isPlatformOwner } from "../utils/platformOwner"
 
 function clientKey(name: string, number: string, location: string) {
   return `${String(name || "")
@@ -582,6 +583,68 @@ export class ClientCrmController {
       return res.status(500).json({
         success: false,
         message: error.message || "Failed to delete client",
+      })
+    }
+  }
+
+  /**
+   * One-time / maintenance: wipe all saved CRM clients for this org.
+   * Restricted to platform owner / super_admin / company_admin.
+   */
+  static async deleteAllSavedClients(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id
+      const actorId = req.user?.userId
+      const role = String(req.user?.role || "")
+      const email = String(req.user?.email || "")
+
+      if (!org_id || !actorId) {
+        return res.status(401).json({ success: false, message: "Unauthorized" })
+      }
+
+      const allowed =
+        role === "company_admin" ||
+        role === "super_admin" ||
+        isPlatformOwner(email, role)
+
+      if (!allowed) {
+        return res.status(403).json({
+          success: false,
+          message: "Only the company owner or super admin can delete all clients",
+        })
+      }
+
+      const confirm = String(req.body?.confirm || "").trim()
+      if (confirm !== "DELETE ALL CLIENTS") {
+        return res.status(400).json({
+          success: false,
+          message: 'Type DELETE ALL CLIENTS to confirm',
+        })
+      }
+
+      const deleteResult = await StockClient.deleteMany({ org_id })
+      const groupsCleared = await StockClientGroup.updateMany(
+        { org_id },
+        {
+          $set: {
+            memberKeys: [],
+            updatedBy: String(actorId),
+          },
+        },
+      )
+
+      return res.status(200).json({
+        success: true,
+        message: `Deleted ${deleteResult.deletedCount || 0} clients and cleared group memberships`,
+        data: {
+          deletedCount: Number(deleteResult.deletedCount || 0),
+          groupsCleared: Number(groupsCleared.modifiedCount || 0),
+        },
+      })
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to delete all clients",
       })
     }
   }

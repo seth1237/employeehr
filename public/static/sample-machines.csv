@@ -1,0 +1,4 @@
+Machine Name,Client,Contact person,phone number,In charge of machine (name),Role,No,LOCATION,Machine S/No,Installation Date,Last Service Date,Next Service
+Chemistry Analyzer,Acme Medical Centre,Dr Jane Wanjiku,0712345678,Peter Otieno,Lab Technician,0722001122,Nairobi,SN-CHEM-001,15/01/2024,15/01/2026,15/07/2026
+Hematology Analyzer,Acme Medical Centre,Dr Jane Wanjiku,0712345678,Mary Achieng,Lab Technician,0733112233,Nairobi,SN-HEM-014,20/03/2024,20/03/2026,20/09/2026
+Ultrasound Machine,Kisii County Hospital,John Momanyi,0744556677,Grace Nyaboke,Facility Manager,0755667788,Kisii,US-KE-8821,01/06/2023,01/06/2025,01/12/2025

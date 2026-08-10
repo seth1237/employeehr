@@ -855,13 +855,40 @@ export const stockApi = {
     client.get<any[]>(`/api/stock/warehouses/${warehouseId}/locations`),
   // Installed machines
   getInstalledMachines: () =>
-    client.get<any[]>(`/api/stock/installed-machines`),
+    client.get<any[]>("/api/stock/installed-machines"),
   createInstalledMachine: (data: any) =>
-    client.post<any>(`/api/stock/installed-machines`, data),
+    client.post<any>("/api/stock/installed-machines", data),
   updateInstalledMachine: (id: string, data: any) =>
     client.patch<any>(`/api/stock/installed-machines/${id}`, data),
   deleteInstalledMachine: (id: string) =>
     client.delete<any>(`/api/stock/installed-machines/${id}`),
+  bulkUploadInstalledMachines: async (file: File) => {
+    const token = getToken();
+    const headers: Record<string, string> = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const form = new FormData();
+    form.append("file", file);
+    const response = await fetch(
+      `${API_URL}/api/stock/installed-machines/bulk`,
+      {
+        method: "POST",
+        headers,
+        body: form,
+      },
+    );
+    const data = await response.text().then((text) => {
+      try {
+        return text ? JSON.parse(text) : null;
+      } catch {
+        return null;
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(data?.message || "Upload failed");
+    }
+    return data;
+  },
   // Machine services
   getMachineServices: (params?: {
     machineId?: string;

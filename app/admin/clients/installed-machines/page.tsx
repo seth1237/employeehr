@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type JSX } from "react";
+import { useEffect, useMemo, useRef, useState, type JSX } from "react";
 import api, { stockApi, usersApi } from "@/lib/api";
 import { finishDataLoad, startDataLoad } from "@/lib/silent-load";
 import { PageLoadingSkeleton } from "@/components/admin/ui/page-states";
@@ -30,6 +30,7 @@ import {
   MessageSquare,
   FileText,
   Download,
+  Upload,
 } from "lucide-react";
 import {
   Dialog,
@@ -434,6 +435,9 @@ export default function InstalledMachinesPage() {
     {},
   );
   const [showCandidates, setShowCandidates] = useState(false);
+  const [showBulkUploadPanel, setShowBulkUploadPanel] = useState(false);
+  const [uploadingMachines, setUploadingMachines] = useState(false);
+  const machineFileInputRef = useRef<HTMLInputElement | null>(null);
   const [hoveredCandidate, setHoveredCandidate] = useState<string | null>(null);
 
   // Clients CRM
@@ -1764,11 +1768,24 @@ export default function InstalledMachinesPage() {
               onClick={() => {
                 setSection("machines");
                 setShowCandidates((v) => !v);
+                if (!showCandidates) setShowBulkUploadPanel(false);
               }}
               className="flex items-center gap-2"
             >
               <Plus className="h-4 w-4" />
               {showCandidates ? "Hide" : "Add"} Machines
+            </Button>
+            <Button
+              variant={showBulkUploadPanel ? "default" : "outline"}
+              className="flex items-center gap-2"
+              onClick={() => {
+                setSection("machines");
+                setShowBulkUploadPanel((v) => !v);
+                if (!showBulkUploadPanel) setShowCandidates(false);
+              }}
+            >
+              <Upload className="h-4 w-4" />
+              Bulk Upload
             </Button>
             <Button
               variant="outline"
@@ -1872,6 +1889,89 @@ export default function InstalledMachinesPage() {
       {/* ---------------------------- Machines section ---------------------------- */}
       {section === "machines" && (
         <>
+          {showBulkUploadPanel && (
+            <Card className="overflow-hidden shadow-sm">
+              <CardHeader className="border-b bg-muted/30 pb-3">
+                <CardTitle className="text-base">Bulk Upload Machines</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 pt-6">
+                <p className="text-sm text-muted-foreground">
+                  Upload a CSV of installed machines. Required:{" "}
+                  <strong>Machine Name</strong> and <strong>Client</strong>.
+                  Recommended: <strong>Machine S/No</strong> and{" "}
+                  <strong>LOCATION</strong>.
+                </p>
+                <div className="rounded-md border bg-muted/30 p-3 text-xs space-y-2">
+                  <p className="font-medium text-foreground">Expected columns</p>
+                  <p>
+                    <code>Machine Name</code>, <code>Client</code>,{" "}
+                    <code>Contact person</code>, <code>phone number</code>,{" "}
+                    <code>In charge of machine (name)</code>, <code>Role</code>,{" "}
+                    <code>No</code> (attendant phone), <code>LOCATION</code>,{" "}
+                    <code>Machine S/No</code>, <code>Installation Date</code>,{" "}
+                    <code>Last Service Date</code>, <code>Next Service</code>
+                  </p>
+                  <p className="text-muted-foreground">
+                    Dates can be <code>DD/MM/YYYY</code> or <code>YYYY-MM-DD</code>.
+                    Rows with the same serial number update the existing machine.
+                    Last/next service dates create service records automatically.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <a
+                    className="text-sm text-primary underline"
+                    href="/static/sample-machines.csv"
+                    download
+                  >
+                    Download sample CSV
+                  </a>
+                  <input
+                    ref={machineFileInputRef}
+                    type="file"
+                    accept=".csv"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files && e.target.files[0];
+                      if (!file) return;
+                      try {
+                        setUploadingMachines(true);
+                        const res = await stockApi.bulkUploadInstalledMachines(file);
+                        if (!res?.success)
+                          throw new Error(res?.message || "Upload failed");
+                        const detailErrors = Array.isArray(res?.data?.errors)
+                          ? res.data.errors.filter(Boolean)
+                          : [];
+                        const summary =
+                          res?.message ||
+                          `Upload complete: ${res?.data?.createdCount || 0} created, ${res?.data?.updatedCount || 0} updated`;
+                        window.alert(
+                          detailErrors.length > 0
+                            ? `${summary}\n\nFirst issues:\n- ${detailErrors.slice(0, 8).join("\n- ")}`
+                            : summary,
+                        );
+                        await load({ silent: true });
+                        setShowBulkUploadPanel(false);
+                      } catch (err: any) {
+                        window.alert(err?.message || "Upload failed");
+                      } finally {
+                        setUploadingMachines(false);
+                        if (machineFileInputRef.current)
+                          machineFileInputRef.current.value = "";
+                      }
+                    }}
+                  />
+                  <Button
+                    onClick={() => machineFileInputRef.current?.click()}
+                    disabled={uploadingMachines}
+                    size="sm"
+                  >
+                    {uploadingMachines ? "Uploading..." : "Upload CSV"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {showCandidates && (
             <Card className="overflow-hidden shadow-sm">
               <CardHeader className="border-b bg-muted/30 pb-3">

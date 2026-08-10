@@ -331,6 +331,11 @@ router.post(
   "/installed-machines",
   InstalledMachineController.createInstalledMachine,
 );
+router.post(
+  "/installed-machines/bulk",
+  uploadApplicationFiles.single("file"),
+  InstalledMachineController.bulkUploadInstalledMachines,
+);
 router.patch(
   "/installed-machines/:id",
   InstalledMachineController.updateInstalledMachine,

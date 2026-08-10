@@ -12,9 +12,27 @@ export class AuthController {
       return false
     }
 
+    if (process.env.NODE_ENV === "development") {
+      console.log("Login OTP skipped: NODE_ENV=development")
+      return false
+    }
+
     const origin = (req.get("origin") || "").toLowerCase()
     const referer = (req.get("referer") || "").toLowerCase()
     const combined = `${origin} ${referer}`
+
+    // Never require OTP for local browsers, even if FRONTEND_URL is a prod domain.
+    if (
+      combined.includes("localhost") ||
+      combined.includes("127.0.0.1") ||
+      combined.includes("[::1]")
+    ) {
+      console.log("Login OTP skipped: request from local/dev environment", {
+        origin,
+        referer,
+      })
+      return false
+    }
 
     const defaultDomains = [
       "hr.codewithseth.co.ke",
@@ -30,7 +48,16 @@ export class AuthController {
     const frontendHost = (() => {
       try {
         const url = process.env.FRONTEND_URL
-        return url ? new URL(url).hostname.toLowerCase() : ""
+        if (!url) return ""
+        const host = new URL(url).hostname.toLowerCase()
+        if (
+          host === "localhost" ||
+          host === "127.0.0.1" ||
+          host === "::1"
+        ) {
+          return ""
+        }
+        return host
       } catch {
         return ""
       }

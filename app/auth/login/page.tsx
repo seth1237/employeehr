@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input"
 import { useState } from "react"
 import { ArrowLeft, Mail, Lock, ShieldCheck } from "lucide-react"
 import { api } from "@/lib/api"
-import { removeToken, removeUser, setToken, setUser } from "@/lib/auth"
+import { removeToken, removeUser, setToken, setUser, getToken } from "@/lib/auth"
 import InvitationForm from "@/components/auth/invitation-form"
 
 function LoginContent() {
@@ -44,7 +44,20 @@ function LoginContent() {
   }
 
   const completeLogin = (authData: any) => {
+    if (!authData?.token) {
+      setError("Login succeeded but no token was returned. Please try again.")
+      return
+    }
+
     setToken(authData.token)
+
+    if (!getToken()) {
+      setError(
+        "Login succeeded but the session could not be saved in this browser. Check that cookies/localStorage are allowed.",
+      )
+      return
+    }
+
     setUser({
       _id: authData.user._id,
       email: authData.user.email,
@@ -57,7 +70,7 @@ function LoginContent() {
     const role = authData.user.role
     if (role === "super_admin") {
       router.push("/owner")
-    } else if (role === "company_admin" || role === "hr") {
+    } else if (role === "company_admin" || role === "admin" || role === "hr") {
       router.push("/admin")
     } else if (role === "manager") {
       router.push("/manager")

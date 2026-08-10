@@ -61,8 +61,11 @@ interface InstalledMachine {
   installedBy?: string;
   attendant?: string;
   attendantNumber?: string;
+  attendantRole?: string;
   isTrained?: boolean;
   notes?: string;
+  invoiceId?: string;
+  quotationId?: string;
 }
 
 interface FacilityContact {
@@ -191,6 +194,11 @@ interface ServiceFormState {
   notes: string;
   cost: string;
   markCompleted: boolean;
+  machineStatus: string;
+  attendant: string;
+  attendantRole: string;
+  attendantNumber: string;
+  nextServiceDate: string;
 }
 
 const EMPTY_SERVICE_FORM: ServiceFormState = {
@@ -201,6 +209,46 @@ const EMPTY_SERVICE_FORM: ServiceFormState = {
   notes: "",
   cost: "",
   markCompleted: false,
+  machineStatus: "active",
+  attendant: "",
+  attendantRole: "",
+  attendantNumber: "",
+  nextServiceDate: "",
+};
+
+const MACHINE_STATUS_OPTIONS = [
+  { value: "active", label: "Active / Working" },
+  { value: "maintenance", label: "Needs maintenance" },
+  { value: "ended", label: "Ended / Decommissioned" },
+  { value: "installation_pending", label: "Installation pending" },
+];
+
+interface ScheduleInstallationForm {
+  invoiceId: string;
+  candidateKey: string;
+  engineer: string;
+  installationDate: string;
+  serialNumber: string;
+  installationLocation: string;
+  clientContactPerson: string;
+  attendant: string;
+  attendantRole: string;
+  attendantNumber: string;
+  notes: string;
+}
+
+const EMPTY_SCHEDULE_FORM: ScheduleInstallationForm = {
+  invoiceId: "",
+  candidateKey: "",
+  engineer: "",
+  installationDate: "",
+  serialNumber: "",
+  installationLocation: "",
+  clientContactPerson: "",
+  attendant: "",
+  attendantRole: "",
+  attendantNumber: "",
+  notes: "",
 };
 
 const SERVICE_TYPE_OPTIONS = [
@@ -436,6 +484,9 @@ export default function InstalledMachinesPage() {
   );
   const [showCandidates, setShowCandidates] = useState(false);
   const [showBulkUploadPanel, setShowBulkUploadPanel] = useState(false);
+  const [showSchedulePanel, setShowSchedulePanel] = useState(false);
+  const [scheduleForm, setScheduleForm] =
+    useState<ScheduleInstallationForm>(EMPTY_SCHEDULE_FORM);
   const [uploadingMachines, setUploadingMachines] = useState(false);
   const machineFileInputRef = useRef<HTMLInputElement | null>(null);
   const [hoveredCandidate, setHoveredCandidate] = useState<string | null>(null);
@@ -1032,10 +1083,45 @@ export default function InstalledMachinesPage() {
     [services],
   );
 
-  const recentDoneServices = useMemo(
-    () => doneServices.slice(0, 5),
-    [doneServices],
-  );
+  const invoiceOptions = useMemo(() => {
+    const map = new Map<string, { invoiceId: string; invoiceNumber: string; clientName: string }>();
+    for (const item of candidates) {
+      const invoiceId = String(item.invoiceId || "");
+      if (!invoiceId || map.has(invoiceId)) continue;
+      map.set(invoiceId, {
+        invoiceId,
+        invoiceNumber: String(item.invoiceNumber || invoiceId.slice(-6)),
+        clientName: String(item.client?.name || "Client"),
+      });
+    }
+    return Array.from(map.values()).sort((a, b) =>
+      a.invoiceNumber.localeCompare(b.invoiceNumber),
+    );
+  }, [candidates]);
+
+  const scheduleCandidates = useMemo(() => {
+    if (!scheduleForm.invoiceId) return [];
+    return candidates.filter(
+      (item) => String(item.invoiceId) === scheduleForm.invoiceId,
+    );
+  }, [candidates, scheduleForm.invoiceId]);
+
+  const engineerOptions = useMemo(() => {
+    const options = employees.map((employee) => ({
+      value: getEmployeeLabel(employee),
+      label: getEmployeeLabel(employee),
+    }));
+    if (
+      scheduleForm.engineer &&
+      !options.some((option) => option.value === scheduleForm.engineer)
+    ) {
+      options.unshift({
+        value: scheduleForm.engineer,
+        label: scheduleForm.engineer,
+      });
+    }
+    return options;
+  }, [employees, scheduleForm.engineer]);
 
   const servicesForSelectedMachine = useMemo(() => {
     if (!selectedMachine) return [];
@@ -1553,8 +1639,10 @@ export default function InstalledMachinesPage() {
       installedBy: machine.installedBy || "",
       attendant: machine.attendant || "",
       attendantNumber: machine.attendantNumber || "",
+      attendantRole: machine.attendantRole || "",
       isTrained: machine.isTrained || false,
       installationLocation: machine.installationLocation || "",
+      status: machine.status || "active",
       notes: machine.notes || "",
     });
     setShowDetailDialog(true);
@@ -1616,6 +1704,68 @@ export default function InstalledMachinesPage() {
     }
   };
 
+  const scheduleInstallation = async () => {
+    if (!scheduleForm.invoiceId) return alert("Select an invoice");
+    if (!scheduleForm.candidateKey) return alert("Select a machine from the invoice");
+    if (!scheduleForm.engineer.trim()) return alert("Assign an engineer");
+    if (!scheduleForm.installationDate) return alert("Select an installation date");
+
+    const selected = scheduleCandidates.find((candidate, index) => {
+      const key = `${candidate.invoiceId}::${candidate.productId}::${index}`;
+      return key === scheduleForm.candidateKey;
+    });
+
+    if (!selected) return alert("Selected machine line was not found");
+
+    setSaving(true);
+    try {
+      const res = await stockApi.createInstalledMachine({
+        client: {
+          ...(selected.client || {}),
+          contactPerson:
+            scheduleForm.clientContactPerson ||
+            (selected.client as any)?.contactPerson ||
+            "",
+        },
+        productId: selected.productId,
+        productName: selected.productName,
+        category: selected.category,
+        invoiceId: selected.invoiceId,
+        quotationId: selected.quotationId,
+        serialNumber: scheduleForm.serialNumber || undefined,
+        installationLocation:
+          scheduleForm.installationLocation ||
+          selected.client?.location ||
+          undefined,
+        installationDate: new Date(scheduleForm.installationDate).toISOString(),
+        installedBy: scheduleForm.engineer.trim(),
+        attendant: scheduleForm.attendant || undefined,
+        attendantRole: scheduleForm.attendantRole || undefined,
+        attendantNumber: scheduleForm.attendantNumber || undefined,
+        notes: scheduleForm.notes || undefined,
+        status: "installation_pending",
+        isActive: true,
+      });
+
+      if (res?.data) {
+        setMachines((prev) => [res.data, ...prev]);
+      } else {
+        await load({ silent: true });
+      }
+
+      setScheduleForm(EMPTY_SCHEDULE_FORM);
+      setShowSchedulePanel(false);
+      alert(
+        "Installation scheduled. It will appear under Telesales Activity → Installations.",
+      );
+    } catch (err: any) {
+      console.error(err);
+      alert(err?.message || "Failed to schedule installation");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const deleteMachine = async (id: string) => {
     if (!confirm("Are you sure you want to delete this machine?")) return;
     try {
@@ -1630,15 +1780,22 @@ export default function InstalledMachinesPage() {
   };
 
   const openLogServiceDialog = (machine?: InstalledMachine) => {
+    const target = machine || selectedMachine;
     setEditingService(null);
     setServiceForm({
       ...EMPTY_SERVICE_FORM,
-      machineId: machine?._id || selectedMachine?._id || "",
+      machineId: target?._id || "",
+      attendant: target?.attendant || "",
+      attendantRole: target?.attendantRole || "",
+      attendantNumber: target?.attendantNumber || "",
+      machineStatus: target?.status === "installation_pending" ? "active" : target?.status || "active",
+      nextServiceDate: toInputDate(target?.nextServiceDate),
     });
     setShowServiceDialog(true);
   };
 
   const openEditServiceDialog = (service: ServiceRecord) => {
+    const machine = machines.find((m) => m._id === service.machineId);
     setEditingService(service);
     setServiceForm({
       machineId: service.machineId,
@@ -1648,8 +1805,53 @@ export default function InstalledMachinesPage() {
       notes: service.notes || "",
       cost: service.cost != null ? String(service.cost) : "",
       markCompleted: !!service.completedDate,
+      machineStatus: machine?.status || "active",
+      attendant: machine?.attendant || "",
+      attendantRole: machine?.attendantRole || "",
+      attendantNumber: machine?.attendantNumber || "",
+      nextServiceDate: toInputDate(machine?.nextServiceDate),
     });
     setShowServiceDialog(true);
+  };
+
+  const applyServiceCompletionToMachine = async (machineId: string) => {
+    if (!machineId) return;
+    const updates: Record<string, any> = {
+      status: serviceForm.machineStatus || "active",
+      attendant: serviceForm.attendant || "",
+      attendantRole: serviceForm.attendantRole || "",
+      attendantNumber: serviceForm.attendantNumber || "",
+    };
+    if (serviceForm.nextServiceDate) {
+      updates.nextServiceDate = new Date(serviceForm.nextServiceDate).toISOString();
+    }
+    const res = await stockApi.updateInstalledMachine(machineId, updates);
+    const updated = res?.data || updates;
+    setMachines((prev) =>
+      prev.map((m) => (m._id === machineId ? { ...m, ...updated } : m)),
+    );
+    setSelectedMachine((prev) =>
+      prev?._id === machineId ? { ...prev, ...updated } : prev,
+    );
+
+    if (serviceForm.nextServiceDate) {
+      const alreadyScheduled = services.some(
+        (service) =>
+          service.machineId === machineId &&
+          !service.completedDate &&
+          toInputDate(service.scheduledDate) === serviceForm.nextServiceDate,
+      );
+      if (!alreadyScheduled) {
+        await stockApi.createMachineService({
+          machineId,
+          serviceType: "Next service",
+          scheduledDate: new Date(serviceForm.nextServiceDate).toISOString(),
+          completedDate: null,
+          technician: serviceForm.technician || "",
+          notes: "Scheduled after service completion",
+        });
+      }
+    }
   };
 
   const saveService = async () => {
@@ -1657,6 +1859,17 @@ export default function InstalledMachinesPage() {
     if (editingService?.isReminder) {
       alert("This reminder cannot be edited directly.");
       return;
+    }
+    if (serviceForm.markCompleted) {
+      if (!serviceForm.attendant.trim()) {
+        return alert("Enter the person left in charge of the machine");
+      }
+      if (!serviceForm.attendantRole.trim()) {
+        return alert("Enter the role of the person left in charge");
+      }
+      if (!serviceForm.nextServiceDate) {
+        return alert("Enter the next service date");
+      }
     }
     setSaving(true);
     try {
@@ -1689,6 +1902,12 @@ export default function InstalledMachinesPage() {
           await load({ silent: true });
         }
       }
+
+      if (serviceForm.markCompleted) {
+        await applyServiceCompletionToMachine(serviceForm.machineId);
+        await load({ silent: true });
+      }
+
       setShowServiceDialog(false);
     } catch (err: any) {
       console.error(err);
@@ -1698,24 +1917,31 @@ export default function InstalledMachinesPage() {
     }
   };
 
-  const markServiceDone = async (service: ServiceRecord) => {
+  const markServiceDone = (service: ServiceRecord) => {
     if (service.isReminder) {
       alert("This reminder is not a saved service record.");
       return;
     }
-    try {
-      const completedDate = new Date().toISOString();
-      const res = await stockApi.updateMachineService(service._id, {
-        completedDate,
-      });
-      const updated = res?.data || { ...service, completedDate };
-      setServices((prev) =>
-        prev.map((s) => (s._id === service._id ? { ...s, ...updated } : s)),
-      );
-    } catch (err: any) {
-      console.error(err);
-      alert(err?.message || "Failed to mark service done");
-    }
+    const machine = machines.find((m) => m._id === service.machineId);
+    setEditingService(service);
+    setServiceForm({
+      machineId: service.machineId,
+      serviceType: service.serviceType || "",
+      scheduledDate: toInputDate(service.scheduledDate),
+      technician: service.technician || "",
+      notes: service.notes || "",
+      cost: service.cost != null ? String(service.cost) : "",
+      markCompleted: true,
+      machineStatus:
+        machine?.status === "installation_pending"
+          ? "active"
+          : machine?.status || "active",
+      attendant: machine?.attendant || "",
+      attendantRole: machine?.attendantRole || "",
+      attendantNumber: machine?.attendantNumber || "",
+      nextServiceDate: toInputDate(machine?.nextServiceDate),
+    });
+    setShowServiceDialog(true);
   };
 
   const deleteService = async (service: ServiceRecord) => {
@@ -1767,9 +1993,27 @@ export default function InstalledMachinesPage() {
             <Button
               onClick={() => {
                 setSection("machines");
-                setShowCandidates((v) => !v);
-                if (!showCandidates) setShowBulkUploadPanel(false);
+                setShowSchedulePanel((v) => !v);
+                if (!showSchedulePanel) {
+                  setShowCandidates(false);
+                  setShowBulkUploadPanel(false);
+                }
               }}
+              className="flex items-center gap-2"
+            >
+              <CalendarClock className="h-4 w-4" />
+              {showSchedulePanel ? "Hide" : "Schedule"} Installation
+            </Button>
+            <Button
+              onClick={() => {
+                setSection("machines");
+                setShowCandidates((v) => !v);
+                if (!showCandidates) {
+                  setShowBulkUploadPanel(false);
+                  setShowSchedulePanel(false);
+                }
+              }}
+              variant="outline"
               className="flex items-center gap-2"
             >
               <Plus className="h-4 w-4" />
@@ -1781,7 +2025,10 @@ export default function InstalledMachinesPage() {
               onClick={() => {
                 setSection("machines");
                 setShowBulkUploadPanel((v) => !v);
-                if (!showBulkUploadPanel) setShowCandidates(false);
+                if (!showBulkUploadPanel) {
+                  setShowCandidates(false);
+                  setShowSchedulePanel(false);
+                }
               }}
             >
               <Upload className="h-4 w-4" />
@@ -1889,6 +2136,232 @@ export default function InstalledMachinesPage() {
       {/* ---------------------------- Machines section ---------------------------- */}
       {section === "machines" && (
         <>
+          {showSchedulePanel && (
+            <Card className="overflow-hidden shadow-sm">
+              <CardHeader className="border-b bg-muted/30 pb-3">
+                <CardTitle className="text-base">Schedule Installation</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4 pt-6">
+                <p className="text-sm text-muted-foreground">
+                  Pick a delivered invoice, assign an engineer and date, then save.
+                  Pending installations appear in{" "}
+                  <strong>Telesales Activity → Installations</strong>.
+                </p>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <Label>Invoice</Label>
+                    <select
+                      className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                      value={scheduleForm.invoiceId}
+                      onChange={(e) =>
+                        setScheduleForm((prev) => ({
+                          ...prev,
+                          invoiceId: e.target.value,
+                          candidateKey: "",
+                        }))
+                      }
+                    >
+                      <option value="">Select invoice…</option>
+                      {invoiceOptions.map((invoice) => (
+                        <option key={invoice.invoiceId} value={invoice.invoiceId}>
+                          {invoice.invoiceNumber} — {invoice.clientName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <Label>Machine on invoice</Label>
+                    <select
+                      className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                      value={scheduleForm.candidateKey}
+                      disabled={!scheduleForm.invoiceId}
+                      onChange={(e) => {
+                        const key = e.target.value;
+                        const selected = scheduleCandidates.find((candidate, index) => {
+                          const candidateKey = `${candidate.invoiceId}::${candidate.productId}::${index}`;
+                          return candidateKey === key;
+                        });
+                        setScheduleForm((prev) => ({
+                          ...prev,
+                          candidateKey: key,
+                          installationLocation:
+                            prev.installationLocation ||
+                            selected?.client?.location ||
+                            "",
+                          clientContactPerson:
+                            prev.clientContactPerson ||
+                            (selected?.client as any)?.contactPerson ||
+                            "",
+                        }));
+                      }}
+                    >
+                      <option value="">Select machine…</option>
+                      {scheduleCandidates.map((candidate, index) => {
+                        const key = `${candidate.invoiceId}::${candidate.productId}::${index}`;
+                        return (
+                          <option key={key} value={key}>
+                            {candidate.productName}
+                            {candidate.category ? ` (${candidate.category})` : ""}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                  <div>
+                    <Label>Assign engineer</Label>
+                    <select
+                      className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                      value={scheduleForm.engineer}
+                      onChange={(e) =>
+                        setScheduleForm((prev) => ({
+                          ...prev,
+                          engineer: e.target.value,
+                        }))
+                      }
+                    >
+                      <option value="">Select engineer…</option>
+                      {engineerOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <Label>Installation date</Label>
+                    <Input
+                      type="date"
+                      className="mt-1"
+                      value={scheduleForm.installationDate}
+                      onChange={(e) =>
+                        setScheduleForm((prev) => ({
+                          ...prev,
+                          installationDate: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label>Machine serial (optional)</Label>
+                    <Input
+                      className="mt-1"
+                      value={scheduleForm.serialNumber}
+                      onChange={(e) =>
+                        setScheduleForm((prev) => ({
+                          ...prev,
+                          serialNumber: e.target.value,
+                        }))
+                      }
+                      placeholder="S/No"
+                    />
+                  </div>
+                  <div>
+                    <Label>Installation location</Label>
+                    <Input
+                      className="mt-1"
+                      value={scheduleForm.installationLocation}
+                      onChange={(e) =>
+                        setScheduleForm((prev) => ({
+                          ...prev,
+                          installationLocation: e.target.value,
+                        }))
+                      }
+                      placeholder="Lab / department / site"
+                    />
+                  </div>
+                  <div>
+                    <Label>Client contact person</Label>
+                    <Input
+                      className="mt-1"
+                      value={scheduleForm.clientContactPerson}
+                      onChange={(e) =>
+                        setScheduleForm((prev) => ({
+                          ...prev,
+                          clientContactPerson: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label>Person left in charge (optional)</Label>
+                    <Input
+                      className="mt-1"
+                      value={scheduleForm.attendant}
+                      onChange={(e) =>
+                        setScheduleForm((prev) => ({
+                          ...prev,
+                          attendant: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label>In-charge role</Label>
+                    <select
+                      className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                      value={scheduleForm.attendantRole}
+                      onChange={(e) =>
+                        setScheduleForm((prev) => ({
+                          ...prev,
+                          attendantRole: e.target.value,
+                        }))
+                      }
+                    >
+                      <option value="">Select role…</option>
+                      {contactRoles.map((role) => (
+                        <option key={role} value={role}>
+                          {role}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <Label>In-charge phone</Label>
+                    <Input
+                      className="mt-1"
+                      value={scheduleForm.attendantNumber}
+                      onChange={(e) =>
+                        setScheduleForm((prev) => ({
+                          ...prev,
+                          attendantNumber: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label>Notes</Label>
+                  <textarea
+                    className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                    rows={2}
+                    value={scheduleForm.notes}
+                    onChange={(e) =>
+                      setScheduleForm((prev) => ({
+                        ...prev,
+                        notes: e.target.value,
+                      }))
+                    }
+                    placeholder="Access notes, training, site requirements…"
+                  />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={scheduleInstallation} disabled={saving}>
+                    {saving ? "Scheduling…" : "Schedule Installation"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setScheduleForm(EMPTY_SCHEDULE_FORM);
+                      setShowSchedulePanel(false);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {showBulkUploadPanel && (
             <Card className="overflow-hidden shadow-sm">
               <CardHeader className="border-b bg-muted/30 pb-3">
@@ -2360,16 +2833,30 @@ export default function InstalledMachinesPage() {
                     {selectedMachine.attendant && (
                       <div>
                         <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                          Operator
+                          Person in charge
                         </Label>
                         <div className="space-y-1 mt-1">
-                          <p className="text-sm">{selectedMachine.attendant}</p>
+                          <p className="text-sm">
+                            {selectedMachine.attendant}
+                            {selectedMachine.attendantRole
+                              ? ` · ${selectedMachine.attendantRole}`
+                              : ""}
+                          </p>
                           {selectedMachine.attendantNumber && (
                             <p className="text-xs text-muted-foreground">
                               {selectedMachine.attendantNumber}
                             </p>
                           )}
                         </div>
+                      </div>
+                    )}
+
+                    {selectedMachine.installedBy && (
+                      <div>
+                        <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                          Engineer
+                        </Label>
+                        <p className="text-sm mt-1">{selectedMachine.installedBy}</p>
                       </div>
                     )}
 
@@ -2485,36 +2972,6 @@ export default function InstalledMachinesPage() {
                 </Card>
               )}
 
-              {/* Recent services done, always visible */}
-              <Card className="overflow-hidden shadow-sm">
-                <CardHeader className="border-b bg-muted/30 pb-3">
-                  <CardTitle className="text-sm">Recent Services Done</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2 pt-4">
-                  {recentDoneServices.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">
-                      No completed services yet.
-                    </p>
-                  ) : (
-                    recentDoneServices.map((s) => (
-                      <div
-                        key={s._id}
-                        className="flex items-center justify-between text-xs rounded-lg border p-2"
-                      >
-                        <div>
-                          <div className="font-medium">
-                            {s.machine?.productName || "Machine"}
-                          </div>
-                          <div className="text-muted-foreground">
-                            {s.serviceType || "General service"} ·{" "}
-                            {formatDate(s.completedDate)}
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </CardContent>
-              </Card>
             </div>
           </div>
         </>
@@ -2828,14 +3285,43 @@ export default function InstalledMachinesPage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Installed By (Engineer)</Label>
-                <Input
+                <select
+                  className="mt-1 w-full rounded border px-3 py-2 text-sm"
                   value={detailForm.installedBy || ""}
                   onChange={(e) =>
                     setDetailForm({ ...detailForm, installedBy: e.target.value })
                   }
-                  placeholder="Engineer name"
-                />
+                >
+                  <option value="">Select engineer…</option>
+                  {employees.map((employee) => {
+                    const label = getEmployeeLabel(employee);
+                    return (
+                      <option key={employee._id} value={label}>
+                        {label}
+                      </option>
+                    );
+                  })}
+                </select>
               </div>
+              <div>
+                <Label>Machine status</Label>
+                <select
+                  className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                  value={detailForm.status || "active"}
+                  onChange={(e) =>
+                    setDetailForm({ ...detailForm, status: e.target.value })
+                  }
+                >
+                  {MACHINE_STATUS_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Next Service Date</Label>
                 <Input
@@ -2850,6 +3336,26 @@ export default function InstalledMachinesPage() {
                     })
                   }
                 />
+              </div>
+              <div>
+                <Label>Operator / Attendant role</Label>
+                <select
+                  className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                  value={detailForm.attendantRole || ""}
+                  onChange={(e) =>
+                    setDetailForm({
+                      ...detailForm,
+                      attendantRole: e.target.value,
+                    })
+                  }
+                >
+                  <option value="">Select role…</option>
+                  {contactRoles.map((role) => (
+                    <option key={role} value={role}>
+                      {role}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 
@@ -3038,9 +3544,107 @@ export default function InstalledMachinesPage() {
               </Label>
             </div>
 
+            {serviceForm.markCompleted ? (
+              <div className="space-y-4 rounded-xl border bg-muted/20 p-4">
+                <p className="text-sm font-medium">After-service handover</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Machine status</Label>
+                    <select
+                      className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                      value={serviceForm.machineStatus}
+                      onChange={(e) =>
+                        setServiceForm({
+                          ...serviceForm,
+                          machineStatus: e.target.value,
+                        })
+                      }
+                    >
+                      {MACHINE_STATUS_OPTIONS.filter(
+                        (option) => option.value !== "installation_pending",
+                      ).map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <Label>Next service date</Label>
+                    <Input
+                      type="date"
+                      className="mt-1"
+                      value={serviceForm.nextServiceDate}
+                      onChange={(e) =>
+                        setServiceForm({
+                          ...serviceForm,
+                          nextServiceDate: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label>Person left in charge</Label>
+                    <Input
+                      className="mt-1"
+                      value={serviceForm.attendant}
+                      onChange={(e) =>
+                        setServiceForm({
+                          ...serviceForm,
+                          attendant: e.target.value,
+                        })
+                      }
+                      placeholder="Name"
+                    />
+                  </div>
+                  <div>
+                    <Label>Role</Label>
+                    <select
+                      className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                      value={serviceForm.attendantRole}
+                      onChange={(e) =>
+                        setServiceForm({
+                          ...serviceForm,
+                          attendantRole: e.target.value,
+                        })
+                      }
+                    >
+                      <option value="">Select role…</option>
+                      {contactRoles.map((role) => (
+                        <option key={role} value={role}>
+                          {role}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="col-span-2">
+                    <Label>In-charge phone (optional)</Label>
+                    <Input
+                      className="mt-1"
+                      value={serviceForm.attendantNumber}
+                      onChange={(e) =>
+                        setServiceForm({
+                          ...serviceForm,
+                          attendantNumber: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
             <div className="flex gap-2 pt-4">
               <Button onClick={saveService} disabled={saving} className="flex-1">
-                {saving ? "Saving..." : editingService ? "Save Changes" : "Log Service"}
+                {saving
+                  ? "Saving..."
+                  : editingService
+                    ? serviceForm.markCompleted
+                      ? "Complete Service"
+                      : "Save Changes"
+                    : serviceForm.markCompleted
+                      ? "Log & Complete Service"
+                      : "Log Service"}
               </Button>
               <Button
                 variant="outline"

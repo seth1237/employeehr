@@ -26,6 +26,7 @@ interface IInstalledMachine {
   installedBy?: string;
   attendant?: string;
   attendantNumber?: string;
+  attendantRole?: string;
   isTrained?: boolean;
   createdBy?: string;
   createdAt?: Date;
@@ -62,6 +63,7 @@ const installedMachineSchema = new Schema<IInstalledMachine>(
     installedBy: { type: String },
     attendant: { type: String },
     attendantNumber: { type: String },
+    attendantRole: { type: String },
     isTrained: { type: Boolean, default: false },
     createdBy: { type: String },
   },

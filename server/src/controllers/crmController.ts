@@ -786,7 +786,7 @@ export class CrmController {
           .sort({ installationDate: 1, nextServiceDate: 1 })
           .limit(80)
           .select(
-            "client productName serialNumber status installationDate nextServiceDate installationLocation",
+            "client productName serialNumber status installationDate nextServiceDate installationLocation installedBy attendant attendantRole",
           )
           .lean(),
         ClientConversation.find({
@@ -1032,6 +1032,9 @@ export class CrmController {
               status: m.status || "active",
               installationDate: m.installationDate,
               nextServiceDate: m.nextServiceDate,
+              installedBy: (m as any).installedBy || "",
+              attendant: (m as any).attendant || "",
+              attendantRole: (m as any).attendantRole || "",
             })),
             followUps: conversationFollowUps.map((c) => {
               const categories = Array.isArray((c as any).focusCategories)

@@ -266,6 +266,13 @@ export class InstalledMachineController {
         invoiceId,
         quotationId,
         notes,
+        status,
+        installedBy,
+        attendant,
+        attendantNumber,
+        attendantRole,
+        nextServiceDate,
+        isTrained,
       } = req.body || {};
 
       if (!client || !client.name || !productId || !productName) {
@@ -283,6 +290,16 @@ export class InstalledMachineController {
       if (product && product.productType && product.productType === "service") {
         // productType in StockProduct is "physical" | "service". We allow "physical" but also check incoming item productType later in invoice.
       }
+
+      const allowedStatus = [
+        "active",
+        "maintenance",
+        "ended",
+        "installation_pending",
+      ];
+      const resolvedStatus = allowedStatus.includes(String(status || ""))
+        ? String(status)
+        : "active";
 
       const doc = await InstalledMachine.create({
         org_id,
@@ -305,6 +322,19 @@ export class InstalledMachineController {
         invoiceId,
         quotationId,
         notes,
+        status: resolvedStatus,
+        installedBy: installedBy ? String(installedBy).trim() : undefined,
+        attendant: attendant ? String(attendant).trim() : undefined,
+        attendantNumber: attendantNumber
+          ? String(attendantNumber).trim()
+          : undefined,
+        attendantRole: attendantRole
+          ? String(attendantRole).trim()
+          : undefined,
+        nextServiceDate: nextServiceDate
+          ? new Date(nextServiceDate)
+          : undefined,
+        isTrained: Boolean(isTrained),
         createdBy: actorId,
         isActive: true,
       });
@@ -347,6 +377,7 @@ export class InstalledMachineController {
         "installedBy",
         "attendant",
         "attendantNumber",
+        "attendantRole",
         "isTrained",
       ];
       const updates: any = {};
@@ -627,7 +658,6 @@ export class InstalledMachineController {
           const product = await resolveProduct(productName);
 
           const noteParts = [notesRaw];
-          if (attendantRole) noteParts.push(`In charge role: ${attendantRole}`);
           if (noValue && !attendantNumber) noteParts.push(`No: ${noValue}`);
           const notes = noteParts.filter(Boolean).join(" | ");
 
@@ -649,6 +679,7 @@ export class InstalledMachineController {
             installedBy: installedBy || undefined,
             attendant: attendant || undefined,
             attendantNumber: attendantNumber || undefined,
+            attendantRole: attendantRole || undefined,
             notes: notes || undefined,
             status: "active",
             isActive: true,
@@ -699,6 +730,7 @@ export class InstalledMachineController {
               installedBy: installedBy || existing.installedBy,
               attendant: attendant || existing.attendant,
               attendantNumber: attendantNumber || existing.attendantNumber,
+              attendantRole: attendantRole || existing.attendantRole,
               notes: notes || existing.notes,
               status: existing.status || "active",
               isActive: true,

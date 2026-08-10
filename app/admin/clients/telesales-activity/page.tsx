@@ -118,6 +118,9 @@ interface TelesalesActivityData {
       status: string
       installationDate?: string
       nextServiceDate?: string
+      installedBy?: string
+      attendant?: string
+      attendantRole?: string
     }>
     followUps: Array<{
       _id: string
@@ -692,7 +695,12 @@ export default function TelesalesActivityPage() {
                       subtitle={item.clientName}
                       date={formatDate(item.installationDate || item.nextServiceDate)}
                       status={item.status}
-                      meta={item.location || item.serialNumber}
+                      meta={[
+                        item.installedBy ? `Engineer: ${item.installedBy}` : "",
+                        item.location || item.serialNumber || "",
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
                     />
                   ))
                 )}

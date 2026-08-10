@@ -205,6 +205,10 @@ export default function AccountsClientsPage() {
     "Other",
   ]);
   const [contactsDraft, setContactsDraft] = useState<ClientContact[]>([]);
+  const [editingContactIndex, setEditingContactIndex] = useState<number | null>(
+    null,
+  );
+  const [newRoleName, setNewRoleName] = useState("");
   const [contactForm, setContactForm] = useState({
     role: "Doctor",
     customRole: "",
@@ -478,6 +482,19 @@ export default function AccountsClientsPage() {
 
           const data = Array.from(mergedMap.values());
           setRows(data);
+          const rolesFromClients = data.flatMap((row) =>
+            (row.contacts || []).map((contact) => String(contact.role || "").trim()),
+          );
+          if (rolesFromClients.some(Boolean)) {
+            setContactRoles((current) =>
+              Array.from(
+                new Set([
+                  ...current,
+                  ...rolesFromClients.filter(Boolean),
+                ]),
+              ),
+            );
+          }
           if (!selectedClientKey && data.length > 0)
             setSelectedClientKey(data[0].key);
         },
@@ -676,6 +693,19 @@ export default function AccountsClientsPage() {
     }
   };
 
+  const resetContactForm = () => {
+    setContactForm({
+      role: contactRoles[0] || "Doctor",
+      customRole: "",
+      name: "",
+      phone: "",
+      email: "",
+      notes: "",
+      isActive: false,
+    });
+    setEditingContactIndex(null);
+  };
+
   const openContactsDialog = (row: SavedClientRow) => {
     setSelectedClientKey(row.key);
     setContactsDraft(
@@ -696,6 +726,8 @@ export default function AccountsClientsPage() {
             ]
           : [],
     );
+    setEditingContactIndex(null);
+    setNewRoleName("");
     setContactForm({
       role: "Doctor",
       customRole: "",
@@ -708,11 +740,51 @@ export default function AccountsClientsPage() {
     setShowContactsDialog(true);
   };
 
-  const addContactToDraft = () => {
-    const role =
-      contactForm.role === "Other"
-        ? contactForm.customRole.trim()
-        : contactForm.role;
+  const resolveContactRole = () => {
+    if (contactForm.role === "Other") return contactForm.customRole.trim();
+    return contactForm.role.trim();
+  };
+
+  const addCustomRoleToList = () => {
+    const role = newRoleName.trim();
+    if (!role) {
+      window.alert("Enter a role name");
+      return;
+    }
+    setContactRoles((current) =>
+      current.includes(role) ? current : [...current, role],
+    );
+    setContactForm((current) => ({
+      ...current,
+      role,
+      customRole: "",
+    }));
+    setNewRoleName("");
+  };
+
+  const startEditContact = (index: number) => {
+    const contact = contactsDraft[index];
+    if (!contact) return;
+    const roleExists = contactRoles.includes(contact.role);
+    if (!roleExists && contact.role) {
+      setContactRoles((current) =>
+        current.includes(contact.role) ? current : [...current, contact.role],
+      );
+    }
+    setEditingContactIndex(index);
+    setContactForm({
+      role: contact.role || "Other",
+      customRole: "",
+      name: contact.name || "",
+      phone: contact.phone || "",
+      email: contact.email || "",
+      notes: contact.notes || "",
+      isActive: Boolean(contact.isActive),
+    });
+  };
+
+  const commitContactForm = () => {
+    const role = resolveContactRole();
     if (!role || !contactForm.name.trim()) {
       window.alert("Role and name are required");
       return;
@@ -725,19 +797,16 @@ export default function AccountsClientsPage() {
       notes: contactForm.notes.trim() || undefined,
       isActive: contactForm.isActive,
     };
-    setContactsDraft((current) => [...current, nextContact]);
+    setContactsDraft((current) => {
+      if (editingContactIndex === null) return [...current, nextContact];
+      return current.map((contact, index) =>
+        index === editingContactIndex ? nextContact : contact,
+      );
+    });
     if (!contactRoles.includes(role)) {
       setContactRoles((current) => [...current, role]);
     }
-    setContactForm({
-      role: "Doctor",
-      customRole: "",
-      name: "",
-      phone: "",
-      email: "",
-      notes: "",
-      isActive: false,
-    });
+    resetContactForm();
   };
 
   const setDraftContactActive = (index: number, active: boolean) => {
@@ -751,14 +820,11 @@ export default function AccountsClientsPage() {
   const saveContacts = async () => {
     if (!selectedClient) return;
 
-    const pendingRole =
-      contactForm.role === "Other"
-        ? contactForm.customRole.trim()
-        : contactForm.role;
     let draft = [...contactsDraft];
     if (contactForm.name.trim()) {
+      const pendingRole = resolveContactRole();
       if (!pendingRole) {
-        window.alert("Role and name are required for the new contact");
+        window.alert("Role and name are required for the contact being edited");
         return;
       }
       const pending: ClientContact = {
@@ -769,7 +835,13 @@ export default function AccountsClientsPage() {
         notes: contactForm.notes.trim() || undefined,
         isActive: contactForm.isActive,
       };
-      draft = [...draft, pending];
+      if (editingContactIndex !== null) {
+        draft = draft.map((contact, index) =>
+          index === editingContactIndex ? pending : contact,
+        );
+      } else {
+        draft = [...draft, pending];
+      }
       setContactsDraft(draft);
     }
 
@@ -815,15 +887,15 @@ export default function AccountsClientsPage() {
           : draft;
 
       setContactsDraft(savedContacts);
-      setContactForm({
-        role: "Doctor",
-        customRole: "",
-        name: "",
-        phone: "",
-        email: "",
-        notes: "",
-        isActive: false,
-      });
+      resetContactForm();
+      const rolesFromContacts = savedContacts
+        .map((contact) => contact.role)
+        .filter(Boolean);
+      if (rolesFromContacts.length > 0) {
+        setContactRoles((current) =>
+          Array.from(new Set([...current, ...rolesFromContacts])),
+        );
+      }
       setRows((current) =>
         current.map((row) =>
           row.key === selectedClient.key
@@ -1900,7 +1972,7 @@ export default function AccountsClientsPage() {
                     onClick={() => openContactsDialog(selectedClient)}
                   >
                     <Users className="mr-2 h-4 w-4" />
-                    Add Contacts
+                    View Contact person
                   </Button>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -1982,7 +2054,7 @@ export default function AccountsClientsPage() {
                       if (actives.length === 0) {
                         return (
                           <p className="text-muted-foreground">
-                            No active contact set — use Add Contacts.
+                            No active contact set — use View Contact person.
                           </p>
                         );
                       }
@@ -2445,7 +2517,7 @@ export default function AccountsClientsPage() {
         <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              Contacts — {selectedClient?.client.name || "Client"}
+              Contact persons — {selectedClient?.client.name || "Client"}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
@@ -2473,6 +2545,9 @@ export default function AccountsClientsPage() {
                       {contact.email ? (
                         <p className="text-muted-foreground">{contact.email}</p>
                       ) : null}
+                      {contact.notes ? (
+                        <p className="text-muted-foreground">{contact.notes}</p>
+                      ) : null}
                     </div>
                     <label className="flex items-center gap-2 text-xs text-muted-foreground">
                       <Checkbox
@@ -2484,22 +2559,79 @@ export default function AccountsClientsPage() {
                       Active contact (more than one allowed)
                     </label>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() =>
-                      setContactsDraft((current) =>
-                        current.filter((_, candidateIndex) => candidateIndex !== index),
-                      )
-                    }
-                  >
-                    Remove
-                  </Button>
+                  <div className="flex shrink-0 flex-col gap-1">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => startEditContact(index)}
+                    >
+                      <Pencil className="mr-1 h-3.5 w-3.5" />
+                      Edit
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-destructive"
+                      onClick={() => {
+                        setContactsDraft((current) =>
+                          current.filter(
+                            (_, candidateIndex) => candidateIndex !== index,
+                          ),
+                        );
+                        if (editingContactIndex === index) resetContactForm();
+                        else if (
+                          editingContactIndex !== null &&
+                          editingContactIndex > index
+                        ) {
+                          setEditingContactIndex(editingContactIndex - 1);
+                        }
+                      }}
+                    >
+                      Remove
+                    </Button>
+                  </div>
                 </div>
               ))
             )}
+
+            <div className="space-y-2 rounded-lg border border-dashed p-3">
+              <p className="text-sm font-medium">Add a role not on the list</p>
+              <div className="flex flex-wrap items-end gap-2">
+                <div className="min-w-[180px] flex-1">
+                  <Label>New role</Label>
+                  <Input
+                    className="mt-1"
+                    value={newRoleName}
+                    onChange={(event) => setNewRoleName(event.target.value)}
+                    placeholder="e.g. Biomedical Engineer"
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        addCustomRoleToList();
+                      }
+                    }}
+                  />
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={addCustomRoleToList}
+                >
+                  Add role
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                New roles are added to the Role dropdown below for this session.
+              </p>
+            </div>
+
             <div className="space-y-3 rounded-lg border p-3">
-              <p className="text-sm font-medium">Add contact</p>
+              <p className="text-sm font-medium">
+                {editingContactIndex !== null
+                  ? "Edit contact person"
+                  : "Add contact person"}
+              </p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
                   <Label>Role</Label>
@@ -2531,6 +2663,7 @@ export default function AccountsClientsPage() {
                           customRole: event.target.value,
                         }))
                       }
+                      placeholder="Type the role name"
                     />
                   </div>
                 ) : null}
@@ -2598,18 +2731,31 @@ export default function AccountsClientsPage() {
                   />
                 </div>
               </div>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={addContactToDraft}
-              >
-                Add to list
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={commitContactForm}
+                >
+                  {editingContactIndex !== null
+                    ? "Update contact"
+                    : "Add to list"}
+                </Button>
+                {editingContactIndex !== null ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={resetContactForm}
+                  >
+                    Cancel edit
+                  </Button>
+                ) : null}
+              </div>
               <p className="text-xs text-muted-foreground">
-                Tip: click <strong>Add to list</strong> for each person, then{" "}
-                <strong>Save contacts</strong>. If you leave a name filled in
-                and click Save, that person is included automatically.
+                Tip: use <strong>Add to list</strong> / <strong>Update contact</strong>{" "}
+                for each person, then <strong>Save contacts</strong>.
               </p>
             </div>
           </div>

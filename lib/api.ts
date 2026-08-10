@@ -1303,10 +1303,17 @@ export const etimsApi = {
 };
 
 export const crmApi = {
-  getConversations: (query?: { roomName?: string, clientName?: string }) => {
+  getConversations: (query?: {
+    roomName?: string
+    clientName?: string
+    relatedMachineId?: string
+    source?: string
+  }) => {
     const params = new URLSearchParams()
     if (query?.roomName) params.append("roomName", query.roomName)
     if (query?.clientName) params.append("clientName", query.clientName)
+    if (query?.relatedMachineId) params.append("relatedMachineId", query.relatedMachineId)
+    if (query?.source) params.append("source", query.source)
     return client.get<any[]>(`/api/crm/conversations?${params.toString()}`)
   },
   createConversation: (data: any) => client.post<any>("/api/crm/conversations", data),
@@ -1339,10 +1346,11 @@ export const crmApi = {
       cost?: number | string
     },
   ) => client.post<any>(`/api/crm/tickets/${id}/resolve`, data),
-  getTelesalesActivity: (query?: { from?: string; to?: string }) => {
+  getTelesalesActivity: (query?: { from?: string; to?: string; userId?: string }) => {
     const params = new URLSearchParams()
     if (query?.from) params.append("from", query.from)
     if (query?.to) params.append("to", query.to)
+    if (query?.userId) params.append("userId", query.userId)
     const qs = params.toString()
     return client.get<any>(`/api/crm/telesales/activity${qs ? `?${qs}` : ""}`)
   },

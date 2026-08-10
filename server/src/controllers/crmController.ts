@@ -108,7 +108,10 @@ export class CrmController {
       if (req.query.roomName) filter.roomName = req.query.roomName
       if (req.query.customer_id) filter.customer_id = req.query.customer_id
       if (req.query.clientName) filter.clientName = new RegExp(req.query.clientName as string, "i")
-      
+      if (req.query.relatedMachineId) {
+        filter.relatedMachineId = String(req.query.relatedMachineId)
+      }
+      if (req.query.source) filter.source = String(req.query.source)
       const conversations = await ClientConversation.find(filter)
         .sort({ createdAt: -1 })
         .populate("customer_id", "name hospital")
@@ -236,6 +239,9 @@ export class CrmController {
         clientPhone: clientPhone || undefined,
         lead_id: leadId,
         quotation_id: req.body?.quotation_id || undefined,
+        relatedMachineId: String(req.body?.relatedMachineId || "").trim() || undefined,
+        relatedMachineName: String(req.body?.relatedMachineName || "").trim() || undefined,
+        source: String(req.body?.source || "").trim() || undefined,
         note,
         callPurpose: callPurpose || undefined,
         focusCategories,
@@ -656,10 +662,33 @@ export class CrmController {
       const to = normalizeDate(req.query.to) || defaultTo
       const rangeStart = startOfDay(from)
       const rangeEnd = endOfDay(to)
-
-      // Planner window: from range start through range end, plus overdue open items
       const plannerStart = startOfDay(rangeStart)
       const plannerEnd = endOfDay(rangeEnd)
+
+      const filterUserId = String(req.query.userId || "").trim()
+      const withPerson = (query: Record<string, any>, mode: "created" | "owned" = "created") => {
+        if (!filterUserId) return query
+        if (mode === "owned") {
+          return {
+            ...query,
+            $and: [
+              ...(query.$and || []),
+              {
+                $or: [{ createdBy: filterUserId }, { assignedTo: filterUserId }],
+              },
+            ],
+          }
+        }
+        return { ...query, createdBy: filterUserId }
+      }
+
+      const machineCallMatch = {
+        $or: [
+          { source: "installed_machine" },
+          { relatedMachineId: { $exists: true, $nin: [null, ""] } },
+          { callPurpose: /machine/i },
+        ],
+      }
 
       const [
         quotesGenerated,
@@ -667,83 +696,160 @@ export class CrmController {
         newClientsOnboarded,
         quotationFollowUpsCount,
         callsLoggedCount,
+        machineFollowUpsCount,
+        machinesScheduledCount,
+        servicesCompletedCount,
         quotations,
         convertedQuotations,
         newClients,
         followUps,
         callLogs,
+        machineFollowUpLogs,
         serviceJobs,
         machineServices,
+        completedMachineServices,
         pendingInstallations,
+        upcomingMachineServices,
         conversationFollowUps,
+        activityUsers,
       ] = await Promise.all([
-        StockQuotation.countDocuments({
+        StockQuotation.countDocuments(
+          withPerson({
+            org_id,
+            createdAt: { $gte: rangeStart, $lte: rangeEnd },
+          }),
+        ),
+        StockQuotation.countDocuments(
+          withPerson({
+            org_id,
+            status: "converted",
+            updatedAt: { $gte: rangeStart, $lte: rangeEnd },
+          }),
+        ),
+        StockClient.countDocuments(
+          withPerson({
+            org_id,
+            createdAt: { $gte: rangeStart, $lte: rangeEnd },
+          }),
+        ),
+        QuotationFollowUp.countDocuments(
+          withPerson({
+            org_id,
+            createdAt: { $gte: rangeStart, $lte: rangeEnd },
+          }),
+        ),
+        ClientConversation.countDocuments(
+          withPerson(
+            {
+              org_id,
+              createdAt: { $gte: rangeStart, $lte: rangeEnd },
+            },
+            "owned",
+          ),
+        ),
+        ClientConversation.countDocuments(
+          withPerson(
+            {
+              org_id,
+              createdAt: { $gte: rangeStart, $lte: rangeEnd },
+              ...machineCallMatch,
+            },
+            "owned",
+          ),
+        ),
+        InstalledMachine.countDocuments(
+          withPerson({
+            org_id,
+            $or: [
+              { status: "installation_pending" },
+              {
+                installationDate: { $gte: rangeStart, $lte: rangeEnd },
+              },
+              {
+                nextServiceDate: { $gte: rangeStart, $lte: rangeEnd },
+              },
+            ],
+          }),
+        ),
+        MachineService.countDocuments({
           org_id,
-          createdAt: { $gte: rangeStart, $lte: rangeEnd },
+          completedDate: { $gte: rangeStart, $lte: rangeEnd },
         }),
-        StockQuotation.countDocuments({
-          org_id,
-          status: "converted",
-          updatedAt: { $gte: rangeStart, $lte: rangeEnd },
-        }),
-        StockClient.countDocuments({
-          org_id,
-          createdAt: { $gte: rangeStart, $lte: rangeEnd },
-        }),
-        QuotationFollowUp.countDocuments({
-          org_id,
-          createdAt: { $gte: rangeStart, $lte: rangeEnd },
-        }),
-        ClientConversation.countDocuments({
-          org_id,
-          createdAt: { $gte: rangeStart, $lte: rangeEnd },
-        }),
-        StockQuotation.find({
-          org_id,
-          createdAt: { $gte: rangeStart, $lte: rangeEnd },
-        })
+        StockQuotation.find(
+          withPerson({
+            org_id,
+            createdAt: { $gte: rangeStart, $lte: rangeEnd },
+          }),
+        )
           .sort({ createdAt: -1 })
           .limit(50)
           .select(
             "quotationNumber client status subTotal createdBy createdAt convertedInvoiceId",
           )
           .lean(),
-        StockQuotation.find({
-          org_id,
-          status: "converted",
-          updatedAt: { $gte: rangeStart, $lte: rangeEnd },
-        })
+        StockQuotation.find(
+          withPerson({
+            org_id,
+            status: "converted",
+            updatedAt: { $gte: rangeStart, $lte: rangeEnd },
+          }),
+        )
           .sort({ updatedAt: -1 })
           .limit(50)
           .select(
             "quotationNumber client status subTotal createdBy updatedAt convertedInvoiceId",
           )
           .lean(),
-        StockClient.find({
-          org_id,
-          createdAt: { $gte: rangeStart, $lte: rangeEnd },
-        })
+        StockClient.find(
+          withPerson({
+            org_id,
+            createdAt: { $gte: rangeStart, $lte: rangeEnd },
+          }),
+        )
           .sort({ createdAt: -1 })
           .limit(50)
           .select(
             "legalName sourceName sourceNumber sourceLocation contactPerson createdBy createdAt",
           )
           .lean(),
-        QuotationFollowUp.find({
-          org_id,
-          createdAt: { $gte: rangeStart, $lte: rangeEnd },
-        })
+        QuotationFollowUp.find(
+          withPerson({
+            org_id,
+            createdAt: { $gte: rangeStart, $lte: rangeEnd },
+          }),
+        )
           .sort({ createdAt: -1 })
           .limit(50)
           .lean(),
-        ClientConversation.find({
-          org_id,
-          createdAt: { $gte: rangeStart, $lte: rangeEnd },
-        })
+        ClientConversation.find(
+          withPerson(
+            {
+              org_id,
+              createdAt: { $gte: rangeStart, $lte: rangeEnd },
+            },
+            "owned",
+          ),
+        )
           .sort({ createdAt: -1 })
           .limit(100)
           .select(
-            "roomName clientName clientPhone note callPurpose focusCategories outcome followUpNeeded followUpDate status assignedTo createdBy createdAt lead_id",
+            "roomName clientName clientPhone note callPurpose focusCategories outcome followUpNeeded followUpDate status assignedTo createdBy createdAt lead_id relatedMachineId relatedMachineName source",
+          )
+          .lean(),
+        ClientConversation.find(
+          withPerson(
+            {
+              org_id,
+              createdAt: { $gte: rangeStart, $lte: rangeEnd },
+              ...machineCallMatch,
+            },
+            "owned",
+          ),
+        )
+          .sort({ createdAt: -1 })
+          .limit(80)
+          .select(
+            "clientName clientPhone note callPurpose outcome followUpNeeded followUpDate status assignedTo createdBy createdAt relatedMachineId relatedMachineName source",
           )
           .lean(),
         StockServiceJob.find({
@@ -771,43 +877,84 @@ export class CrmController {
           .sort({ scheduledDate: 1 })
           .limit(80)
           .lean(),
-        InstalledMachine.find({
+        MachineService.find({
           org_id,
-          $or: [
-            { status: "installation_pending" },
-            {
-              installationDate: { $gte: plannerStart, $lte: plannerEnd },
-            },
-            {
-              nextServiceDate: { $gte: plannerStart, $lte: plannerEnd },
-            },
-          ],
+          completedDate: { $gte: rangeStart, $lte: rangeEnd },
         })
-          .sort({ installationDate: 1, nextServiceDate: 1 })
+          .sort({ completedDate: -1 })
+          .limit(80)
+          .lean(),
+        InstalledMachine.find(
+          withPerson({
+            org_id,
+            $or: [
+              { status: "installation_pending" },
+              {
+                installationDate: { $gte: plannerStart, $lte: plannerEnd },
+              },
+            ],
+          }),
+        )
+          .sort({ installationDate: 1 })
           .limit(80)
           .select(
-            "client productName serialNumber status installationDate nextServiceDate installationLocation installedBy attendant attendantRole",
+            "client productName serialNumber status installationDate nextServiceDate installationLocation installedBy attendant attendantRole createdBy",
           )
           .lean(),
-        ClientConversation.find({
-          org_id,
-          $or: [
+        InstalledMachine.find(
+          withPerson({
+            org_id,
+            nextServiceDate: { $gte: plannerStart, $lte: plannerEnd },
+            status: { $ne: "ended" },
+          }),
+        )
+          .sort({ nextServiceDate: 1 })
+          .limit(80)
+          .select(
+            "client productName serialNumber status installationDate nextServiceDate installationLocation installedBy attendant attendantRole createdBy",
+          )
+          .lean(),
+        ClientConversation.find(
+          withPerson(
             {
-              followUpNeeded: true,
-              status: { $nin: ["Closed", "Not Interested"] },
+              org_id,
+              $or: [
+                {
+                  followUpNeeded: true,
+                  status: { $nin: ["Closed", "Not Interested"] },
+                },
+                { status: "Follow-up Needed" },
+                {
+                  followUpDate: { $gte: plannerStart, $lte: plannerEnd },
+                },
+              ],
             },
-            { status: "Follow-up Needed" },
-            {
-              followUpDate: { $gte: plannerStart, $lte: plannerEnd },
-            },
-          ],
-        })
+            "owned",
+          ),
+        )
           .sort({ followUpDate: 1, createdAt: -1 })
           .limit(120)
           .select(
-            "roomName clientName clientPhone note followUpDate status assignedTo createdBy callPurpose focusCategories outcome followUpNeeded",
+            "roomName clientName clientPhone note followUpDate status assignedTo createdBy callPurpose focusCategories outcome followUpNeeded relatedMachineId relatedMachineName source",
           )
           .lean(),
+        ClientConversation.aggregate([
+          {
+            $match: {
+              org_id,
+              createdAt: { $gte: rangeStart, $lte: rangeEnd },
+            },
+          },
+          {
+            $group: {
+              _id: { $ifNull: ["$assignedTo", "$createdBy"] },
+              count: { $sum: 1 },
+            },
+          },
+          { $match: { _id: { $nin: [null, ""] } } },
+          { $sort: { count: -1 } },
+          { $limit: 100 },
+        ]),
       ])
 
       const followUpQuotationIds = [
@@ -826,7 +973,13 @@ export class CrmController {
       )
 
       const machineIds = [
-        ...new Set(machineServices.map((s) => String(s.machineId || "")).filter(Boolean)),
+        ...new Set(
+          [
+            ...machineServices.map((s) => String(s.machineId || "")),
+            ...completedMachineServices.map((s) => String(s.machineId || "")),
+            ...machineFollowUpLogs.map((c) => String((c as any).relatedMachineId || "")),
+          ].filter(Boolean),
+        ),
       ]
       const machinesForServices = machineIds.length
         ? await InstalledMachine.find({
@@ -846,11 +999,14 @@ export class CrmController {
         ...newClients.map((c) => c.createdBy),
         ...followUps.map((f) => f.createdBy),
         ...callLogs.map((c) => c.assignedTo || c.createdBy),
+        ...machineFollowUpLogs.map((c) => c.assignedTo || c.createdBy),
         ...conversationFollowUps.map((c) => c.assignedTo || c.createdBy),
+        ...activityUsers.map((row: any) => row._id),
+        filterUserId || undefined,
       ])
       const users = userIds.length
         ? await User.find({ _id: { $in: userIds }, org_id })
-            .select("firstName lastName email")
+            .select("firstName lastName email role")
             .lean()
         : []
       const userMap = new Map(
@@ -890,6 +1046,48 @@ export class CrmController {
         0,
       )
 
+      const mapCategories = (c: any) =>
+        Array.isArray(c?.focusCategories)
+          ? c.focusCategories.map((cat: any) => cat.name).filter(Boolean)
+          : []
+
+      const clientFollowUps = conversationFollowUps.filter(
+        (c) =>
+          !(c as any).relatedMachineId &&
+          (c as any).source !== "installed_machine" &&
+          !/machine/i.test(String((c as any).callPurpose || "")),
+      )
+      const machinePlannerFollowUps = conversationFollowUps.filter(
+        (c) =>
+          Boolean((c as any).relatedMachineId) ||
+          (c as any).source === "installed_machine" ||
+          /machine/i.test(String((c as any).callPurpose || "")),
+      )
+
+      const telesalesPeople = activityUsers
+        .map((row: any) => {
+          const id = String(row._id || "")
+          if (!id || !userMap.has(id)) return null
+          return {
+            _id: id,
+            name: userMap.get(id) || "User",
+            activityCount: Number(row.count || 0),
+          }
+        })
+        .filter(Boolean)
+
+      // Also include quote creators who may not have call logs
+      for (const q of quotations) {
+        const id = String(q.createdBy || "")
+        if (!id || id === "website" || telesalesPeople.some((p: any) => p._id === id)) continue
+        if (!userMap.has(id)) continue
+        telesalesPeople.push({
+          _id: id,
+          name: userMap.get(id) || "User",
+          activityCount: 0,
+        })
+      }
+
       return res.status(200).json({
         success: true,
         data: {
@@ -897,12 +1095,20 @@ export class CrmController {
             from: rangeStart.toISOString(),
             to: rangeEnd.toISOString(),
           },
+          filter: {
+            userId: filterUserId || null,
+            userName: filterUserId ? nameFor(filterUserId) : null,
+          },
+          telesalesPeople,
           performance: {
             quotesGenerated,
             invoicesConverted,
             newClientsOnboarded,
             quotationFollowUps: quotationFollowUpsCount,
             callsLogged: callsLoggedCount,
+            machineFollowUps: machineFollowUpsCount,
+            machinesScheduled: machinesScheduledCount,
+            machineServicesCompleted: servicesCompletedCount,
             quoteValue,
             convertedValue,
             conversionRate:
@@ -919,6 +1125,7 @@ export class CrmController {
               status: q.status,
               subTotal: Number(q.subTotal || 0),
               createdByName: nameFor(q.createdBy),
+              createdBy: q.createdBy,
               createdAt: q.createdAt,
             })),
             conversions: convertedQuotations.map((q) => {
@@ -932,6 +1139,7 @@ export class CrmController {
                 clientName: q.client?.name || "—",
                 subTotal: Number(q.subTotal || 0),
                 createdByName: nameFor(q.createdBy),
+                createdBy: q.createdBy,
                 convertedAt: q.updatedAt,
               }
             }),
@@ -942,6 +1150,7 @@ export class CrmController {
               location: c.sourceLocation || "",
               contactPerson: c.contactPerson || "",
               createdByName: nameFor(c.createdBy),
+              createdBy: c.createdBy,
               createdAt: c.createdAt,
             })),
             followUps: followUps.map((f) => {
@@ -955,15 +1164,12 @@ export class CrmController {
                 callMade: Boolean(f.callMade),
                 outcome: f.outcome || "",
                 createdByName: nameFor(f.createdBy),
+                createdBy: f.createdBy,
                 createdAt: f.createdAt,
               }
             }),
             callLogs: callLogs.map((c) => {
-              const categories = Array.isArray((c as any).focusCategories)
-                ? (c as any).focusCategories
-                    .map((cat: any) => cat.name)
-                    .filter(Boolean)
-                : []
+              const categories = mapCategories(c)
               return {
                 _id: String(c._id),
                 clientName: c.clientName || "—",
@@ -976,8 +1182,49 @@ export class CrmController {
                 followUpDate: c.followUpDate,
                 status: c.status,
                 hasLead: Boolean(c.lead_id),
+                relatedMachineId: (c as any).relatedMachineId || "",
+                relatedMachineName: (c as any).relatedMachineName || "",
+                source: (c as any).source || "",
                 createdByName: nameFor(c.assignedTo || c.createdBy),
+                createdBy: c.assignedTo || c.createdBy,
                 createdAt: c.createdAt,
+              }
+            }),
+            machineFollowUps: machineFollowUpLogs.map((c) => {
+              const machine =
+                (c as any).relatedMachineId
+                  ? machineMap.get(String((c as any).relatedMachineId))
+                  : null
+              return {
+                _id: String(c._id),
+                clientName: c.clientName || machine?.client?.name || "—",
+                clientPhone: c.clientPhone || "",
+                machineName:
+                  (c as any).relatedMachineName ||
+                  machine?.productName ||
+                  "Machine",
+                serialNumber: machine?.serialNumber || "",
+                note: c.note,
+                outcome: (c as any).outcome || c.status,
+                followUpNeeded: Boolean((c as any).followUpNeeded),
+                followUpDate: c.followUpDate,
+                status: c.status,
+                createdByName: nameFor(c.assignedTo || c.createdBy),
+                createdBy: c.assignedTo || c.createdBy,
+                createdAt: c.createdAt,
+              }
+            }),
+            machineServicesCompleted: completedMachineServices.map((svc) => {
+              const machine = machineMap.get(String(svc.machineId))
+              return {
+                _id: String(svc._id),
+                title: svc.serviceType || "Machine service",
+                clientName: machine?.client?.name || "—",
+                productName: machine?.productName || "",
+                serialNumber: machine?.serialNumber || "",
+                technician: svc.technician || "",
+                completedDate: svc.completedDate,
+                notes: svc.notes || "",
               }
             }),
           },
@@ -1036,10 +1283,22 @@ export class CrmController {
               attendant: (m as any).attendant || "",
               attendantRole: (m as any).attendantRole || "",
             })),
-            followUps: conversationFollowUps.map((c) => {
-              const categories = Array.isArray((c as any).focusCategories)
-                ? (c as any).focusCategories.map((cat: any) => cat.name).filter(Boolean)
-                : []
+            machineServicesDue: upcomingMachineServices.map((m) => ({
+              _id: String(m._id),
+              type: "machine_next_service" as const,
+              title: m.productName,
+              clientName: m.client?.name || "—",
+              serialNumber: m.serialNumber || "",
+              location: m.installationLocation || m.client?.location || "",
+              status: m.status || "active",
+              nextServiceDate: m.nextServiceDate,
+              attendant: (m as any).attendant || "",
+              overdue:
+                Boolean(m.nextServiceDate) &&
+                new Date(m.nextServiceDate as Date) < startOfDay(now),
+            })),
+            followUps: clientFollowUps.map((c) => {
+              const categories = mapCategories(c)
               const purpose = String((c as any).callPurpose || "")
               return {
                 _id: String(c._id),
@@ -1054,11 +1313,61 @@ export class CrmController {
                 focusCategories: categories,
                 outcome: (c as any).outcome || c.status,
                 assignedToName: nameFor(c.assignedTo || c.createdBy),
+                assignedTo: c.assignedTo || c.createdBy,
                 overdue:
                   Boolean(c.followUpDate) &&
                   new Date(c.followUpDate as Date) < startOfDay(now),
               }
             }),
+            machineFollowUps: [
+              ...machinePlannerFollowUps.map((c) => {
+                const machine =
+                  (c as any).relatedMachineId
+                    ? machineMap.get(String((c as any).relatedMachineId))
+                    : null
+                return {
+                  _id: String(c._id),
+                  type: "machine_followup" as const,
+                  title:
+                    (c as any).relatedMachineName ||
+                    machine?.productName ||
+                    "Machine follow-up",
+                  clientName: c.clientName || machine?.client?.name || "—",
+                  clientPhone: c.clientPhone || "",
+                  serialNumber: machine?.serialNumber || "",
+                  note: c.note,
+                  followUpDate: c.followUpDate,
+                  status: c.status,
+                  outcome: (c as any).outcome || c.status,
+                  assignedToName: nameFor(c.assignedTo || c.createdBy),
+                  assignedTo: c.assignedTo || c.createdBy,
+                  overdue:
+                    Boolean(c.followUpDate) &&
+                    new Date(c.followUpDate as Date) < startOfDay(now),
+                }
+              }),
+              ...upcomingMachineServices.map((m) => ({
+                _id: `svc-${String(m._id)}`,
+                type: "machine_next_service" as const,
+                title: m.productName,
+                clientName: m.client?.name || "—",
+                clientPhone: m.client?.number || "",
+                serialNumber: m.serialNumber || "",
+                note: "Scheduled next service",
+                followUpDate: m.nextServiceDate,
+                status: m.status || "scheduled",
+                outcome: "Service due",
+                assignedToName: (m as any).installedBy || "—",
+                assignedTo: "",
+                overdue:
+                  Boolean(m.nextServiceDate) &&
+                  new Date(m.nextServiceDate as Date) < startOfDay(now),
+              })),
+            ].sort(
+              (a, b) =>
+                new Date(a.followUpDate || 0).getTime() -
+                new Date(b.followUpDate || 0).getTime(),
+            ),
           },
         },
       })

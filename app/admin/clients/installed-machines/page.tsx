@@ -2,7 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState, type JSX } from "react";
 import api, { stockApi, usersApi } from "@/lib/api";
+import { getToken } from "@/lib/auth";
+import API_URL from "@/lib/apiBase";
 import { finishDataLoad, startDataLoad } from "@/lib/silent-load";
+import { useToast } from "@/hooks/use-toast";
 import { PageLoadingSkeleton } from "@/components/admin/ui/page-states";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -572,8 +575,39 @@ export default function InstalledMachinesPage() {
   const [showCallDialog, setShowCallDialog] = useState(false);
   const [showHistoryDialog, setShowHistoryDialog] = useState(false);
   const [activeCRMClient, setActiveCRMClient] = useState<any>(null);
-  const [callForm, setCallForm] = useState({ note: "", status: "Interested", followUpDate: "" });
+  const [activeCRMMachine, setActiveCRMMachine] = useState<InstalledMachine | null>(null);
+  const [callForm, setCallForm] = useState({
+    note: "",
+    callPurpose: "Machine follow-up",
+    focusCategoryIds: [] as string[],
+    outcome: "Interested",
+    createLead: false,
+    followUpNeeded: false,
+    followUpDate: "",
+  });
+  const [callPurposes, setCallPurposes] = useState<string[]>([
+    "Machine follow-up",
+    "Service reminder",
+    "Installation follow-up",
+    "Company introduction",
+    "Quotation follow up",
+    "Debt collection",
+    "Delivery inquiry",
+    "Project inquiry",
+  ]);
+  const [sellingPurposes, setSellingPurposes] = useState<string[]>([
+    "Company introduction",
+    "Quotation follow up",
+    "Project inquiry",
+  ]);
+  const [stockCategories, setStockCategories] = useState<
+    Array<{ _id: string; name: string }>
+  >([]);
+  const [addingPurpose, setAddingPurpose] = useState(false);
+  const [newPurpose, setNewPurpose] = useState("");
   const [clientHistory, setClientHistory] = useState<any[]>([]);
+  const [savingCrm, setSavingCrm] = useState(false);
+  const { toast } = useToast();
 
   const [saving, setSaving] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -1574,49 +1608,192 @@ export default function InstalledMachinesPage() {
 
   /* ------------------------------- CRM Actions -------------------------------- */
 
-  const handleLogCallSubmit = async () => {
-    if (!activeCRMClient || !callForm.note.trim()) return;
+  const isSellingPurpose = sellingPurposes.includes(callForm.callPurpose);
+
+  const openCallDialogForMachine = async (
+    machine: InstalledMachine,
+    quoteRequested = false,
+  ) => {
+    setActiveCRMMachine(machine);
+    setCallForm({
+      note: quoteRequested
+        ? `Client requested a quotation for ${machine.productName}.`
+        : "",
+      callPurpose: quoteRequested ? "Quotation follow up" : "Machine follow-up",
+      focusCategoryIds: [],
+      outcome: quoteRequested ? "Quote Requested" : "Interested",
+      createLead: false,
+      followUpNeeded: false,
+      followUpDate: "",
+    });
+    setNewPurpose("");
+    setAddingPurpose(false);
+    setShowCallDialog(true);
+
     try {
-      setSaving(true);
-      await api.crm.createConversation({
-        roomName: "Telesales",
-        note: callForm.note,
-        status: callForm.status,
-        followUpDate: callForm.followUpDate || undefined,
-        clientName: activeCRMClient.client.name,
-        clientPhone: activeCRMClient.client.number || activeCRMClient.client.phoneNumbers?.[0],
-      });
-      setShowCallDialog(false);
-      alert("Call logged successfully in Telesales!");
-    } catch (err) {
-      console.error(err);
-      alert("Failed to log call");
-    } finally {
-      setSaving(false);
+      const [purposesRes, categoriesRes] = await Promise.all([
+        api.crm.getCallPurposes().catch(() => null),
+        fetch(`${API_URL}/api/stock/categories`, {
+          headers: { Authorization: `Bearer ${getToken()}` },
+        })
+          .then((r) => r.json())
+          .catch(() => null),
+      ]);
+      if (purposesRes?.success && purposesRes.data) {
+        const purposes = purposesRes.data.purposes || [];
+        const withMachineDefaults = Array.from(
+          new Set(["Machine follow-up", "Service reminder", "Installation follow-up", ...purposes]),
+        );
+        setCallPurposes(withMachineDefaults);
+        if (Array.isArray(purposesRes.data.sellingPurposes)) {
+          setSellingPurposes(purposesRes.data.sellingPurposes);
+        }
+      }
+      if (categoriesRes?.success && Array.isArray(categoriesRes.data)) {
+        setStockCategories(
+          categoriesRes.data.map((c: any) => ({
+            _id: String(c._id),
+            name: String(c.name || ""),
+          })),
+        );
+      }
+    } catch {
+      // keep defaults
     }
   };
 
-  const openCallDialog = (client: any, quoteRequested: boolean = false) => {
-    setActiveCRMClient(client);
-    setCallForm({
-      note: quoteRequested ? "Client requested a quotation." : "",
-      status: quoteRequested ? "Quote Requested" : "Interested",
-      followUpDate: "",
-    });
-    setShowCallDialog(true);
+  const handleAddCallPurpose = async () => {
+    const purpose = newPurpose.trim();
+    if (!purpose) return;
+    try {
+      setSavingCrm(true);
+      const res = await api.crm.addCallPurpose(purpose);
+      const nextPurposes = res?.data?.purposes || [...callPurposes, purpose];
+      setCallPurposes(nextPurposes);
+      setCallForm((current) => ({ ...current, callPurpose: purpose }));
+      setNewPurpose("");
+      setAddingPurpose(false);
+    } catch (error: any) {
+      toast({
+        title: "Failed to add purpose",
+        description: error?.message || "Could not add call purpose",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingCrm(false);
+    }
   };
 
-  const openHistoryDialog = async (client: any) => {
-    setActiveCRMClient(client);
+  const toggleFocusCategory = (categoryId: string) => {
+    setCallForm((current) => {
+      const exists = current.focusCategoryIds.includes(categoryId);
+      return {
+        ...current,
+        focusCategoryIds: exists
+          ? current.focusCategoryIds.filter((id) => id !== categoryId)
+          : [...current.focusCategoryIds, categoryId],
+      };
+    });
+  };
+
+  const handleLogCallSubmit = async () => {
+    if (!activeCRMMachine || !callForm.note.trim()) {
+      toast({
+        title: "Notes required",
+        description: "Enter what was discussed on the call.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!callForm.callPurpose.trim()) {
+      toast({
+        title: "Call purpose required",
+        description: "Select or add a call purpose.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const followUpNeeded =
+      callForm.followUpNeeded || callForm.outcome === "Follow-up Needed";
+    if (followUpNeeded && !callForm.followUpDate) {
+      toast({
+        title: "Follow-up date required",
+        description: "Choose a follow-up date when follow-up is needed.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setSavingCrm(true);
+      const focusCategories = stockCategories
+        .filter((c) => callForm.focusCategoryIds.includes(c._id))
+        .map((c) => ({ id: c._id, name: c.name }));
+
+      const res = await api.crm.createConversation({
+        roomName: "Telesales",
+        source: "installed_machine",
+        relatedMachineId: activeCRMMachine._id,
+        relatedMachineName:
+          activeCRMMachine.productName ||
+          activeCRMMachine.serialNumber ||
+          "Machine",
+        note: callForm.note.trim(),
+        callPurpose: callForm.callPurpose,
+        focusCategories,
+        outcome: callForm.outcome,
+        status: callForm.outcome,
+        createLead:
+          callForm.outcome === "Interested" ? callForm.createLead : false,
+        followUpNeeded,
+        followUpDate: followUpNeeded ? callForm.followUpDate : undefined,
+        clientName: activeCRMMachine.client?.name || "",
+        clientPhone: activeCRMMachine.client?.number || "",
+        contactPerson: activeCRMMachine.client?.contactPerson || "",
+        clientLocation: activeCRMMachine.client?.location || "",
+      });
+
+      if (!res?.success) {
+        throw new Error(res?.message || "Failed to save call");
+      }
+
+      setShowCallDialog(false);
+      toast({
+        title: "Call logged",
+        description: followUpNeeded
+          ? "Saved and added to Telesales Activity planner."
+          : "Call activity saved and available in Telesales reports.",
+      });
+    } catch (err: any) {
+      console.error(err);
+      toast({
+        title: "Failed to log call",
+        description: err?.message || "Could not save call activity",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingCrm(false);
+    }
+  };
+
+  const openHistoryDialogForMachine = async (machine: InstalledMachine) => {
+    setActiveCRMMachine(machine);
     setClientHistory([]);
     setShowHistoryDialog(true);
     try {
-      const res = await api.crm.getConversations({ clientName: client.client.name });
+      const res = await api.crm.getConversations({
+        relatedMachineId: machine._id,
+      });
       if (res.success) {
         setClientHistory(res.data || []);
       }
     } catch (err) {
       console.error(err);
+      toast({
+        title: "Failed to load history",
+        description: "Could not load call history for this machine.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -2667,7 +2844,7 @@ export default function InstalledMachinesPage() {
                                       Actions
                                     </Button>
                                   </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end" className="w-48">
+                                  <DropdownMenuContent align="end" className="w-52">
                                     <DropdownMenuItem
                                       onClick={() => setSelectedMachine(m)}
                                     >
@@ -2677,6 +2854,18 @@ export default function InstalledMachinesPage() {
                                       onClick={() => openDetailDialog(m)}
                                     >
                                       Edit machine
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={() => void openCallDialogForMachine(m)}
+                                    >
+                                      <PhoneCall className="mr-2 h-4 w-4" />
+                                      Log call
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={() => void openHistoryDialogForMachine(m)}
+                                    >
+                                      <MessageSquare className="mr-2 h-4 w-4" />
+                                      Call history
                                     </DropdownMenuItem>
                                     <DropdownMenuItem
                                       onClick={() => openLogServiceDialog(m)}
@@ -2897,6 +3086,21 @@ export default function InstalledMachinesPage() {
                         onClick={() => openDetailDialog(selectedMachine)}
                       >
                         Edit Details
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void openCallDialogForMachine(selectedMachine)}
+                      >
+                        <PhoneCall className="mr-1.5 h-3.5 w-3.5" />
+                        Log Call
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void openHistoryDialogForMachine(selectedMachine)}
+                      >
+                        Call History
                       </Button>
                       <Button
                         size="sm"
@@ -3972,47 +4176,235 @@ export default function InstalledMachinesPage() {
 
       {/* CRM Log Call Dialog */}
       <Dialog open={showCallDialog} onOpenChange={setShowCallDialog}>
-        <DialogContent>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Log Call for {activeCRMClient?.client?.name}</DialogTitle>
+            <DialogTitle>
+              Log Call — {activeCRMMachine?.productName || "Machine"}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div>
-              <Label>Outcome / Notes</Label>
-              <Input
-                value={callForm.note}
-                onChange={(e) => setCallForm({ ...callForm, note: e.target.value })}
-                placeholder="What was discussed?"
-              />
+            <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+              <p className="font-medium">
+                {activeCRMMachine?.client?.name || "Unknown client"}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {[
+                  activeCRMMachine?.serialNumber
+                    ? `SN: ${activeCRMMachine.serialNumber}`
+                    : "",
+                  activeCRMMachine?.client?.number || "",
+                  activeCRMMachine?.client?.location || "",
+                ]
+                  .filter(Boolean)
+                  .join(" · ") || "Installed machine follow-up"}
+              </p>
             </div>
-            <div>
-              <Label>Next Action Status</Label>
+
+            <div className="space-y-1">
+              <Label>Call purpose</Label>
+              {!addingPurpose ? (
+                <select
+                  className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                  value={callForm.callPurpose}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    if (value === "__add_new__") {
+                      setAddingPurpose(true);
+                      return;
+                    }
+                    setCallForm((current) => ({
+                      ...current,
+                      callPurpose: value,
+                      focusCategoryIds: sellingPurposes.includes(value)
+                        ? current.focusCategoryIds
+                        : [],
+                    }));
+                  }}
+                >
+                  {callPurposes.map((purpose) => (
+                    <option key={purpose} value={purpose}>
+                      {purpose}
+                    </option>
+                  ))}
+                  <option value="__add_new__">Add new…</option>
+                </select>
+              ) : (
+                <div className="flex gap-2">
+                  <Input
+                    value={newPurpose}
+                    onChange={(e) => setNewPurpose(e.target.value)}
+                    placeholder="New call purpose"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={savingCrm || !newPurpose.trim()}
+                    onClick={() => void handleAddCallPurpose()}
+                  >
+                    Add
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                      setAddingPurpose(false);
+                      setNewPurpose("");
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {isSellingPurpose ? (
+              <div className="space-y-2">
+                <Label>Department of focus (stock categories)</Label>
+                <p className="text-xs text-muted-foreground">
+                  Select one or more product categories this call focused on.
+                </p>
+                <div className="max-h-40 overflow-y-auto rounded-md border p-3 space-y-2">
+                  {stockCategories.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      No stock categories found.
+                    </p>
+                  ) : (
+                    stockCategories.map((category) => {
+                      const checked = callForm.focusCategoryIds.includes(
+                        category._id,
+                      );
+                      return (
+                        <label
+                          key={category._id}
+                          className="flex items-center gap-2 text-sm cursor-pointer"
+                        >
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={() =>
+                              toggleFocusCategory(category._id)
+                            }
+                          />
+                          <span>{category.name}</span>
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="space-y-1">
+              <Label>Outcome</Label>
               <select
-                className="w-full mt-1 rounded border px-3 py-2 text-sm"
-                value={callForm.status}
-                onChange={(e) => setCallForm({ ...callForm, status: e.target.value })}
+                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                value={callForm.outcome}
+                onChange={(event) => {
+                  const outcome = event.target.value;
+                  setCallForm((current) => ({
+                    ...current,
+                    outcome,
+                    createLead:
+                      outcome === "Interested" ? true : current.createLead,
+                    followUpNeeded:
+                      outcome === "Follow-up Needed"
+                        ? true
+                        : current.followUpNeeded,
+                  }));
+                }}
               >
                 <option value="Interested">Interested</option>
                 <option value="Follow-up Needed">Follow-up Needed</option>
-                <option value="Pending">Pending</option>
+                <option value="Not Interested">Not Interested</option>
+                <option value="No Answer">No Answer</option>
                 <option value="Quote Requested">Quote Requested</option>
+                <option value="Pending">Pending</option>
                 <option value="Closed">Closed</option>
               </select>
             </div>
-            <div>
-              <Label>Follow-up Date (Optional)</Label>
+
+            {callForm.outcome === "Interested" ? (
+              <label className="flex items-start gap-2 text-sm rounded-md border bg-emerald-50/60 border-emerald-100 p-3">
+                <Checkbox
+                  checked={callForm.createLead}
+                  onCheckedChange={(checked) =>
+                    setCallForm((current) => ({
+                      ...current,
+                      createLead: Boolean(checked),
+                    }))
+                  }
+                />
+                <span>
+                  <span className="font-medium text-emerald-900">
+                    Save as lead
+                  </span>
+                  <span className="block text-xs text-emerald-800/80 mt-0.5">
+                    Creates a CRM lead linked to this client/machine opportunity.
+                  </span>
+                </span>
+              </label>
+            ) : null}
+
+            <div className="space-y-2 rounded-md border p-3">
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={
+                    callForm.followUpNeeded ||
+                    callForm.outcome === "Follow-up Needed"
+                  }
+                  onCheckedChange={(checked) =>
+                    setCallForm((current) => ({
+                      ...current,
+                      followUpNeeded: Boolean(checked),
+                    }))
+                  }
+                />
+                <span className="font-medium">Follow-up needed</span>
+              </label>
+              {(callForm.followUpNeeded ||
+                callForm.outcome === "Follow-up Needed") && (
+                <div className="space-y-1 pl-6">
+                  <Label>Follow-up date</Label>
+                  <Input
+                    type="date"
+                    value={callForm.followUpDate}
+                    onChange={(event) =>
+                      setCallForm((current) => ({
+                        ...current,
+                        followUpDate: event.target.value,
+                      }))
+                    }
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Appears in Telesales Activity planner and reports.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-1">
+              <Label>Notes</Label>
               <Input
-                type="date"
-                value={callForm.followUpDate}
-                onChange={(e) => setCallForm({ ...callForm, followUpDate: e.target.value })}
+                value={callForm.note}
+                onChange={(event) =>
+                  setCallForm((current) => ({
+                    ...current,
+                    note: event.target.value,
+                  }))
+                }
+                placeholder="What was discussed?"
               />
             </div>
-            <div className="flex justify-end gap-2 pt-4">
-              <Button disabled={saving} onClick={handleLogCallSubmit}>
-                {saving ? "Saving..." : "Save Call Log"}
-              </Button>
-              <Button variant="outline" onClick={() => setShowCallDialog(false)}>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => setShowCallDialog(false)}
+                disabled={savingCrm}
+              >
                 Cancel
+              </Button>
+              <Button disabled={savingCrm} onClick={() => void handleLogCallSubmit()}>
+                {savingCrm ? "Saving..." : "Save Call Log"}
               </Button>
             </div>
           </div>
@@ -4023,29 +4415,65 @@ export default function InstalledMachinesPage() {
       <Dialog open={showHistoryDialog} onOpenChange={setShowHistoryDialog}>
         <DialogContent className="max-w-xl">
           <DialogHeader>
-            <DialogTitle>Interaction History: {activeCRMClient?.client?.name}</DialogTitle>
+            <DialogTitle>
+              Call history — {activeCRMMachine?.productName || "Machine"}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
             {clientHistory.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">No logged interactions yet.</p>
+              <p className="text-sm text-muted-foreground text-center py-4">
+                No logged calls for this machine yet.
+              </p>
             ) : (
               clientHistory.map((h, i) => (
-                <div key={i} className="border-b pb-3 last:border-0 text-sm">
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="font-semibold text-slate-900">{h.roomName}</span>
-                    <span className="text-xs text-muted-foreground">{new Date(h.createdAt).toLocaleString()}</span>
+                <div key={h._id || i} className="border-b pb-3 last:border-0 text-sm">
+                  <div className="flex justify-between items-center mb-1 gap-2">
+                    <span className="font-semibold text-slate-900">
+                      {h.callPurpose || h.roomName || "Call"}
+                    </span>
+                    <span className="text-xs text-muted-foreground shrink-0">
+                      {h.createdAt
+                        ? new Date(h.createdAt).toLocaleString()
+                        : ""}
+                    </span>
                   </div>
                   <p className="text-slate-700">{h.note}</p>
-                  <div className="mt-2 flex gap-2">
-                    <Badge variant="outline">{h.status}</Badge>
-                    {h.followUpDate && <Badge variant="secondary">Follow-up: {new Date(h.followUpDate).toLocaleDateString()}</Badge>}
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Badge variant="outline">{h.outcome || h.status}</Badge>
+                    {h.followUpDate ? (
+                      <Badge variant="secondary">
+                        Follow-up:{" "}
+                        {new Date(h.followUpDate).toLocaleDateString()}
+                      </Badge>
+                    ) : null}
+                    {Array.isArray(h.focusCategories) &&
+                    h.focusCategories.length > 0 ? (
+                      <Badge variant="secondary">
+                        Focus:{" "}
+                        {h.focusCategories
+                          .map((c: any) => c.name || c)
+                          .filter(Boolean)
+                          .join(", ")}
+                      </Badge>
+                    ) : null}
                   </div>
                 </div>
               ))
             )}
           </div>
-          <div className="flex justify-end pt-2">
-            <Button variant="outline" onClick={() => setShowHistoryDialog(false)}>Close</Button>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowHistoryDialog(false);
+                if (activeCRMMachine) void openCallDialogForMachine(activeCRMMachine);
+              }}
+            >
+              Log another call
+            </Button>
+            <Button variant="outline" onClick={() => setShowHistoryDialog(false)}>
+              Close
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

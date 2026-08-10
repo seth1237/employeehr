@@ -2699,6 +2699,9 @@ export function generateTelesalesActivityPdf(params: {
     newClientsOnboarded: number;
     quotationFollowUps: number;
     callsLogged?: number;
+    machineFollowUps?: number;
+    machinesScheduled?: number;
+    machineServicesCompleted?: number;
     quoteValue: number;
     convertedValue: number;
     conversionRate: number;
@@ -2746,6 +2749,24 @@ export function generateTelesalesActivityPdf(params: {
       createdAt?: string | Date;
       hasLead?: boolean;
     }>;
+    machineFollowUps?: Array<{
+      clientName: string;
+      machineName: string;
+      serialNumber?: string;
+      note: string;
+      outcome: string;
+      followUpDate?: string | Date;
+      createdByName: string;
+      createdAt?: string | Date;
+    }>;
+    machineServicesCompleted?: Array<{
+      title: string;
+      clientName: string;
+      productName?: string;
+      serialNumber?: string;
+      technician?: string;
+      completedDate?: string | Date;
+    }>;
   };
   planner: {
     services: Array<{
@@ -2753,6 +2774,7 @@ export function generateTelesalesActivityPdf(params: {
       clientName: string;
       scheduledDate?: string | Date;
       status: string;
+      productName?: string;
     }>;
     installations: Array<{
       title: string;
@@ -2760,6 +2782,15 @@ export function generateTelesalesActivityPdf(params: {
       status: string;
       installationDate?: string | Date;
       nextServiceDate?: string | Date;
+      installedBy?: string;
+      serialNumber?: string;
+    }>;
+    machineServicesDue?: Array<{
+      title: string;
+      clientName: string;
+      nextServiceDate?: string | Date;
+      status: string;
+      serialNumber?: string;
     }>;
     followUps: Array<{
       title: string;
@@ -2770,10 +2801,20 @@ export function generateTelesalesActivityPdf(params: {
       status: string;
       assignedToName: string;
     }>;
+    machineFollowUps?: Array<{
+      title: string;
+      clientName: string;
+      serialNumber?: string;
+      followUpDate?: string | Date;
+      status: string;
+      outcome?: string;
+      assignedToName: string;
+    }>;
   };
   branding?: TenantBranding;
   periodStr?: string;
   reportTitle?: string;
+  personLabel?: string;
   autoSave?: boolean;
 }) {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
@@ -2813,29 +2854,36 @@ export function generateTelesalesActivityPdf(params: {
     setColorFromHex(doc, DEFAULT_GRAY, "text");
     doc.text(params.periodStr, 198, 30, { align: "right" });
   }
+  if (params.personLabel) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    setColorFromHex(doc, DEFAULT_GRAY, "text");
+    doc.text(`Telesales: ${params.personLabel}`, 198, 36, { align: "right" });
+  }
 
   // Summary band
   setColorFromHex(doc, DEFAULT_LIGHT, "fill");
-  doc.rect(12, 38, 186, 28, "F");
+  doc.rect(12, 40, 186, 34, "F");
 
   doc.setFontSize(10);
   doc.setFont("helvetica", "bold");
   setColorFromHex(doc, DEFAULT_TEXT, "text");
-  doc.text("PERFORMANCE SUMMARY", 15, 46);
+  doc.text("PERFORMANCE SUMMARY", 15, 48);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.5);
   const summaryLines = [
-    `Calls logged: ${params.performance.callsLogged ?? 0}`,
+    `Calls logged: ${params.performance.callsLogged ?? 0} · Machine follow-ups: ${params.performance.machineFollowUps ?? 0}`,
     `Quotes generated: ${params.performance.quotesGenerated} (${formatMoney(params.performance.quoteValue)})`,
     `Invoices converted: ${params.performance.invoicesConverted} (${formatMoney(params.performance.convertedValue)}) · ${params.performance.conversionRate}%`,
     `New clients: ${params.performance.newClientsOnboarded} · Quotation follow-ups: ${params.performance.quotationFollowUps}`,
+    `Machines scheduled: ${params.performance.machinesScheduled ?? 0} · Services completed: ${params.performance.machineServicesCompleted ?? 0}`,
   ];
   summaryLines.forEach((line, i) => {
-    doc.text(line, 15, 53 + i * 4);
+    doc.text(line, 15, 55 + i * 4);
   });
 
-  let y = 76;
+  let y = 84;
 
   const ensureSpace = (needed: number) => {
     if (y + needed > 275) {
@@ -2932,31 +2980,94 @@ export function generateTelesalesActivityPdf(params: {
     ]),
   );
 
-  drawSectionHeading("Planner — services & installations");
+  drawSectionHeading("Machine follow-up responses");
+  drawTable(
+    [
+      { h: "Date", w: 22 },
+      { h: "Client", w: 36 },
+      { h: "Machine", w: 40 },
+      { h: "Outcome", w: 30 },
+      { h: "Follow-up", w: 28 },
+      { h: "By", w: 30 },
+    ],
+    (params.activity.machineFollowUps || []).map((c) => [
+      formatDate(c.createdAt),
+      c.clientName,
+      `${c.machineName}${c.serialNumber ? ` (${c.serialNumber})` : ""}`,
+      c.outcome,
+      formatDate(c.followUpDate),
+      c.createdByName,
+    ]),
+  );
+
+  drawSectionHeading("Planner — scheduled services");
   drawTable(
     [
       { h: "Date", w: 28 },
-      { h: "Type", w: 28 },
-      { h: "Activity", w: 52 },
+      { h: "Service", w: 52 },
       { h: "Client", w: 48 },
+      { h: "Machine", w: 28 },
       { h: "Status", w: 30 },
     ],
+    params.planner.services.map((s) => [
+      formatDate(s.scheduledDate),
+      s.title,
+      s.clientName,
+      s.productName || "—",
+      s.status,
+    ]),
+  );
+
+  drawSectionHeading("Planner — scheduled installations");
+  drawTable(
     [
-      ...params.planner.services.map((s) => [
-        formatDate(s.scheduledDate),
-        "Service",
-        s.title,
-        s.clientName,
-        s.status,
-      ]),
-      ...params.planner.installations.map((s) => [
-        formatDate(s.installationDate || s.nextServiceDate),
-        "Installation",
-        s.title,
-        s.clientName,
-        s.status,
-      ]),
+      { h: "Date", w: 28 },
+      { h: "Machine", w: 48 },
+      { h: "Client", w: 44 },
+      { h: "Engineer", w: 36 },
+      { h: "Status", w: 30 },
     ],
+    params.planner.installations.map((s) => [
+      formatDate(s.installationDate || s.nextServiceDate),
+      `${s.title}${s.serialNumber ? ` (${s.serialNumber})` : ""}`,
+      s.clientName,
+      s.installedBy || "—",
+      s.status,
+    ]),
+  );
+
+  drawSectionHeading("Planner — machine services due");
+  drawTable(
+    [
+      { h: "Next service", w: 32 },
+      { h: "Machine", w: 52 },
+      { h: "Client", w: 52 },
+      { h: "Status", w: 50 },
+    ],
+    (params.planner.machineServicesDue || []).map((s) => [
+      formatDate(s.nextServiceDate),
+      `${s.title}${s.serialNumber ? ` (${s.serialNumber})` : ""}`,
+      s.clientName,
+      s.status,
+    ]),
+  );
+
+  drawSectionHeading("Planner — machine follow-ups");
+  drawTable(
+    [
+      { h: "Date", w: 28 },
+      { h: "Client", w: 40 },
+      { h: "Machine", w: 44 },
+      { h: "Assigned", w: 40 },
+      { h: "Status", w: 34 },
+    ],
+    (params.planner.machineFollowUps || []).map((s) => [
+      formatDate(s.followUpDate),
+      s.clientName,
+      `${s.title}${s.serialNumber ? ` (${s.serialNumber})` : ""}`,
+      s.assignedToName,
+      s.status,
+    ]),
   );
 
   drawSectionHeading("Planner — client follow-ups");
@@ -2974,6 +3085,24 @@ export function generateTelesalesActivityPdf(params: {
       s.callPurpose || s.title,
       s.assignedToName,
       s.status,
+    ]),
+  );
+
+  drawSectionHeading("Services completed");
+  drawTable(
+    [
+      { h: "Date", w: 28 },
+      { h: "Service", w: 44 },
+      { h: "Client", w: 44 },
+      { h: "Machine", w: 40 },
+      { h: "Tech", w: 30 },
+    ],
+    (params.activity.machineServicesCompleted || []).map((s) => [
+      formatDate(s.completedDate),
+      s.title,
+      s.clientName,
+      `${s.productName || "—"}${s.serialNumber ? ` (${s.serialNumber})` : ""}`,
+      s.technician || "—",
     ]),
   );
 

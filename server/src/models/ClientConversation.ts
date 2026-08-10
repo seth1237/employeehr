@@ -13,6 +13,9 @@ export interface IClientConversation extends Document {
   clientPhone?: string
   lead_id?: string // Reference to Lead if linked
   quotation_id?: string // Reference to a Quotation
+  relatedMachineId?: string
+  relatedMachineName?: string
+  source?: string // e.g. "installed_machine", "clients_list"
   note: string
   callPurpose?: string
   focusCategories?: IConversationFocusCategory[]
@@ -44,6 +47,9 @@ const clientConversationSchema = new Schema<IClientConversation>(
     clientPhone: { type: String },
     lead_id: { type: String, ref: "Lead" },
     quotation_id: { type: String }, // Can refer to StockQuotation
+    relatedMachineId: { type: String, index: true },
+    relatedMachineName: { type: String },
+    source: { type: String, index: true },
     note: { type: String, required: true },
     callPurpose: { type: String },
     focusCategories: { type: [focusCategorySchema], default: [] },

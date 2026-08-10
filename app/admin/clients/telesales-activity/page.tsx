@@ -13,6 +13,7 @@ import {
   Quote,
   ArrowRightLeft,
   PhoneCall,
+  Package,
 } from "lucide-react"
 import { PageLoadingSkeleton } from "@/components/admin/ui/page-states"
 import { Button } from "@/components/ui/button"
@@ -31,12 +32,17 @@ type PeriodPreset = "day" | "week" | "month" | "quarter" | "custom"
 
 interface TelesalesActivityData {
   period: { from: string; to: string }
+  filter?: { userId?: string | null; userName?: string | null }
+  telesalesPeople?: Array<{ _id: string; name: string; activityCount: number }>
   performance: {
     quotesGenerated: number
     invoicesConverted: number
     newClientsOnboarded: number
     quotationFollowUps: number
     callsLogged?: number
+    machineFollowUps?: number
+    machinesScheduled?: number
+    machineServicesCompleted?: number
     quoteValue: number
     convertedValue: number
     conversionRate: number
@@ -96,6 +102,29 @@ interface TelesalesActivityData {
       createdByName: string
       createdAt?: string
     }>
+    machineFollowUps?: Array<{
+      _id: string
+      clientName: string
+      machineName: string
+      serialNumber?: string
+      note: string
+      outcome: string
+      followUpNeeded?: boolean
+      followUpDate?: string
+      status: string
+      createdByName: string
+      createdAt?: string
+    }>
+    machineServicesCompleted?: Array<{
+      _id: string
+      title: string
+      clientName: string
+      productName?: string
+      serialNumber?: string
+      technician?: string
+      completedDate?: string
+      notes?: string
+    }>
   }
   planner: {
     services: Array<{
@@ -122,6 +151,16 @@ interface TelesalesActivityData {
       attendant?: string
       attendantRole?: string
     }>
+    machineServicesDue?: Array<{
+      _id: string
+      title: string
+      clientName: string
+      serialNumber?: string
+      location?: string
+      status: string
+      nextServiceDate?: string
+      overdue?: boolean
+    }>
     followUps: Array<{
       _id: string
       title: string
@@ -132,6 +171,18 @@ interface TelesalesActivityData {
       status: string
       callPurpose?: string
       focusCategories?: string[]
+      outcome?: string
+      assignedToName: string
+      overdue?: boolean
+    }>
+    machineFollowUps?: Array<{
+      _id: string
+      title: string
+      clientName: string
+      serialNumber?: string
+      note?: string
+      followUpDate?: string
+      status: string
       outcome?: string
       assignedToName: string
       overdue?: boolean
@@ -225,6 +276,8 @@ export default function TelesalesActivityPage() {
   const [exportMode, setExportMode] = useState<"day" | "period" | "custom">("period")
   const [exportFrom, setExportFrom] = useState("")
   const [exportTo, setExportTo] = useState("")
+  const [exportPersonId, setExportPersonId] = useState<string>("all")
+  const [viewPersonId, setViewPersonId] = useState<string>("all")
 
   const primaryColor = branding.primaryColor || "#0f766e"
   const secondaryColor = branding.secondaryColor || "#0ea5e9"
@@ -239,12 +292,13 @@ export default function TelesalesActivityPage() {
     return from === to ? from : `${from} – ${to}`
   }, [data?.period])
 
-  const load = useCallback(async (from: string, to: string) => {
+  const load = useCallback(async (from: string, to: string, userId: string = "all") => {
     setLoading(true)
     try {
       const token = getToken()
+      const personId = userId && userId !== "all" ? userId : undefined
       const [activityRes, brandingRes] = await Promise.all([
-        crmApi.getTelesalesActivity({ from, to }),
+        crmApi.getTelesalesActivity({ from, to, userId: personId }),
         fetch(`${API_URL}/api/company/branding`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         }),
@@ -276,7 +330,7 @@ export default function TelesalesActivityPage() {
     setToInput(range.to.slice(0, 10))
     setExportFrom(range.from.slice(0, 10))
     setExportTo(range.to.slice(0, 10))
-    void load(range.from, range.to)
+    void load(range.from, range.to, viewPersonId)
   }, [load])
 
   const applyPreset = (next: PeriodPreset) => {
@@ -285,7 +339,7 @@ export default function TelesalesActivityPage() {
     const range = presetRange(next)
     setFromInput(range.from.slice(0, 10))
     setToInput(range.to.slice(0, 10))
-    void load(range.from, range.to)
+    void load(range.from, range.to, viewPersonId)
   }
 
   const applyCustom = () => {
@@ -298,7 +352,19 @@ export default function TelesalesActivityPage() {
       return
     }
     setPreset("custom")
-    void load(startOfDayIso(new Date(fromInput)), endOfDayIso(new Date(toInput)))
+    void load(
+      startOfDayIso(new Date(fromInput)),
+      endOfDayIso(new Date(toInput)),
+      viewPersonId,
+    )
+  }
+
+  const applyPersonFilter = (personId: string) => {
+    setViewPersonId(personId)
+    setExportPersonId(personId)
+    const from = data?.period.from || presetRange(preset).from
+    const to = data?.period.to || presetRange(preset).to
+    void load(from, to, personId)
   }
 
   const resolveExportRange = () => {
@@ -338,25 +404,24 @@ export default function TelesalesActivityPage() {
     try {
       setExporting(true)
       const range = resolveExportRange()
-      let reportData = data
+      const personId =
+        exportPersonId && exportPersonId !== "all" ? exportPersonId : undefined
+      const personLabel =
+        !personId
+          ? "All telesales"
+          : data?.telesalesPeople?.find((p) => p._id === personId)?.name ||
+            data?.filter?.userName ||
+            "Selected person"
 
-      const needsReload =
-        !reportData ||
-        reportData.period.from !== range.from ||
-        reportData.period.to !== range.to
-
-      if (needsReload) {
-        const res = await crmApi.getTelesalesActivity({
-          from: range.from,
-          to: range.to,
-        })
-        if (!res.success) {
-          throw new Error(res.message || "Failed to load report data")
-        }
-        reportData = res.data as TelesalesActivityData
+      const res = await crmApi.getTelesalesActivity({
+        from: range.from,
+        to: range.to,
+        userId: personId,
+      })
+      if (!res.success) {
+        throw new Error(res.message || "Failed to load report data")
       }
-
-      if (!reportData) throw new Error("No report data available")
+      const reportData = res.data as TelesalesActivityData
 
       const { generateTelesalesActivityPdf } = await import(
         "@/lib/stock-document-pdf"
@@ -365,16 +430,21 @@ export default function TelesalesActivityPage() {
         performance: {
           ...reportData.performance,
           callsLogged: reportData.performance.callsLogged ?? 0,
+          machineFollowUps: reportData.performance.machineFollowUps ?? 0,
+          machinesScheduled: reportData.performance.machinesScheduled ?? 0,
+          machineServicesCompleted:
+            reportData.performance.machineServicesCompleted ?? 0,
         },
         activity: reportData.activity,
         planner: reportData.planner,
         branding,
         periodStr: range.label,
         reportTitle: range.title,
+        personLabel,
       })
       toast({
         title: "Report exported",
-        description: `${range.title} · ${range.label}`,
+        description: `${range.title} · ${personLabel} · ${range.label}`,
       })
     } catch (error: any) {
       toast({
@@ -403,6 +473,12 @@ export default function TelesalesActivityPage() {
       icon: PhoneCall,
     },
     {
+      label: "Machine follow-ups",
+      value: perf?.machineFollowUps ?? activity?.machineFollowUps?.length ?? 0,
+      hint: "Installed machine call responses",
+      icon: Package,
+    },
+    {
       label: "Quotes generated",
       value: perf?.quotesGenerated ?? 0,
       hint: formatMoney(perf?.quoteValue || 0),
@@ -416,18 +492,14 @@ export default function TelesalesActivityPage() {
       icon: ArrowRightLeft,
     },
     {
-      label: "New clients",
-      value: perf?.newClientsOnboarded ?? 0,
-      hint: "CRM directory additions",
-      icon: UserPlus,
-    },
-    {
-      label: "Follow-ups",
-      value: perf?.quotationFollowUps ?? 0,
-      hint: "Logged call / note follow-ups",
-      icon: Activity,
+      label: "Machines scheduled",
+      value: perf?.machinesScheduled ?? 0,
+      hint: "Installations & services in range",
+      icon: CalendarClock,
     },
   ]
+
+  const telesalesPeople = data?.telesalesPeople || []
 
   return (
     <div className="space-y-5">
@@ -450,10 +522,28 @@ export default function TelesalesActivityPage() {
               Activity dashboard
             </h1>
             <p className="text-sm text-muted-foreground">
-              Performance, quotation activity, and planner for services and follow-ups.
+              Performance, machine follow-ups, scheduled installations/services, and planner.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="space-y-1">
+              <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                Telesales person
+              </Label>
+              <select
+                value={viewPersonId}
+                onChange={(e) => applyPersonFilter(e.target.value)}
+                className="h-9 min-w-[180px] rounded-md border bg-background px-3 text-sm"
+              >
+                <option value="all">All telesales</option>
+                {telesalesPeople.map((person) => (
+                  <option key={person._id} value={person._id}>
+                    {person.name}
+                    {person.activityCount ? ` (${person.activityCount})` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
             <Button
               variant="outline"
               size="sm"
@@ -650,12 +740,12 @@ export default function TelesalesActivityPage() {
         </TabsContent>
 
         <TabsContent value="planner" className="space-y-4">
-          <div className="grid gap-4 lg:grid-cols-3">
+          <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
             <Card className="shadow-sm">
               <CardHeader className="border-b bg-muted/30 pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
                   <Wrench className="h-4 w-4" style={{ color: primaryColor }} />
-                  Services
+                  Scheduled services
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 max-h-[420px] overflow-y-auto p-4">
@@ -681,7 +771,7 @@ export default function TelesalesActivityPage() {
               <CardHeader className="border-b bg-muted/30 pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
                   <CalendarClock className="h-4 w-4" style={{ color: primaryColor }} />
-                  Installations
+                  Scheduled installations
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 max-h-[420px] overflow-y-auto p-4">
@@ -698,6 +788,38 @@ export default function TelesalesActivityPage() {
                       meta={[
                         item.installedBy ? `Engineer: ${item.installedBy}` : "",
                         item.location || item.serialNumber || "",
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    />
+                  ))
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-sm">
+              <CardHeader className="border-b bg-muted/30 pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Package className="h-4 w-4" style={{ color: primaryColor }} />
+                  Machine follow-ups
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 max-h-[420px] overflow-y-auto p-4">
+                {(planner?.machineFollowUps || []).length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No machine follow-ups.</p>
+                ) : (
+                  planner?.machineFollowUps.map((item) => (
+                    <PlannerRow
+                      key={item._id}
+                      title={item.title}
+                      subtitle={item.clientName}
+                      date={formatDate(item.followUpDate) || "Date TBD"}
+                      status={item.status}
+                      overdue={item.overdue}
+                      meta={[
+                        item.serialNumber || "",
+                        item.outcome || "",
+                        item.assignedToName || "",
                       ]
                         .filter(Boolean)
                         .join(" · ")}
@@ -750,9 +872,9 @@ export default function TelesalesActivityPage() {
             </CardHeader>
             <CardContent className="space-y-4 p-4">
               <p className="text-sm text-muted-foreground max-w-2xl">
-                Download a statement-style report with performance summary, call
-                logs, planner activities, quotes, and conversions — using your
-                company logo and colours.
+                Download a branded PDF with performance, machine follow-up
+                responses, scheduled installations/services, call logs, quotes,
+                and conversions. Choose one telesales person or all.
               </p>
 
               <div className="flex flex-wrap gap-2">
@@ -777,6 +899,24 @@ export default function TelesalesActivityPage() {
                     {label}
                   </Button>
                 ))}
+              </div>
+
+              <div className="space-y-1 max-w-sm">
+                <Label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+                  Telesales person
+                </Label>
+                <select
+                  value={exportPersonId}
+                  onChange={(e) => setExportPersonId(e.target.value)}
+                  className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                >
+                  <option value="all">All telesales</option>
+                  {telesalesPeople.map((person) => (
+                    <option key={person._id} value={person._id}>
+                      {person.name}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {exportMode === "custom" ? (
@@ -819,7 +959,11 @@ export default function TelesalesActivityPage() {
                 onClick={() => void exportPdf()}
               >
                 <Download className="h-4 w-4 mr-1.5" />
-                {exporting ? "Generating PDF…" : "Download PDF report"}
+                {exporting
+                  ? "Generating PDF…"
+                  : exportPersonId === "all"
+                    ? "Download all telesales PDF"
+                    : "Download person PDF"}
               </Button>
             </CardContent>
           </Card>
@@ -848,6 +992,39 @@ export default function TelesalesActivityPage() {
               ])}
             />
             <ActivityTable
+              title="Machine follow-up responses"
+              empty="No machine follow-ups in this period"
+              headers={["Date", "Client", "Machine", "Outcome", "Follow-up", "By"]}
+              rows={(activity?.machineFollowUps || []).map((f) => [
+                formatDate(f.createdAt),
+                f.clientName,
+                `${f.machineName}${f.serialNumber ? ` (${f.serialNumber})` : ""}`,
+                <Badge key={f._id} variant="outline" className={statusBadgeClass(f.outcome)}>
+                  {f.outcome}
+                </Badge>,
+                formatDate(f.followUpDate),
+                f.createdByName,
+              ])}
+            />
+            <ActivityTable
+              title="Planner — machine follow-ups"
+              empty="No machine follow-ups in planner"
+              headers={["Date", "Client", "Machine", "Status", "Assigned"]}
+              rows={(planner?.machineFollowUps || []).map((f) => [
+                formatDate(f.followUpDate) || "TBD",
+                f.clientName,
+                `${f.title}${f.serialNumber ? ` (${f.serialNumber})` : ""}`,
+                <Badge
+                  key={f._id}
+                  variant="outline"
+                  className={statusBadgeClass(f.overdue ? "overdue" : f.status)}
+                >
+                  {f.overdue ? "Overdue" : f.status}
+                </Badge>,
+                f.assignedToName,
+              ])}
+            />
+            <ActivityTable
               title="Planner — client follow-ups"
               empty="No follow-ups in planner"
               headers={["Date", "Client", "Purpose", "Status", "Assigned"]}
@@ -860,36 +1037,38 @@ export default function TelesalesActivityPage() {
                   variant="outline"
                   className={statusBadgeClass(f.overdue ? "overdue" : f.status)}
                 >
-                  {f.overdue ? "overdue" : f.status}
+                  {f.overdue ? "Overdue" : f.status}
                 </Badge>,
                 f.assignedToName,
               ])}
             />
             <ActivityTable
-              title="Planner — services"
+              title="Planner — scheduled services"
               empty="No scheduled services"
-              headers={["Date", "Service", "Client", "Status"]}
+              headers={["Date", "Service", "Client", "Machine", "Status"]}
               rows={(planner?.services || []).map((s) => [
                 formatDate(s.scheduledDate),
                 s.title,
                 s.clientName,
+                s.productName || "—",
                 <Badge
                   key={s._id}
                   variant="outline"
                   className={statusBadgeClass(s.overdue ? "overdue" : s.status)}
                 >
-                  {s.overdue ? "overdue" : s.status}
+                  {s.overdue ? "Overdue" : s.status}
                 </Badge>,
               ])}
             />
             <ActivityTable
-              title="Planner — installations"
+              title="Planner — scheduled installations"
               empty="No installations in range"
-              headers={["Date", "Product", "Client", "Status"]}
+              headers={["Date", "Product", "Client", "Engineer", "Status"]}
               rows={(planner?.installations || []).map((s) => [
                 formatDate(s.installationDate || s.nextServiceDate),
                 s.title,
                 s.clientName,
+                s.installedBy || "—",
                 <Badge key={s._id} variant="outline" className={statusBadgeClass(s.status)}>
                   {s.status}
                 </Badge>,

@@ -215,6 +215,7 @@ const companySchema = new Schema<ICompany>(
     },
     crmSettings: {
       callPurposes: { type: [String], default: [] },
+      removedContactRoles: { type: [String], default: [] },
     },
     setupProgress: {
       completed: { type: Boolean, default: false },

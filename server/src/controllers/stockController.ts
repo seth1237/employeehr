@@ -2590,6 +2590,7 @@ export class StockController {
         sourceLocation,
         legalName,
         contactPerson,
+        contactPersonRole,
         kraPin,
         email,
         branchId,
@@ -2603,6 +2604,30 @@ export class StockController {
       }
 
       const resolvedLegalName = String(legalName || sourceName).trim();
+      const contactName = contactPerson ? String(contactPerson).trim() : "";
+      const contactRole = contactPersonRole
+        ? String(contactPersonRole).trim()
+        : "";
+      const initialContacts =
+        contactName && contactRole
+          ? [
+              {
+                role: contactRole,
+                name: contactName,
+                phone: String(sourceNumber).trim() || undefined,
+                isActive: true,
+              },
+            ]
+          : contactName
+            ? [
+                {
+                  role: "Contact",
+                  name: contactName,
+                  phone: String(sourceNumber).trim() || undefined,
+                  isActive: true,
+                },
+              ]
+            : [];
 
       const profile = await StockClient.findOneAndUpdate(
         {
@@ -2614,9 +2639,7 @@ export class StockController {
         {
           $set: {
             legalName: resolvedLegalName,
-            contactPerson: contactPerson
-              ? String(contactPerson).trim()
-              : undefined,
+            contactPerson: contactName || undefined,
             kraPin: kraPin ? String(kraPin).trim().toUpperCase() : undefined,
             email: email ? String(email).trim() : undefined,
             branchId: branchId ? String(branchId).trim() : undefined,
@@ -2629,10 +2652,57 @@ export class StockController {
             sourceNumber: String(sourceNumber).trim(),
             sourceLocation: String(sourceLocation).trim(),
             createdBy: String(actorId),
+            contacts: initialContacts,
           },
         },
         { upsert: true, new: true },
       );
+
+      if (
+        profile &&
+        initialContacts.length > 0 &&
+        (!Array.isArray(profile.contacts) || profile.contacts.length === 0)
+      ) {
+        profile.contacts = initialContacts as any;
+        await profile.save();
+      }
+
+      const countyName = String(sourceLocation).trim();
+      if (countyName && profile) {
+        const memberKey = buildClientMemberKey(
+          String(sourceName).trim(),
+          String(sourceNumber).trim(),
+          countyName,
+        );
+        let countyGroup = await StockClientGroup.findOne({
+          org_id,
+          name: countyName,
+        });
+        if (!countyGroup) {
+          countyGroup = await StockClientGroup.create({
+            org_id,
+            name: countyName,
+            description: "County group",
+            memberKeys: [memberKey],
+            createdBy: String(actorId),
+            updatedBy: String(actorId),
+          });
+        } else {
+          await StockClientGroup.updateOne(
+            { _id: countyGroup._id, org_id },
+            {
+              $addToSet: { memberKeys: memberKey },
+              $set: { updatedBy: String(actorId) },
+            },
+          );
+        }
+        const groupId = String(countyGroup._id);
+        if (!(profile.groupIds || []).map(String).includes(groupId)) {
+          profile.groupIds = [...(profile.groupIds || []), groupId];
+          profile.updatedBy = String(actorId);
+          await profile.save();
+        }
+      }
 
       return res.status(200).json({ success: true, data: profile });
     } catch (error: any) {

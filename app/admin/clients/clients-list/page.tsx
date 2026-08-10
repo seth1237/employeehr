@@ -163,6 +163,8 @@ export default function AccountsClientsPage() {
     number: "",
     location: "",
     contactPerson: "",
+    contactPersonRole: "Doctor",
+    contactPersonCustomRole: "",
   });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [uploadingClients, setUploadingClients] = useState(false);
@@ -180,6 +182,11 @@ export default function AccountsClientsPage() {
   const [addToGroupId, setAddToGroupId] = useState("");
   const [showEditGroupDialog, setShowEditGroupDialog] = useState(false);
   const [showManageGroupsDialog, setShowManageGroupsDialog] = useState(false);
+  const [selectedMergeGroupIds, setSelectedMergeGroupIds] = useState<string[]>([]);
+  const [mergeGroupName, setMergeGroupName] = useState("");
+  const [showManageRolesDialog, setShowManageRolesDialog] = useState(false);
+  const [renameRoleFrom, setRenameRoleFrom] = useState("");
+  const [renameRoleTo, setRenameRoleTo] = useState("");
   const [editingGroupId, setEditingGroupId] = useState("");
   const [editingGroupName, setEditingGroupName] = useState("");
   const [editingGroupDescription, setEditingGroupDescription] = useState("");
@@ -657,6 +664,242 @@ export default function AccountsClientsPage() {
       setSavingCrm(false);
     }
   };
+
+  const suggestMergedGroupName = (names: string[]) => {
+    const cleaned = names
+      .map((name) =>
+        String(name || "")
+          .replace(/\s*\(confirm\)\s*/gi, " ")
+          .replace(/\s+/g, " ")
+          .trim(),
+      )
+      .filter(Boolean);
+    if (cleaned.length === 0) return "";
+    const counts = new Map<string, number>();
+    for (const name of cleaned) {
+      counts.set(name, (counts.get(name) || 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => {
+      if (b[1] !== a[1]) return b[1] - a[1];
+      return a[0].localeCompare(b[0]);
+    })[0][0];
+  };
+
+  const toggleMergeGroupSelection = (groupId: string) => {
+    setSelectedMergeGroupIds((current) => {
+      const next = current.includes(groupId)
+        ? current.filter((id) => id !== groupId)
+        : [...current, groupId];
+      const selectedNames = clientGroups
+        .filter((group) => next.includes(String(group._id)))
+        .map((group) => group.name);
+      if (selectedNames.length >= 2) {
+        setMergeGroupName(suggestMergedGroupName(selectedNames));
+      } else if (selectedNames.length === 1) {
+        setMergeGroupName(
+          String(selectedNames[0] || "")
+            .replace(/\s*\(confirm\)\s*/gi, " ")
+            .trim(),
+        );
+      } else {
+        setMergeGroupName("");
+      }
+      return next;
+    });
+  };
+
+  const mergeSelectedGroups = async () => {
+    if (selectedMergeGroupIds.length < 2) {
+      window.alert("Select at least two groups to merge");
+      return;
+    }
+    const mergedName = mergeGroupName.trim();
+    if (!mergedName) {
+      window.alert("Enter the name for the merged group");
+      return;
+    }
+
+    const selectedLabels = clientGroups
+      .filter((group) => selectedMergeGroupIds.includes(String(group._id)))
+      .map((group) => group.name)
+      .join(", ");
+
+    if (
+      !window.confirm(
+        `Merge ${selectedMergeGroupIds.length} groups (${selectedLabels}) into "${mergedName}"? The old groups will be removed.`,
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setSavingCrm(true);
+      const response = await stockApi.mergeClientGroups({
+        groupIds: selectedMergeGroupIds,
+        name: mergedName,
+      });
+      if (!response?.success) {
+        throw new Error(response?.message || "Failed to merge groups");
+      }
+
+      const survivorId = String(response?.data?._id || "");
+      const deletedIds = new Set(
+        (response?.meta?.deletedGroupIds || []).map(String),
+      );
+
+      setClientGroups((current) => {
+        const survivor = response.data;
+        const withoutDeleted = current.filter(
+          (group) => !deletedIds.has(String(group._id)),
+        );
+        if (!survivorId) return withoutDeleted;
+        const hasSurvivor = withoutDeleted.some(
+          (group) => String(group._id) === survivorId,
+        );
+        if (hasSurvivor) {
+          return withoutDeleted.map((group) =>
+            String(group._id) === survivorId ? survivor : group,
+          );
+        }
+        return [survivor, ...withoutDeleted];
+      });
+
+      setRows((current) =>
+        current.map((row) => {
+          const groupIds = (row.groupIds || []).map(String);
+          const touched = groupIds.some(
+            (id) => selectedMergeGroupIds.includes(id) || deletedIds.has(id),
+          );
+          if (!touched || !survivorId) return row;
+          const nextGroupIds = Array.from(
+            new Set([
+              ...groupIds.filter(
+                (id) =>
+                  !selectedMergeGroupIds.includes(id) && !deletedIds.has(id),
+              ),
+              survivorId,
+            ]),
+          );
+          return { ...row, groupIds: nextGroupIds };
+        }),
+      );
+
+      if (groupFilter !== "all" && deletedIds.has(groupFilter)) {
+        setGroupFilter(survivorId || "all");
+      }
+
+      setSelectedMergeGroupIds([]);
+      setMergeGroupName("");
+      window.alert(response.message || "Groups merged successfully");
+      await loadData({ silent: true });
+    } catch (error: any) {
+      window.alert(error?.message || "Failed to merge groups");
+    } finally {
+      setSavingCrm(false);
+    }
+  };
+
+  const renameContactRoleGlobally = async () => {
+    const fromRole = renameRoleFrom.trim();
+    const toRole = renameRoleTo.trim();
+    if (!fromRole || !toRole) {
+      window.alert("Select the role to fix and enter the corrected name");
+      return;
+    }
+    if (fromRole.toLowerCase() === toRole.toLowerCase()) {
+      window.alert("Choose a different corrected role name");
+      return;
+    }
+    if (
+      !window.confirm(
+        `Merge all "${fromRole}" contacts into "${toRole}"? If the same person exists under both roles, they will be combined into one contact.`,
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setSavingCrm(true);
+      const response = await stockApi.renameClientContactRole({
+        fromRole,
+        toRole,
+      });
+      if (!response?.success) {
+        throw new Error(response?.message || "Failed to rename role");
+      }
+
+      setContactRoles((current) =>
+        Array.from(
+          new Set([
+            ...current.filter(
+              (role) => role.toLowerCase() !== fromRole.toLowerCase(),
+            ),
+            toRole,
+          ]),
+        ).sort((a, b) => a.localeCompare(b)),
+      );
+      setRows((current) =>
+        current.map((row) => {
+          const nextContacts = (row.contacts || []).map((contact) =>
+            String(contact.role || "").trim().toLowerCase() ===
+            fromRole.toLowerCase()
+              ? { ...contact, role: toRole }
+              : contact,
+          );
+          const deduped = new Map<string, ClientContact>();
+          for (const contact of nextContacts) {
+            const role = String(contact.role || "").trim();
+            const name = String(contact.name || "").trim();
+            if (!role || !name) continue;
+            const key = `${role.toLowerCase()}|${name.toLowerCase()}`;
+            const existing = deduped.get(key);
+            deduped.set(
+              key,
+              existing
+                ? {
+                    ...existing,
+                    ...contact,
+                    isActive: Boolean(contact.isActive || existing.isActive),
+                  }
+                : contact,
+            );
+          }
+          return { ...row, contacts: Array.from(deduped.values()) };
+        }),
+      );
+      setRenameRoleFrom("");
+      setRenameRoleTo("");
+      window.alert(response.message || "Contact role merged and removed");
+      await loadData({ silent: true });
+      try {
+        const rolesResponse = await stockApi.getClientContactRoles();
+        if (Array.isArray(rolesResponse?.data)) {
+          setContactRoles(
+            rolesResponse.data.filter(
+              (role: string) =>
+                String(role || "").trim().toLowerCase() !==
+                fromRole.toLowerCase(),
+            ),
+          );
+        }
+      } catch {
+        // keep local role list
+      }
+    } catch (error: any) {
+      window.alert(error?.message || "Failed to rename contact role");
+    } finally {
+      setSavingCrm(false);
+    }
+  };
+
+  const countyGroupOptions = useMemo(
+    () =>
+      clientGroups
+        .map((group) => String(group.name || "").trim())
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b)),
+    [clientGroups],
+  );
 
   const addClientsToGroup = async (groupId: string, keys: string[]) => {
     if (!groupId || keys.length === 0) return;
@@ -1409,8 +1652,17 @@ export default function AccountsClientsPage() {
     const name = newClient.name.trim();
     const number = newClient.number.trim();
     const location = newClient.location.trim();
+    const contactPerson = newClient.contactPerson.trim();
+    const contactPersonRole =
+      newClient.contactPersonRole === "Other"
+        ? newClient.contactPersonCustomRole.trim()
+        : newClient.contactPersonRole.trim();
     if (!name || !number || !location) {
-      window.alert("Client name, phone number, and location are required");
+      window.alert("Client name, phone number, and county are required");
+      return;
+    }
+    if (contactPerson && !contactPersonRole) {
+      window.alert("Select a role for the contact person, or leave the name blank");
       return;
     }
 
@@ -1421,14 +1673,21 @@ export default function AccountsClientsPage() {
         sourceNumber: number,
         sourceLocation: location,
         legalName: name,
-        contactPerson: newClient.contactPerson.trim() || undefined,
+        contactPerson: contactPerson || undefined,
+        contactPersonRole: contactPersonRole || undefined,
       });
+
+      if (contactPersonRole && !contactRoles.includes(contactPersonRole)) {
+        setContactRoles((current) => [...current, contactPersonRole]);
+      }
 
       setNewClient({
         name: "",
         number: "",
         location: "",
         contactPerson: "",
+        contactPersonRole: "Doctor",
+        contactPersonCustomRole: "",
       });
 
       await loadData({ silent: true });
@@ -1471,17 +1730,6 @@ export default function AccountsClientsPage() {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            {canPurgeAllClients ? (
-              <Button
-                size="sm"
-                variant="destructive"
-                disabled={purgingClients || savingCrm}
-                onClick={() => void purgeAllClients()}
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                {purgingClients ? "Deleting…" : "Delete all clients"}
-              </Button>
-            ) : null}
             <Button
               size="sm"
               variant={showBulkUploadPanel ? "default" : "outline"}
@@ -1500,7 +1748,15 @@ export default function AccountsClientsPage() {
               onClick={() => setShowManageGroupsDialog(true)}
             >
               <Pencil className="mr-2 h-4 w-4" />
-              Edit groups
+              Groups
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowManageRolesDialog(true)}
+            >
+              <Users className="mr-2 h-4 w-4" />
+              Contact roles
             </Button>
             <Button
               size="sm"
@@ -1585,8 +1841,9 @@ export default function AccountsClientsPage() {
                 />
               </div>
               <div>
-                <Label>Client Location</Label>
+                <Label>County</Label>
                 <Input
+                  list="county-group-options"
                   value={newClient.location}
                   onChange={(event) =>
                     setNewClient((prev) => ({
@@ -1594,7 +1851,16 @@ export default function AccountsClientsPage() {
                       location: event.target.value,
                     }))
                   }
+                  placeholder="e.g. Kakamega"
                 />
+                <datalist id="county-group-options">
+                  {countyGroupOptions.map((county) => (
+                    <option key={county} value={county} />
+                  ))}
+                </datalist>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  County becomes the client group name automatically.
+                </p>
               </div>
               <div>
                 <Label>Contact Person (optional)</Label>
@@ -1608,6 +1874,40 @@ export default function AccountsClientsPage() {
                   }
                 />
               </div>
+              <div>
+                <Label>Contact Person Role</Label>
+                <select
+                  className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
+                  value={newClient.contactPersonRole}
+                  onChange={(event) =>
+                    setNewClient((prev) => ({
+                      ...prev,
+                      contactPersonRole: event.target.value,
+                    }))
+                  }
+                >
+                  {contactRoles.map((role) => (
+                    <option key={role} value={role}>
+                      {role}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {newClient.contactPersonRole === "Other" ? (
+                <div>
+                  <Label>Custom role</Label>
+                  <Input
+                    value={newClient.contactPersonCustomRole}
+                    onChange={(event) =>
+                      setNewClient((prev) => ({
+                        ...prev,
+                        contactPersonCustomRole: event.target.value,
+                      }))
+                    }
+                    placeholder="e.g. Biomedical Engineer"
+                  />
+                </div>
+              ) : null}
             </div>
             <div className="flex justify-end gap-2">
               <Button
@@ -2626,6 +2926,70 @@ export default function AccountsClientsPage() {
               </p>
             </div>
 
+            <div className="space-y-3 rounded-lg border border-dashed p-3">
+              <p className="text-sm font-medium">Fix a role typo for everyone</p>
+              <p className="text-xs text-muted-foreground">
+                Merge one role into another — including an existing role. Duplicate
+                contacts with the same name are combined automatically.
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <Label>Role to fix</Label>
+                  <select
+                    className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
+                    value={renameRoleFrom}
+                    onChange={(event) => {
+                      setRenameRoleFrom(event.target.value);
+                      if (
+                        renameRoleTo.trim().toLowerCase() ===
+                        event.target.value.trim().toLowerCase()
+                      ) {
+                        setRenameRoleTo("");
+                      }
+                    }}
+                  >
+                    <option value="">Select role…</option>
+                    {contactRoles.map((role) => (
+                      <option key={role} value={role}>
+                        {role}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <Label>Merge into role</Label>
+                  <select
+                    className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
+                    value={renameRoleTo}
+                    onChange={(event) => setRenameRoleTo(event.target.value)}
+                  >
+                    <option value="">Select target role…</option>
+                    {contactRoles
+                      .filter(
+                        (role) =>
+                          role.toLowerCase() !== renameRoleFrom.toLowerCase(),
+                      )
+                      .map((role) => (
+                        <option key={role} value={role}>
+                          {role}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={
+                  savingCrm || !renameRoleFrom.trim() || !renameRoleTo.trim()
+                }
+                onClick={() => void renameContactRoleGlobally()}
+              >
+                Merge roles for all clients
+              </Button>
+            </div>
+
             <div className="space-y-3 rounded-lg border p-3">
               <p className="text-sm font-medium">
                 {editingContactIndex !== null
@@ -2824,40 +3188,85 @@ export default function AccountsClientsPage() {
 
       <Dialog
         open={showManageGroupsDialog}
-        onOpenChange={setShowManageGroupsDialog}
+        onOpenChange={(open) => {
+          setShowManageGroupsDialog(open);
+          if (!open) {
+            setSelectedMergeGroupIds([]);
+            setMergeGroupName("");
+          }
+        }}
       >
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Edit groups</DialogTitle>
+            <DialogTitle>Manage groups</DialogTitle>
           </DialogHeader>
           {clientGroups.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               No groups yet. Create a group first.
             </p>
           ) : (
-            <div className="max-h-[360px] space-y-2 overflow-y-auto">
-              {clientGroups.map((group) => (
-                <div
-                  key={group._id}
-                  className="flex items-center justify-between gap-2 rounded-md border p-2"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{group.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {group.memberKeys?.length || 0} member
-                      {(group.memberKeys?.length || 0) === 1 ? "" : "s"}
-                    </p>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => openEditGroupDialog(group)}
-                  >
-                    <Pencil className="mr-1.5 h-3.5 w-3.5" />
-                    Edit
-                  </Button>
+            <div className="space-y-4">
+              <div className="space-y-3 rounded-lg border border-dashed p-3">
+                <p className="text-sm font-medium">Merge duplicate groups</p>
+                <p className="text-xs text-muted-foreground">
+                  Select groups such as <strong>Kakamega</strong> and{" "}
+                  <strong>Kakamega (confirm)</strong>, choose the final name,
+                  then merge. Old groups are removed and members move to one group.
+                </p>
+                <div>
+                  <Label>Merged group name</Label>
+                  <Input
+                    className="mt-1"
+                    value={mergeGroupName}
+                    onChange={(event) => setMergeGroupName(event.target.value)}
+                    placeholder="e.g. Kakamega"
+                  />
                 </div>
-              ))}
+                <Button
+                  size="sm"
+                  disabled={savingCrm || selectedMergeGroupIds.length < 2}
+                  onClick={() => void mergeSelectedGroups()}
+                >
+                  Merge {selectedMergeGroupIds.length} selected group
+                  {selectedMergeGroupIds.length === 1 ? "" : "s"}
+                </Button>
+              </div>
+
+              <div className="max-h-[360px] space-y-2 overflow-y-auto">
+                {clientGroups.map((group) => {
+                  const groupId = String(group._id);
+                  const selected = selectedMergeGroupIds.includes(groupId);
+                  return (
+                    <div
+                      key={group._id}
+                      className="flex items-center justify-between gap-2 rounded-md border p-2"
+                    >
+                      <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-2">
+                        <Checkbox
+                          checked={selected}
+                          onCheckedChange={() => toggleMergeGroupSelection(groupId)}
+                          className="mt-0.5"
+                        />
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">{group.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {group.memberKeys?.length || 0} member
+                            {(group.memberKeys?.length || 0) === 1 ? "" : "s"}
+                          </p>
+                        </div>
+                      </label>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => openEditGroupDialog(group)}
+                      >
+                        <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                        Edit
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
           <DialogFooter>
@@ -2875,6 +3284,87 @@ export default function AccountsClientsPage() {
               }}
             >
               Create group
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={showManageRolesDialog}
+        onOpenChange={(open) => {
+          setShowManageRolesDialog(open);
+          if (!open) {
+            setRenameRoleFrom("");
+            setRenameRoleTo("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Fix contact roles</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Merge one role into another — including an existing role. Duplicate
+            contacts with the same name are combined automatically.
+          </p>
+          <div className="space-y-3 rounded-lg border border-dashed p-3">
+            <div>
+              <Label>Role to fix</Label>
+              <select
+                className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
+                value={renameRoleFrom}
+                onChange={(event) => {
+                  setRenameRoleFrom(event.target.value);
+                  if (
+                    renameRoleTo.trim().toLowerCase() ===
+                    event.target.value.trim().toLowerCase()
+                  ) {
+                    setRenameRoleTo("");
+                  }
+                }}
+              >
+                <option value="">Select role…</option>
+                {contactRoles.map((role) => (
+                  <option key={role} value={role}>
+                    {role}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label>Merge into role</Label>
+              <select
+                className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
+                value={renameRoleTo}
+                onChange={(event) => setRenameRoleTo(event.target.value)}
+              >
+                <option value="">Select target role…</option>
+                {contactRoles
+                  .filter(
+                    (role) =>
+                      role.toLowerCase() !== renameRoleFrom.toLowerCase(),
+                  )
+                  .map((role) => (
+                    <option key={role} value={role}>
+                      {role}
+                    </option>
+                  ))}
+              </select>
+            </div>
+            <Button
+              size="sm"
+              disabled={savingCrm || !renameRoleFrom.trim() || !renameRoleTo.trim()}
+              onClick={() => void renameContactRoleGlobally()}
+            >
+              Merge roles for all clients
+            </Button>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowManageRolesDialog(false)}
+            >
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2955,8 +3445,9 @@ export default function AccountsClientsPage() {
               />
             </div>
             <div>
-              <Label>Location / county</Label>
+              <Label>County</Label>
               <Input
+                list="edit-county-group-options"
                 value={editClientForm.location}
                 onChange={(event) =>
                   setEditClientForm((current) => ({
@@ -2965,6 +3456,11 @@ export default function AccountsClientsPage() {
                   }))
                 }
               />
+              <datalist id="edit-county-group-options">
+                {countyGroupOptions.map((county) => (
+                  <option key={county} value={county} />
+                ))}
+              </datalist>
             </div>
             <div>
               <Label>Contact person (optional)</Label>

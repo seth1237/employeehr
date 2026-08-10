@@ -2,6 +2,8 @@ import type { Response } from "express"
 import type { AuthenticatedRequest } from "../middleware/auth"
 import { StockClient, DEFAULT_CONTACT_ROLES } from "../models/StockClient"
 import { StockClientGroup } from "../models/StockClientGroup"
+import { InstalledMachine } from "../models/InstalledMachine"
+import { Company } from "../models/Company"
 import { isPlatformOwner } from "../utils/platformOwner"
 
 function clientKey(name: string, number: string, location: string) {
@@ -38,6 +40,29 @@ function normalizeContact(raw: any) {
   }
 }
 
+function dedupeContacts(contacts: any[]) {
+  const map = new Map<string, ReturnType<typeof normalizeContact>>()
+  for (const raw of contacts || []) {
+    const contact = normalizeContact(raw)
+    if (!contact) continue
+    const key = `${contact.role.toLowerCase()}|${contact.name.toLowerCase()}`
+    const existing = map.get(key)
+    if (!existing) {
+      map.set(key, contact)
+      continue
+    }
+    map.set(key, {
+      role: contact.role,
+      name: contact.name,
+      ...(contact.phone || existing.phone ? { phone: contact.phone || existing.phone } : {}),
+      ...(contact.email || existing.email ? { email: contact.email || existing.email } : {}),
+      ...(contact.notes || existing.notes ? { notes: contact.notes || existing.notes } : {}),
+      isActive: Boolean(contact.isActive || existing.isActive),
+    })
+  }
+  return Array.from(map.values())
+}
+
 async function findClientProfile(
   org_id: string,
   sourceName: string,
@@ -61,11 +86,179 @@ async function findClientProfile(
 }
 
 export class ClientCrmController {
-  static async listContactRoles(_req: AuthenticatedRequest, res: Response) {
-    return res.status(200).json({
-      success: true,
-      data: [...DEFAULT_CONTACT_ROLES],
-    })
+  static async listContactRoles(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id
+      if (!org_id) {
+        return res.status(401).json({ success: false, message: "Unauthorized" })
+      }
+
+      const [clients, company] = await Promise.all([
+        StockClient.find({ org_id }).select("contacts.role").lean(),
+        Company.findById(org_id).select("crmSettings.removedContactRoles").lean(),
+      ])
+      const removed = new Set(
+        (
+          Array.isArray((company as any)?.crmSettings?.removedContactRoles)
+            ? (company as any).crmSettings.removedContactRoles
+            : []
+        )
+          .map((role: string) => String(role || "").trim().toLowerCase())
+          .filter(Boolean),
+      )
+      const fromContacts = clients.flatMap((client) =>
+        (client.contacts || [])
+          .map((contact: any) => String(contact?.role || "").trim())
+          .filter(Boolean),
+      )
+      const roles = Array.from(
+        new Set([...DEFAULT_CONTACT_ROLES, ...fromContacts]),
+      )
+        .filter((role) => !removed.has(role.toLowerCase()))
+        .sort((a, b) => a.localeCompare(b))
+
+      return res.status(200).json({ success: true, data: roles })
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to list contact roles",
+      })
+    }
+  }
+
+  static async renameContactRole(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id
+      const actorId = req.user?.userId
+      if (!org_id || !actorId) {
+        return res
+          .status(401)
+          .json({ success: false, message: "Unauthorized" })
+      }
+
+      const fromRole = String(req.body?.fromRole || "").trim()
+      const toRole = String(req.body?.toRole || "").trim()
+      if (!fromRole || !toRole) {
+        return res.status(400).json({
+          success: false,
+          message: "fromRole and toRole are required",
+        })
+      }
+      if (fromRole.toLowerCase() === toRole.toLowerCase()) {
+        return res.status(400).json({
+          success: false,
+          message: "Choose a different corrected role name",
+        })
+      }
+
+      const clients = await StockClient.find({ org_id }).select(
+        "contacts contactPerson email updatedBy",
+      )
+      let updatedClients = 0
+      let updatedContacts = 0
+
+      for (const client of clients) {
+        const hadRole = (client.contacts || []).some(
+          (contact: any) =>
+            String(contact.role || "")
+              .trim()
+              .toLowerCase() === fromRole.toLowerCase(),
+        )
+        if (!hadRole) continue
+
+        const remapped = (client.contacts || []).map((contact: any) => {
+          const role = String(contact.role || "").trim()
+          const nextRole =
+            role.toLowerCase() === fromRole.toLowerCase() ? toRole : role
+          if (role.toLowerCase() === fromRole.toLowerCase()) {
+            updatedContacts += 1
+          }
+          return {
+            role: nextRole,
+            name: String(contact.name || "").trim(),
+            phone: contact.phone ? String(contact.phone) : undefined,
+            email: contact.email ? String(contact.email) : undefined,
+            notes: contact.notes ? String(contact.notes) : undefined,
+            isActive: Boolean(contact.isActive),
+          }
+        })
+        const deduped = dedupeContacts(remapped).filter(Boolean)
+        client.set("contacts", deduped)
+        client.markModified("contacts")
+
+        const actives = deduped.filter((contact) => contact?.isActive)
+        const primary = actives[0] || deduped[0]
+        if (primary?.name) {
+          client.contactPerson =
+            actives
+              .map((contact) => contact?.name)
+              .filter(Boolean)
+              .join("; ") || primary.name
+        }
+        if (primary?.email) client.email = primary.email
+        client.updatedBy = String(actorId)
+        await client.save()
+        updatedClients += 1
+      }
+
+      let machinesUpdated = 0
+      try {
+        const machineUpdate = await InstalledMachine.updateMany(
+          {
+            org_id,
+            attendantRole: new RegExp(`^${escapeRegex(fromRole)}$`, "i"),
+          },
+          { $set: { attendantRole: toRole } },
+        )
+        machinesUpdated = Number((machineUpdate as any)?.modifiedCount || 0)
+      } catch (machineError) {
+        console.error("Failed to update machine attendant roles", machineError)
+      }
+
+      // Persist removal so the old role never reappears in dropdowns.
+      // Do $pull and $addToSet in separate updates — same-path conflict otherwise.
+      try {
+        await Company.findByIdAndUpdate(org_id, {
+          $pull: { "crmSettings.removedContactRoles": toRole },
+        })
+        await Company.findByIdAndUpdate(org_id, {
+          $addToSet: { "crmSettings.removedContactRoles": fromRole },
+        })
+      } catch (companyError) {
+        console.error("Failed to persist removed contact role", companyError)
+      }
+
+      // Safety check: old role must no longer exist on any contact.
+      const leftover = await StockClient.countDocuments({
+        org_id,
+        "contacts.role": new RegExp(`^${escapeRegex(fromRole)}$`, "i"),
+      })
+      if (leftover > 0) {
+        return res.status(500).json({
+          success: false,
+          message: `Merge incomplete: ${leftover} client(s) still have role "${fromRole}"`,
+        })
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: `Merged ${updatedContacts} contact${updatedContacts === 1 ? "" : "s"} from "${fromRole}" into "${toRole}" across ${updatedClients} client${updatedClients === 1 ? "" : "s"}. Role "${fromRole}" was removed.`,
+        data: {
+          updatedClients,
+          updatedContacts,
+          fromRole,
+          toRole,
+          machinesUpdated,
+          removed: true,
+        },
+      })
+    } catch (error: any) {
+      console.error("renameContactRole failed", error)
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to rename contact role",
+      })
+    }
   }
 
   static async upsertClientContacts(req: AuthenticatedRequest, res: Response) {
@@ -404,6 +597,124 @@ export class ClientCrmController {
       return res.status(500).json({
         success: false,
         message: error.message || "Failed to delete group",
+      })
+    }
+  }
+
+  static async mergeGroups(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id
+      const actorId = req.user?.userId
+      if (!org_id || !actorId) {
+        return res.status(401).json({ success: false, message: "Unauthorized" })
+      }
+
+      const groupIds = Array.isArray(req.body?.groupIds)
+        ? Array.from(
+            new Set(
+              req.body.groupIds.map((id: unknown) => String(id || "").trim()).filter(Boolean),
+            ),
+          )
+        : []
+      const mergedName = String(req.body?.name || "").trim()
+
+      if (groupIds.length < 2) {
+        return res.status(400).json({
+          success: false,
+          message: "Select at least two groups to merge",
+        })
+      }
+      if (!mergedName) {
+        return res.status(400).json({
+          success: false,
+          message: "Merged group name is required",
+        })
+      }
+
+      const groups = await StockClientGroup.find({
+        org_id,
+        _id: { $in: groupIds },
+      }).lean()
+
+      if (groups.length < 2) {
+        return res.status(404).json({
+          success: false,
+          message: "One or more selected groups were not found",
+        })
+      }
+
+      const nameConflict = await StockClientGroup.findOne({
+        org_id,
+        name: mergedName,
+        _id: { $nin: groupIds },
+      }).lean()
+      if (nameConflict) {
+        return res.status(409).json({
+          success: false,
+          message: `Another group already uses the name "${mergedName}"`,
+        })
+      }
+
+      const survivorId = String(groups[0]._id)
+      const mergedMemberKeys = Array.from(
+        new Set(
+          groups.flatMap((group) =>
+            (group.memberKeys || []).map((key) => String(key).trim().toLowerCase()),
+          ),
+        ),
+      ).filter(Boolean)
+
+      const mergedDescriptions = groups
+        .map((group) => String(group.description || "").trim())
+        .filter(Boolean)
+
+      const survivor = await StockClientGroup.findOneAndUpdate(
+        { _id: survivorId, org_id },
+        {
+          $set: {
+            name: mergedName,
+            memberKeys: mergedMemberKeys,
+            description:
+              mergedDescriptions.length > 0
+                ? mergedDescriptions.join(" · ")
+                : undefined,
+            updatedBy: String(actorId),
+          },
+        },
+        { new: true },
+      )
+
+      if (!survivor) {
+        return res.status(404).json({ success: false, message: "Group not found" })
+      }
+
+      const deleteIds = groupIds.filter((id) => id !== survivorId)
+      if (deleteIds.length > 0) {
+        await StockClientGroup.deleteMany({
+          org_id,
+          _id: { $in: deleteIds },
+        })
+      }
+
+      await StockClient.updateMany(
+        { org_id, groupIds: { $in: groupIds } },
+        { $pull: { groupIds: { $in: deleteIds } } },
+      )
+      await StockClient.updateMany(
+        { org_id, groupIds: { $in: groupIds } },
+        { $addToSet: { groupIds: survivorId } },
+      )
+
+      return res.status(200).json({
+        success: true,
+        message: `Merged ${groups.length} groups into "${mergedName}"`,
+        data: survivor,
+        meta: { deletedGroupIds: deleteIds },
+      })
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to merge groups",
       })
     }
   }

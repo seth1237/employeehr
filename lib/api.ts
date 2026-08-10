@@ -753,6 +753,8 @@ export const stockApi = {
   getSavedClients: () => client.get<any[]>("/api/stock/clients/saved"),
   getClientContactRoles: () =>
     client.get<string[]>("/api/stock/clients/contact-roles"),
+  renameClientContactRole: (data: { fromRole: string; toRole: string }) =>
+    client.post<any>("/api/stock/clients/contact-roles/rename", data),
   saveClientContacts: (data: {
     sourceName: string
     sourceNumber: string
@@ -798,6 +800,8 @@ export const stockApi = {
     groupId: string,
     data: { name?: string; description?: string; memberKeys?: string[] },
   ) => client.put<any>(`/api/stock/clients/groups/${groupId}`, data),
+  mergeClientGroups: (data: { groupIds: string[]; name: string }) =>
+    client.post<any>("/api/stock/clients/groups/merge", data),
   addClientsToGroup: (groupId: string, memberKeys: string[]) =>
     client.post<any>(`/api/stock/clients/groups/${groupId}/members`, {
       memberKeys,
@@ -936,6 +940,7 @@ export const stockApi = {
     sourceLocation: string;
     legalName?: string;
     contactPerson?: string;
+    contactPersonRole?: string;
     kraPin?: string;
     email?: string;
     branchId?: string;

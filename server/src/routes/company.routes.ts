@@ -11,8 +11,8 @@ const router = Router()
 router.use(authMiddleware, orgMiddleware, tenantIsolation)
 
 // Page access settings
-router.get("/page-access", roleMiddleware("company_admin", "hr", "manager"), CompanyController.getPageAccessSettings)
-router.post("/page-access", roleMiddleware("company_admin"), CompanyController.updatePageAccessSettings)
+router.get("/page-access", roleMiddleware("company_admin", "admin", "hr", "manager"), CompanyController.getPageAccessSettings)
+router.post("/page-access", roleMiddleware("company_admin", "admin"), CompanyController.updatePageAccessSettings)
 
 // Branding
 router.get("/branding", CompanyController.getBranding)

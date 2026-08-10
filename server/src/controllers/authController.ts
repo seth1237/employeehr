@@ -4,11 +4,17 @@ import type { AuthenticatedRequest } from "../middleware/auth"
 
 export class AuthController {
   private static shouldRequireLoginOtp(req: AuthenticatedRequest) {
-    // Require OTP for deployed frontends. Localhost/dev bypasses OTP.
-    // Override with SKIP_LOGIN_OTP=true to disable OTP globally.
+    // Login OTP is opt-in so password login works on local AND deployed hosts.
+    // Enable with REQUIRE_LOGIN_OTP=true (optionally scoped by OTP_REQUIRED_DOMAINS).
+    // Force off with SKIP_LOGIN_OTP=true.
 
     if (process.env.SKIP_LOGIN_OTP === "true") {
       console.log("Login OTP bypassed due to SKIP_LOGIN_OTP env var")
+      return false
+    }
+
+    if (process.env.REQUIRE_LOGIN_OTP !== "true") {
+      console.log("Login OTP skipped: REQUIRE_LOGIN_OTP is not enabled")
       return false
     }
 
@@ -34,62 +40,36 @@ export class AuthController {
       return false
     }
 
-    const defaultDomains = [
-      "hr.codewithseth.co.ke",
-      "elevatehub.co.ke",
-      "www.elevatehub.co.ke",
-    ]
-
     const fromEnv = String(process.env.OTP_REQUIRED_DOMAINS || "")
       .split(",")
       .map((d) => d.trim().toLowerCase())
       .filter(Boolean)
 
-    const frontendHost = (() => {
-      try {
-        const url = process.env.FRONTEND_URL
-        if (!url) return ""
-        const host = new URL(url).hostname.toLowerCase()
-        if (
-          host === "localhost" ||
-          host === "127.0.0.1" ||
-          host === "::1"
-        ) {
-          return ""
-        }
-        return host
-      } catch {
-        return ""
+    // If domains are listed, only those hosts require OTP. Otherwise all non-local.
+    if (fromEnv.length > 0) {
+      const matched = fromEnv.filter(
+        (domain) =>
+          origin.includes(domain) ||
+          referer.includes(domain) ||
+          combined.includes(domain),
+      )
+      if (matched.length === 0) {
+        console.log("Login OTP skipped: origin not in OTP_REQUIRED_DOMAINS", {
+          origin,
+          referer,
+        })
+        return false
       }
-    })()
-
-    const deployedDomains = [
-      ...defaultDomains,
-      ...fromEnv,
-      ...(frontendHost ? [frontendHost] : []),
-    ]
-
-    const isFromDeployed = deployedDomains.some(
-      (domain) =>
-        origin.includes(domain) ||
-        referer.includes(domain) ||
-        combined.includes(domain),
-    )
-
-    if (isFromDeployed) {
-      console.log("Login OTP required: request from deployed domain", {
+      console.log("Login OTP required: matched OTP_REQUIRED_DOMAINS", {
         origin,
         referer,
-        matched: deployedDomains.filter((d) => combined.includes(d)),
+        matched,
       })
       return true
     }
 
-    console.log("Login OTP skipped: request from local/dev environment", {
-      origin,
-      referer,
-    })
-    return false
+    console.log("Login OTP required: REQUIRE_LOGIN_OTP=true", { origin, referer })
+    return true
   }
 
   static async registerCompany(req: AuthenticatedRequest, res: Response) {
@@ -138,7 +118,12 @@ export class AuthController {
       const result = await AuthService.login(email, password, {
         requireOtp: AuthController.shouldRequireLoginOtp(req),
       })
-      res.status(result.success ? 200 : 401).json(result)
+      const status = result.success
+        ? 200
+        : String(result.message || "").toLowerCase().includes("email")
+          ? 503
+          : 401
+      res.status(status).json(result)
     } catch (error) {
       res.status(500).json({
         success: false,

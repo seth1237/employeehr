@@ -51,6 +51,13 @@ export default function ClientsHubPage() {
       icon: Mail,
       color: "bg-orange-100 text-orange-700",
     },
+    {
+      title: "Client Complaints",
+      description: "Log and track client complaints through resolution",
+      href: "/admin/clients/complaints",
+      icon: MessageSquare,
+      color: "bg-red-100 text-red-700",
+    },
   ]
 
   return (

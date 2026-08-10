@@ -11,6 +11,20 @@ const ADMIN_SECTION_OPTIONS = [
   "RECRUITMENT",
   "EMPLOYEE MANAGEMENT",
   "INVENTORY MANAGER",
+  "CLIENTS",
+  "FLEET",
+  "IMPORTATION",
+  "ACCOUNTS",
+  "PERFORMANCE",
+  "SYSTEM",
+];
+
+/** Pre-CLIENTS/FLEET/IMPORTATION defaults — used to migrate legacy role configs. */
+const LEGACY_ADMIN_SECTIONS = [
+  "CORE",
+  "RECRUITMENT",
+  "EMPLOYEE MANAGEMENT",
+  "INVENTORY MANAGER",
   "ACCOUNTS",
   "PERFORMANCE",
   "SYSTEM",
@@ -25,6 +39,8 @@ const PERMISSION_OPTIONS = [
   "stock:read",
   "stock:write",
   "stock:approve",
+  "clients:read",
+  "clients:write",
   "accounts:read",
   "accounts:write",
   "reports:read",
@@ -42,10 +58,11 @@ const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
     "users:read",
     "users:write",
     "payroll:read",
+    "clients:read",
     "reports:read",
     "settings:read",
   ],
-  manager: ["users:read", "reports:read", "stock:read"],
+  manager: ["users:read", "reports:read", "stock:read", "clients:read"],
   employee: ["reports:read"],
 };
 
@@ -70,13 +87,22 @@ const normalizeSettingsMap = (value: unknown, allowed: string[]) => {
   );
 };
 
+const resolveAdminAreaSections = (raw: unknown): string[] => {
+  const list = sanitizeList(raw, ADMIN_SECTION_OPTIONS)
+  if (list.length === 0) return [...ADMIN_SECTION_OPTIONS]
+  // Exact legacy default (pre-CLIENTS/FLEET) → treat as full current defaults.
+  const isExactLegacy =
+    list.length === LEGACY_ADMIN_SECTIONS.length &&
+    LEGACY_ADMIN_SECTIONS.every((section) => list.includes(section))
+  if (isExactLegacy) return [...ADMIN_SECTION_OPTIONS]
+  return list
+}
+
 const buildRoleSectionDefaults = (raw: any) => ({
   company_admin: ADMIN_SECTION_OPTIONS,
-  admin:
-    sanitizeList(raw?.admin, ADMIN_SECTION_OPTIONS).length > 0
-      ? sanitizeList(raw.admin, ADMIN_SECTION_OPTIONS)
-      : ADMIN_SECTION_OPTIONS,
-  hr: sanitizeList(raw?.hr, ADMIN_SECTION_OPTIONS),
+  // Admin-area roles default to full access (including Clients).
+  admin: resolveAdminAreaSections(raw?.admin),
+  hr: resolveAdminAreaSections(raw?.hr),
   manager: sanitizeList(raw?.manager, ADMIN_SECTION_OPTIONS),
   employee: sanitizeList(raw?.employee, ADMIN_SECTION_OPTIONS),
 });
@@ -799,10 +825,12 @@ export class CompanyController {
       const userPermissionsPayload = req.body?.permissionMatrixByUser || {};
 
       const adminSections = sanitizeList(payload.admin, ADMIN_SECTION_OPTIONS);
+      const hrSections = sanitizeList(payload.hr, ADMIN_SECTION_OPTIONS);
       const nextSettings = {
         company_admin: ADMIN_SECTION_OPTIONS,
+        // Empty payload means "keep full access" for admin-area roles.
         admin: adminSections.length > 0 ? adminSections : ADMIN_SECTION_OPTIONS,
-        hr: sanitizeList(payload.hr, ADMIN_SECTION_OPTIONS),
+        hr: hrSections.length > 0 ? hrSections : ADMIN_SECTION_OPTIONS,
         manager: sanitizeList(payload.manager, ADMIN_SECTION_OPTIONS),
         employee: sanitizeList(payload.employee, ADMIN_SECTION_OPTIONS),
       };

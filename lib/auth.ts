@@ -147,5 +147,5 @@ export const hasRole = (requiredRoles: string[]): boolean => {
 
 // Check if user is admin
 export const isAdmin = (): boolean => {
-    return hasRole(['company_admin', 'admin', 'hr'])
+    return hasRole(['company_admin', 'admin', 'hr', 'super_admin'])
 }

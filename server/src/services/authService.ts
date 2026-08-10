@@ -81,6 +81,78 @@ export class AuthService {
     return challengeId
   }
 
+  private static async completePasswordLogin(
+    user: any,
+    extras?: { company?: any },
+  ): Promise<IAPIResponse<LoginSuccessPayload>> {
+    user.lastLoginAt = new Date()
+    await user.save()
+    const token = this.getTokenFromUser(user.toObject() as any)
+    return {
+      success: true,
+      message: "Login successful",
+      data: {
+        user: user.toObject() as any,
+        token,
+        ...(extras?.company ? { company: extras.company } : {}),
+      },
+    }
+  }
+
+  private static async issueOtpOrCompleteLogin(params: {
+    user: any
+    loginType: LoginOtpType
+    companySlug?: string
+    company?: any
+    requireOtp?: boolean
+  }): Promise<IAPIResponse<LoginSuccessPayload | LoginOtpChallenge>> {
+    if (!params.requireOtp) {
+      return this.completePasswordLogin(params.user, {
+        company: params.company,
+      })
+    }
+
+    try {
+      const challengeId = await this.issueLoginOtpChallenge({
+        user: params.user.toObject
+          ? (params.user.toObject() as any)
+          : params.user,
+        loginType: params.loginType,
+        companySlug: params.companySlug,
+      })
+      return {
+        success: true,
+        message: "OTP sent to your email",
+        data: {
+          requiresOtp: true,
+          challengeId,
+          email: params.user.email,
+          loginType: params.loginType,
+        },
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to send login OTP"
+
+      // Password already verified. Do not lock users out when SMTP is down
+      // (local or deployed). Set LOGIN_OTP_STRICT=true to fail instead.
+      if (process.env.LOGIN_OTP_STRICT === "true") {
+        return {
+          success: false,
+          message,
+        }
+      }
+
+      console.warn(
+        "Login OTP email failed; completing login after password verification",
+        { email: params.user.email, loginType: params.loginType, message },
+      )
+      return this.completePasswordLogin(params.user, {
+        company: params.company,
+      })
+    }
+  }
+
   private static getTokenFromUser(user: IUser): string {
     const payload: IJWTPayload = {
       userId: user._id?.toString() || "",
@@ -235,37 +307,11 @@ export class AuthService {
         }
       }
 
-      if (options?.requireOtp) {
-        const challengeId = await this.issueLoginOtpChallenge({
-          user: user.toObject() as any,
-          loginType: "standard",
-        })
-
-        return {
-          success: true,
-          message: "OTP sent to your email",
-          data: {
-            requiresOtp: true,
-            challengeId,
-            email: user.email,
-            loginType: "standard",
-          },
-        }
-      }
-
-      user.lastLoginAt = new Date()
-      await user.save()
-
-      const token = this.getTokenFromUser(user.toObject() as any)
-
-      return {
-        success: true,
-        message: "Login successful",
-        data: {
-          user: user.toObject() as any,
-          token,
-        },
-      }
+      return this.issueOtpOrCompleteLogin({
+        user,
+        loginType: "standard",
+        requireOtp: options?.requireOtp,
+      })
     } catch (error) {
       return {
         success: false,
@@ -712,36 +758,13 @@ export class AuthService {
         }
       }
 
-      if (options?.requireOtp) {
-        const challengeId = await this.issueLoginOtpChallenge({
-          user: user.toObject() as any,
-          loginType: "company",
-          companySlug: slug.toLowerCase(),
-        })
-
-        return {
-          success: true,
-          message: "OTP sent to your email",
-          data: {
-            requiresOtp: true,
-            challengeId,
-            email: user.email,
-            loginType: "company",
-          },
-        }
-      }
-
-      const token = this.getTokenFromUser(user.toObject() as any)
-
-      return {
-        success: true,
-        message: "Login successful",
-        data: {
-          user: user.toObject() as any,
-          token,
-          company: { ...company.toObject() } as ICompany,
-        },
-      }
+      return this.issueOtpOrCompleteLogin({
+        user,
+        loginType: "company",
+        companySlug: slug.toLowerCase(),
+        company: { ...company.toObject() } as ICompany,
+        requireOtp: options?.requireOtp,
+      })
     } catch (error) {
       return {
         success: false,
@@ -846,35 +869,12 @@ export class AuthService {
         }
       }
 
-      if (options?.requireOtp) {
-        const challengeId = await this.issueLoginOtpChallenge({
-          user: user.toObject() as any,
-          loginType: "employee",
-        })
-
-        return {
-          success: true,
-          message: "OTP sent to your email",
-          data: {
-            requiresOtp: true,
-            challengeId,
-            email: user.email,
-            loginType: "employee",
-          },
-        }
-      }
-
-      const token = this.getTokenFromUser(user.toObject() as any)
-
-      return {
-        success: true,
-        message: "Login successful",
-        data: {
-          user: user.toObject() as any,
-          token,
-          company: { ...company.toObject() } as ICompany,
-        },
-      }
+      return this.issueOtpOrCompleteLogin({
+        user,
+        loginType: "employee",
+        company: { ...company.toObject() } as ICompany,
+        requireOtp: options?.requireOtp,
+      })
     } catch (error) {
       return {
         success: false,

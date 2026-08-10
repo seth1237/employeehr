@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Loader2, ShieldCheck, Save, Lock, Eye } from "lucide-react"
 import { api, companyApi, usersApi } from "@/lib/api"
 import { getUser } from "@/lib/auth"
+import { ADMIN_SECTION_OPTIONS } from "@/lib/admin-sections"
 
 type RoleKey = "company_admin" | "admin" | "hr" | "manager" | "employee"
 
@@ -42,17 +43,7 @@ interface Branch {
   code?: string
 }
 
-const FALLBACK_SECTIONS = [
-  "CORE",
-  "RECRUITMENT",
-  "EMPLOYEE MANAGEMENT",
-  "INVENTORY MANAGER",
-  "CLIENTS",
-  "FLEET",
-  "ACCOUNTS",
-  "PERFORMANCE",
-  "SYSTEM",
-]
+const FALLBACK_SECTIONS = [...ADMIN_SECTION_OPTIONS]
 
 const EDITABLE_ROLES: Array<{ key: Exclude<RoleKey, "company_admin">; label: string }> = [
   { key: "admin", label: "Admin" },
@@ -70,6 +61,8 @@ const PERMISSION_LABELS: Record<string, string> = {
   "stock:read": "View stock",
   "stock:write": "Manage stock",
   "stock:approve": "Approve stock actions",
+  "clients:read": "View clients",
+  "clients:write": "Manage clients",
   "accounts:read": "View accounts",
   "accounts:write": "Manage accounts",
   "reports:read": "View reports",
@@ -106,7 +99,7 @@ export default function PageAccessSettingsPage() {
   })
 
   const currentUser = useMemo(() => getUser(), [])
-  const canEdit = currentUser?.role === "company_admin"
+  const canEdit = currentUser?.role === "company_admin" || currentUser?.role === "admin"
 
   useEffect(() => {
     const load = async () => {
@@ -291,6 +284,23 @@ export default function PageAccessSettingsPage() {
       })
 
       if (response.success) {
+        const data = response.data || {}
+        const sections = data.availableSections || FALLBACK_SECTIONS
+        const byRole = data.adminSectionsByRole || {}
+        setAvailableSections(sections)
+        setAccessState({
+          company_admin: byRole.company_admin || sections,
+          admin: byRole.admin || sections,
+          hr: byRole.hr || sections,
+          manager: byRole.manager || [],
+          employee: byRole.employee || [],
+        })
+        setUserOverrides(data.adminSectionsByUser || {})
+        setDepartmentOverrides(data.adminSectionsByDepartment || {})
+        setBranchOverrides(data.adminSectionsByBranch || {})
+        setAvailablePermissions(data.availablePermissions || [])
+        setPermissionMatrix(data.permissionMatrixByRole || {})
+        setUserPermissionOverrides(data.permissionMatrixByUser || {})
         setSuccessMessage("Page visibility updated successfully")
       }
     } catch (saveError: any) {
@@ -327,7 +337,7 @@ export default function PageAccessSettingsPage() {
         <Alert>
           <Lock className="w-4 h-4" />
           <AlertDescription>
-            Only Company Admin can update these settings. You can view but not modify.
+            Only Company Admin or Admin can update these settings. You can view but not modify.
           </AlertDescription>
         </Alert>
       )}

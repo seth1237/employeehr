@@ -42,6 +42,7 @@ import API_URL from "@/lib/apiBase";
 import { parseResponse } from "@/lib/fetchUtils";
 import { companyApi } from "@/lib/api";
 import { getFavoriteHrefs } from "@/lib/admin-personalization";
+import { resolveAdminAllowedSections } from "@/lib/admin-sections";
 import { useEffect, useMemo, useState } from "react";
 
 interface SidebarProps {
@@ -166,6 +167,12 @@ const adminMenuItems = [
     icon: Stamp,
     href: "/admin/stock/services",
     section: "INVENTORY MANAGER",
+  },
+  {
+    label: "Clients Hub",
+    icon: Building2,
+    href: "/admin/clients",
+    section: "CLIENTS",
   },
   {
     label: "Telesales Activity",
@@ -420,67 +427,36 @@ export default function AdminSidebar({
   useEffect(() => {
     const loadSectionAccess = async () => {
       const role = currentUser?.role;
-      if (!role || role === "company_admin") {
+      if (!role || role === "company_admin" || role === "super_admin") {
         setAllowedSections(null);
         return;
       }
 
       try {
         const response = await companyApi.getPageAccess();
-        if (response.success) {
-          const userId = currentUser?._id || (currentUser as any)?.userId;
-          const userSections = userId
-            ? response.data?.adminSectionsByUser?.[userId]
-            : undefined;
-          const roleSections = response.data?.adminSectionsByRole?.[role] || [];
-          const effectiveSections = Array.from(
-            new Set([...(roleSections || []), ...(userSections || [])]),
-          );
-
-          // If current user is a manager, respect department-level sidebar allocations.
-          if (role === "manager") {
-            try {
-              const deptsRes = await companyApi.getDepartments();
-              if (deptsRes?.success && Array.isArray(deptsRes.data)) {
-                // collect sections for departments where this user is manager
-                const deptSections = new Set<string>();
-                const uid = userId;
-                deptsRes.data.forEach((d: any) => {
-                  if (
-                    d?.managerId &&
-                    uid &&
-                    String(d.managerId) === String(uid) &&
-                    Array.isArray(d.sidebarSections)
-                  ) {
-                    d.sidebarSections.forEach((s: string) =>
-                      deptSections.add(s),
-                    );
-                  }
-                });
-                // If department-level allocations exist, only allow those sections
-                if (deptSections.size > 0) {
-                  setAllowedSections(deptSections);
-                  return;
-                }
-              }
-            } catch (e) {
-              // fallback to role/user based sections if fetching departments fails
-            }
-          }
-
-          setAllowedSections(new Set(effectiveSections));
+        if (!response.success) {
+          setAllowedSections(null);
+          return;
         }
+
+        const userId = currentUser?._id || (currentUser as any)?.userId;
+        const allowed = resolveAdminAllowedSections({
+          role,
+          userId,
+          pageAccess: response.data,
+        });
+        setAllowedSections(allowed);
       } catch {
         setAllowedSections(null);
       }
     };
 
     loadSectionAccess();
-  }, [currentUser?.role]);
+  }, [currentUser?.role, currentUser?._id]);
 
   useEffect(() => {
     const role = currentUser?.role;
-    if (!role || !["company_admin", "hr"].includes(role)) {
+    if (!role || !["company_admin", "admin", "hr"].includes(role)) {
       setPendingQuotationCount(0);
       return;
     }

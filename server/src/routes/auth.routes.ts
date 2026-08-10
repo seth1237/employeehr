@@ -1,7 +1,7 @@
 import { Router } from "express"
 import { AuthController } from "../controllers/authController"
 import { authMiddleware } from "../middleware/auth"
-import { authLimiter } from "../middleware/rateLimit.middleware"
+import { authLimiter, authOtpLimiter } from "../middleware/rateLimit.middleware"
 import { validateRequest } from "../middleware/validation.middleware"
 import {
   loginSchema,
@@ -23,12 +23,12 @@ router.post("/company-login", authLimiter, validateRequest(companyLoginSchema), 
 router.post("/employee-login", authLimiter, validateRequest(employeeIdLoginSchema), AuthController.employeeIdLogin)
 router.get("/validate-company/:slug", AuthController.validateCompany)
 
-// Password reset flow
-router.post("/forgot-password", authLimiter, validateRequest(forgotPasswordSchema), AuthController.forgotPassword)
-router.post("/verify-otp", authLimiter, validateRequest(verifyOtpSchema), AuthController.verifyOtp)
-router.post("/verify-login-otp", authLimiter, validateRequest(verifyLoginOtpSchema), AuthController.verifyLoginOtp)
-router.post("/resend-login-otp", authLimiter, AuthController.resendLoginOtp)
-router.post("/reset-password", authLimiter, validateRequest(resetPasswordSchema), AuthController.resetPassword)
+// Password reset / OTP flow — separate softer bucket so OTP retries don't block login
+router.post("/forgot-password", authOtpLimiter, validateRequest(forgotPasswordSchema), AuthController.forgotPassword)
+router.post("/verify-otp", authOtpLimiter, validateRequest(verifyOtpSchema), AuthController.verifyOtp)
+router.post("/verify-login-otp", authOtpLimiter, validateRequest(verifyLoginOtpSchema), AuthController.verifyLoginOtp)
+router.post("/resend-login-otp", authOtpLimiter, AuthController.resendLoginOtp)
+router.post("/reset-password", authOtpLimiter, validateRequest(resetPasswordSchema), AuthController.resetPassword)
 
 // Protected routes
 router.post("/change-password", authMiddleware, AuthController.changePassword)

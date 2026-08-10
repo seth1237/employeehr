@@ -2,74 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { getUser, isAdmin, logout } from "@/lib/auth";
+import { getUser, isAdmin } from "@/lib/auth";
 import { api } from "@/lib/api";
 import Sidebar from "@/components/admin/sidebar";
 import TopNav from "@/components/admin/top-nav";
 import { AiAssistantChat } from "@/components/ai/ai-assistant-chat";
 import { RecentPagesTracker } from "@/components/admin/recent-pages-tracker";
-
-const ADMIN_SECTION_PATHS: Array<{
-  section: string;
-  match: (path: string) => boolean;
-}> = [
-  {
-    section: "CORE",
-    match: (path) => path === "/admin" || path.startsWith("/admin/users"),
-  },
-  {
-    section: "RECRUITMENT",
-    match: (path) =>
-      [
-        "/admin/jobs",
-        "/admin/applications",
-        "/admin/analytics",
-        "/admin/communications",
-      ].some((prefix) => path.startsWith(prefix)),
-  },
-  {
-    section: "EMPLOYEE MANAGEMENT",
-    match: (path) =>
-      [
-        "/admin/leave",
-        "/admin/payroll",
-        "/admin/meetings",
-        "/admin/bookings",
-        "/admin/suggestions",
-        "/admin/badges",
-        "/admin/polls",
-        "/admin/contracts",
-        "/admin/alerts",
-        "/admin/allocations",
-      ].some((prefix) => path.startsWith(prefix)),
-  },
-  {
-    section: "INVENTORY MANAGER",
-    match: (path) => path.startsWith("/admin/stock"),
-  },
-  { section: "CLIENTS", match: (path) => path.startsWith("/admin/clients") },
-  { section: "FLEET", match: (path) => path.startsWith("/admin/fleet") },
-  { section: "ACCOUNTS", match: (path) => path.startsWith("/admin/accounts") },
-  {
-    section: "PERFORMANCE",
-    match: (path) =>
-      ["/admin/kpis", "/admin/feedback-360", "/admin/reports"].some((prefix) =>
-        path.startsWith(prefix),
-      ),
-  },
-  {
-    section: "SYSTEM",
-    match: (path) =>
-      ["/admin/settings", "/admin/stamps"].some((prefix) =>
-        path.startsWith(prefix),
-      ),
-  },
-];
-
-const getSectionForPath = (path: string): string | null => {
-  const rule = ADMIN_SECTION_PATHS.find((entry) => entry.match(path));
-  return rule?.section || null;
-};
+import {
+  getAdminSectionForPath,
+  resolveAdminAllowedSections,
+} from "@/lib/admin-sections";
 
 export default function AdminLayout({
   children,
@@ -114,18 +56,18 @@ export default function AdminLayout({
       return;
     }
 
-    // Only company_admin and hr can access admin panel
+    // company_admin, admin, and hr can access the admin area
     if (!isAdmin()) {
-      // Redirect to appropriate dashboard based on role
       if (user.role === "manager") {
         router.push("/manager");
+      } else if (user.role === "super_admin") {
+        router.push("/owner");
       } else {
         router.push("/employee");
       }
       return;
     }
 
-    // Check setup completion
     checkSetupStatus();
   }, [router]);
 
@@ -134,7 +76,6 @@ export default function AdminLayout({
       const response = await api.setup.getProgress();
 
       if (response.success && response.data) {
-        // If setup is not completed, redirect to setup page
         if (!response.data.setupProgress?.completed) {
           router.push("/setup");
           return;
@@ -150,34 +91,29 @@ export default function AdminLayout({
   useEffect(() => {
     const enforcePageAccess = async () => {
       const user = getUser();
-      if (!user || user.role === "company_admin") return;
+      if (!user || !isAdmin()) return;
+      if (user.role === "company_admin" || user.role === "super_admin") return;
 
-      if (!isAdmin()) return;
-
-      const currentSection = getSectionForPath(pathname);
-      if (!currentSection) return;
+      const currentSection = getAdminSectionForPath(pathname);
+      if (!currentSection || currentSection === "CORE") return;
 
       try {
         const response = await api.company.getPageAccess();
         if (!response.success) return;
 
-        const userId = user._id || user.userId;
-        const userSections: string[] | undefined = userId
-          ? response.data?.adminSectionsByUser?.[userId]
-          : undefined;
-        const roleSections: string[] =
-          response.data?.adminSectionsByRole?.[user.role] || [];
-        const allowedSections: string[] = response.data?.effectiveSections
-          ?.length
-          ? response.data.effectiveSections
-          : Array.from(
-              new Set([...(roleSections || []), ...(userSections || [])]),
-            );
-        if (!allowedSections.includes(currentSection)) {
+        const allowed = resolveAdminAllowedSections({
+          role: user.role,
+          userId: user._id || user.userId,
+          pageAccess: response.data,
+        });
+
+        if (!allowed) return;
+
+        if (!allowed.has(currentSection)) {
           router.push("/admin");
         }
       } catch {
-        // fail open to avoid blocking admin area when settings API is unavailable
+        // fail open when settings API is unavailable
       }
     };
 

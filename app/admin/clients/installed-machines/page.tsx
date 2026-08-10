@@ -176,7 +176,12 @@ interface ServiceRecord {
   machine?: {
     productName?: string;
     serialNumber?: string;
-    client?: { name: string; location?: string };
+    client?: {
+      name: string;
+      number?: string;
+      location?: string;
+      contactPerson?: string;
+    };
   };
   serviceType?: string;
   scheduledDate?: string;
@@ -390,12 +395,16 @@ function ServiceCard({
   onMarkDone,
   onEdit,
   onDelete,
+  onClientClick,
 }: {
   service: ServiceRecord;
   onMarkDone?: (s: ServiceRecord) => void;
   onEdit: (s: ServiceRecord) => void;
   onDelete: (s: ServiceRecord) => void;
+  onClientClick?: (s: ServiceRecord) => void;
 }) {
+  const clientName = service.machine?.client?.name || "";
+
   return (
     <div className="flex items-start justify-between gap-3 rounded-xl border p-4 transition-colors hover:bg-muted/40">
       <div className="min-w-0 flex-1">
@@ -407,7 +416,20 @@ function ServiceCard({
         </div>
         <div className="mt-1 text-xs text-muted-foreground">
           {service.serviceType || "General service"} ·{" "}
-          {service.machine?.client?.name || "—"}
+          {clientName && onClientClick ? (
+            <button
+              type="button"
+              className="font-medium text-foreground underline-offset-2 hover:underline hover:text-teal-700"
+              onClick={(event) => {
+                event.stopPropagation();
+                onClientClick(service);
+              }}
+            >
+              {clientName}
+            </button>
+          ) : (
+            clientName || "—"
+          )}
         </div>
         <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
           {service.scheduledDate && (
@@ -444,6 +466,11 @@ function ServiceCard({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-44">
+              {clientName && onClientClick ? (
+                <DropdownMenuItem onClick={() => onClientClick(service)}>
+                  View client details
+                </DropdownMenuItem>
+              ) : null}
               <DropdownMenuItem onClick={() => onEdit(service)}>
                 Edit service
               </DropdownMenuItem>
@@ -456,6 +483,17 @@ function ServiceCard({
             </DropdownMenuContent>
           </DropdownMenu>
         )}
+        {service.isReminder && clientName && onClientClick ? (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 whitespace-nowrap text-xs"
+            onClick={() => onClientClick(service)}
+          >
+            <Users className="mr-1 h-3.5 w-3.5" />
+            Client
+          </Button>
+        ) : null}
       </div>
     </div>
   );
@@ -504,6 +542,17 @@ export default function InstalledMachinesPage() {
   const [newGroupName, setNewGroupName] = useState("");
   const [newGroupDescription, setNewGroupDescription] = useState("");
   const [showContactsDialog, setShowContactsDialog] = useState(false);
+  const [showClientDetailsDialog, setShowClientDetailsDialog] = useState(false);
+  const [clientDetailsView, setClientDetailsView] = useState<{
+    name: string;
+    number?: string;
+    location?: string;
+    contactPerson?: string;
+    email?: string;
+    contacts: FacilityContact[];
+    machines: InstalledMachine[];
+    customerRow: any | null;
+  } | null>(null);
   const [contactRoles, setContactRoles] = useState<string[]>([
     "Doctor",
     "Lab Technician",
@@ -777,6 +826,81 @@ export default function InstalledMachinesPage() {
       notes: "",
     });
     setShowContactsDialog(true);
+  };
+
+  const openClientDetailsFromService = (service: ServiceRecord) => {
+    const linkedMachine =
+      machines.find((m) => m._id === service.machineId) || null;
+    const clientFromService = service.machine?.client;
+    const clientFromMachine = linkedMachine?.client;
+    const clientName =
+      clientFromService?.name || clientFromMachine?.name || "";
+    if (!clientName) {
+      toast({
+        title: "No client linked",
+        description: "This service has no client details to show.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const proxyMachine: InstalledMachine = linkedMachine || {
+      _id: service.machineId || "unknown",
+      productName: service.machine?.productName || "Machine",
+      serialNumber: service.machine?.serialNumber,
+      client: {
+        name: clientName,
+        number: clientFromService?.number || clientFromMachine?.number,
+        location: clientFromService?.location || clientFromMachine?.location,
+        contactPerson:
+          clientFromService?.contactPerson || clientFromMachine?.contactPerson,
+      },
+    };
+
+    const customerRow = findCustomerRowForMachine(customers, proxyMachine);
+    const contacts = contactsFromCustomerRow(customerRow);
+    if (
+      proxyMachine.attendant &&
+      !contacts.some((c) => namesMatch(c.name, proxyMachine.attendant))
+    ) {
+      contacts.push({
+        role: proxyMachine.attendantRole || "Attendant",
+        name: proxyMachine.attendant,
+        phone: proxyMachine.attendantNumber || "",
+      });
+    }
+
+    const relatedMachines = machines.filter(
+      (m) =>
+        String(m.client?.name || "")
+          .trim()
+          .toLowerCase() === clientName.trim().toLowerCase(),
+    );
+
+    setClientDetailsView({
+      name: clientName,
+      number:
+        customerRow?.client?.number ||
+        clientFromService?.number ||
+        clientFromMachine?.number,
+      location:
+        customerRow?.client?.location ||
+        clientFromService?.location ||
+        clientFromMachine?.location,
+      contactPerson:
+        customerRow?.client?.contactPerson ||
+        clientFromService?.contactPerson ||
+        clientFromMachine?.contactPerson,
+      email: customerRow?.client?.email,
+      contacts,
+      machines: relatedMachines.length
+        ? relatedMachines
+        : linkedMachine
+          ? [linkedMachine]
+          : [],
+      customerRow,
+    });
+    setShowClientDetailsDialog(true);
   };
 
   const addContactToDraft = () => {
@@ -3342,6 +3466,7 @@ export default function InstalledMachinesPage() {
                   onMarkDone={markServiceDone}
                   onEdit={openEditServiceDialog}
                   onDelete={deleteService}
+                  onClientClick={openClientDetailsFromService}
                 />
               ))
             )}
@@ -3370,6 +3495,7 @@ export default function InstalledMachinesPage() {
                   onMarkDone={markServiceDone}
                   onEdit={openEditServiceDialog}
                   onDelete={deleteService}
+                  onClientClick={openClientDetailsFromService}
                 />
               ))
             )}
@@ -3416,6 +3542,7 @@ export default function InstalledMachinesPage() {
                   onMarkDone={markServiceDone}
                   onEdit={openEditServiceDialog}
                   onDelete={deleteService}
+                  onClientClick={openClientDetailsFromService}
                 />
               ))
             )}
@@ -3443,6 +3570,7 @@ export default function InstalledMachinesPage() {
                   service={s}
                   onEdit={openEditServiceDialog}
                   onDelete={deleteService}
+                  onClientClick={openClientDetailsFromService}
                 />
               ))
             )}
@@ -4475,6 +4603,154 @@ export default function InstalledMachinesPage() {
               Close
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Client details from Pending / Due services */}
+      <Dialog
+        open={showClientDetailsDialog}
+        onOpenChange={setShowClientDetailsDialog}
+      >
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Client details — {clientDetailsView?.name || "Client"}
+            </DialogTitle>
+          </DialogHeader>
+          {clientDetailsView ? (
+            <div className="space-y-4">
+              <div className="rounded-lg border bg-muted/30 p-3 space-y-2 text-sm">
+                <div>
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    Client
+                  </p>
+                  <p className="font-medium">{clientDetailsView.name}</p>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                      Phone
+                    </p>
+                    <p>{clientDetailsView.number || "—"}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                      Location
+                    </p>
+                    <p>{clientDetailsView.location || "—"}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                      Contact person
+                    </p>
+                    <p>{clientDetailsView.contactPerson || "—"}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                      Email
+                    </p>
+                    <p>{clientDetailsView.email || "—"}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Contacts</p>
+                {clientDetailsView.contacts.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No contacts saved for this client yet.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {clientDetailsView.contacts.map((person, idx) => (
+                      <div
+                        key={`${person.role}-${person.name}-${idx}`}
+                        className="rounded-md border p-3 text-sm"
+                      >
+                        <p className="font-medium">
+                          {person.role}: {person.name}
+                        </p>
+                        {person.phone ? (
+                          <p className="text-muted-foreground">{person.phone}</p>
+                        ) : null}
+                        {person.email ? (
+                          <p className="text-muted-foreground">{person.email}</p>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-sm font-medium">
+                  Installed machines ({clientDetailsView.machines.length})
+                </p>
+                {clientDetailsView.machines.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No machines linked to this client.
+                  </p>
+                ) : (
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {clientDetailsView.machines.map((machine) => (
+                      <button
+                        key={machine._id}
+                        type="button"
+                        className="w-full rounded-md border p-3 text-left text-sm hover:bg-muted/40"
+                        onClick={() => {
+                          setSelectedMachine(machine);
+                          setSection("machines");
+                          setShowClientDetailsDialog(false);
+                        }}
+                      >
+                        <p className="font-medium">{machine.productName}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {[
+                            machine.serialNumber
+                              ? `SN: ${machine.serialNumber}`
+                              : "",
+                            machine.status || "",
+                            machine.nextServiceDate
+                              ? `Next service: ${formatDate(machine.nextServiceDate)}`
+                              : "",
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-wrap justify-end gap-2 pt-2">
+                {clientDetailsView.customerRow ? (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      openContactsDialog(clientDetailsView.customerRow);
+                      setShowClientDetailsDialog(false);
+                    }}
+                  >
+                    Manage contacts
+                  </Button>
+                ) : null}
+                <Button asChild variant="outline">
+                  <a
+                    href={`/admin/clients/clients-list?q=${encodeURIComponent(clientDetailsView.name)}`}
+                  >
+                    Open in Client CRM
+                  </a>
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowClientDetailsDialog(false)}
+                >
+                  Close
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </DialogContent>
       </Dialog>
 

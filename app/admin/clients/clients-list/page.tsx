@@ -1514,6 +1514,51 @@ export default function AccountsClientsPage() {
     }
   };
 
+  const deleteGroup = async (group: ClientGroup) => {
+    const groupId = String(group._id || "").trim();
+    if (!groupId) return;
+    if (
+      !window.confirm(
+        `Delete group "${group.name}"? Clients will be unassigned from this group (they will not be deleted).`,
+      )
+    ) {
+      return;
+    }
+    try {
+      setSavingCrm(true);
+      await stockApi.deleteClientGroup(groupId);
+      setClientGroups((current) =>
+        current.filter((item) => String(item._id) !== groupId),
+      );
+      setRows((current) =>
+        current.map((row) => {
+          const nextGroupIds = (row.groupIds || [])
+            .map(String)
+            .filter((id) => id !== groupId);
+          if (nextGroupIds.length === (row.groupIds || []).length) return row;
+          return { ...row, groupIds: nextGroupIds };
+        }),
+      );
+      setSelectedMergeGroupIds((current) =>
+        current.filter((id) => id !== groupId),
+      );
+      if (groupFilter === groupId) {
+        setGroupFilter("all");
+      }
+      if (editingGroupId === groupId) {
+        setShowEditGroupDialog(false);
+        setEditingGroupId("");
+        setEditingGroupName("");
+        setEditingGroupDescription("");
+        setShowManageGroupsDialog(true);
+      }
+    } catch (error: any) {
+      window.alert(error?.message || "Failed to delete group");
+    } finally {
+      setSavingCrm(false);
+    }
+  };
+
   const openEditClientDialog = (row: SavedClientRow) => {
     setEditClientForm({
       name: row.client.name || "",
@@ -1794,6 +1839,17 @@ export default function AccountsClientsPage() {
               <Download className="mr-2 h-4 w-4" />
               Export report
             </Button>
+            {canPurgeAllClients ? (
+              <Button
+                size="sm"
+                variant="destructive"
+                disabled={purgingClients || rows.length === 0}
+                onClick={() => void purgeAllClients()}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                {purgingClients ? "Deleting…" : "Delete all clients"}
+              </Button>
+            ) : null}
             <Button
               size="sm"
               variant="outline"
@@ -3255,14 +3311,26 @@ export default function AccountsClientsPage() {
                           </p>
                         </div>
                       </label>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => openEditGroupDialog(group)}
-                      >
-                        <Pencil className="mr-1.5 h-3.5 w-3.5" />
-                        Edit
-                      </Button>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => openEditGroupDialog(group)}
+                        >
+                          <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                          Edit
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-red-700 hover:bg-red-50 hover:text-red-800"
+                          disabled={savingCrm}
+                          onClick={() => void deleteGroup(group)}
+                        >
+                          <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                          Delete
+                        </Button>
+                      </div>
                     </div>
                   );
                 })}
@@ -3393,20 +3461,40 @@ export default function AccountsClientsPage() {
               />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="gap-2 sm:justify-between">
             <Button
+              type="button"
               variant="outline"
-              onClick={() => setShowEditGroupDialog(false)}
-              disabled={savingCrm}
+              className="text-red-700 hover:bg-red-50 hover:text-red-800"
+              disabled={savingCrm || !editingGroupId}
+              onClick={() => {
+                const group = clientGroups.find(
+                  (item) => String(item._id) === editingGroupId,
+                );
+                if (group) void deleteGroup(group);
+              }}
             >
-              Cancel
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete group
             </Button>
-            <Button
-              onClick={() => void saveEditedGroup()}
-              disabled={savingCrm || !editingGroupName.trim()}
-            >
-              {savingCrm ? "Saving…" : "Save group"}
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowEditGroupDialog(false);
+                  setShowManageGroupsDialog(true);
+                }}
+                disabled={savingCrm}
+              >
+                Back
+              </Button>
+              <Button
+                onClick={() => void saveEditedGroup()}
+                disabled={savingCrm || !editingGroupName.trim()}
+              >
+                {savingCrm ? "Saving…" : "Save group"}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

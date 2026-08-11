@@ -396,12 +396,16 @@ function ServiceCard({
   onEdit,
   onDelete,
   onClientClick,
+  onLogCall,
+  onCallHistory,
 }: {
   service: ServiceRecord;
   onMarkDone?: (s: ServiceRecord) => void;
   onEdit: (s: ServiceRecord) => void;
   onDelete: (s: ServiceRecord) => void;
   onClientClick?: (s: ServiceRecord) => void;
+  onLogCall?: (s: ServiceRecord) => void;
+  onCallHistory?: (s: ServiceRecord) => void;
 }) {
   const clientName = service.machine?.client?.name || "";
 
@@ -446,7 +450,29 @@ function ServiceCard({
           </div>
         )}
       </div>
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+        {onLogCall ? (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 whitespace-nowrap text-xs"
+            onClick={() => onLogCall(service)}
+          >
+            <PhoneCall className="mr-1 h-3.5 w-3.5" />
+            Log call
+          </Button>
+        ) : null}
+        {onCallHistory ? (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 whitespace-nowrap text-xs"
+            onClick={() => onCallHistory(service)}
+          >
+            <MessageSquare className="mr-1 h-3.5 w-3.5" />
+            Call history
+          </Button>
+        ) : null}
         {!service.completedDate && !service.isReminder && onMarkDone && (
           <Button
             size="sm"
@@ -465,10 +491,20 @@ function ServiceCard({
                 Actions
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuContent align="end" className="w-48">
               {clientName && onClientClick ? (
                 <DropdownMenuItem onClick={() => onClientClick(service)}>
                   View client details
+                </DropdownMenuItem>
+              ) : null}
+              {onLogCall ? (
+                <DropdownMenuItem onClick={() => onLogCall(service)}>
+                  Log call
+                </DropdownMenuItem>
+              ) : null}
+              {onCallHistory ? (
+                <DropdownMenuItem onClick={() => onCallHistory(service)}>
+                  Call history
                 </DropdownMenuItem>
               ) : null}
               <DropdownMenuItem onClick={() => onEdit(service)}>
@@ -1919,6 +1955,53 @@ export default function InstalledMachinesPage() {
         variant: "destructive",
       });
     }
+  };
+
+  const resolveMachineFromService = (
+    service: ServiceRecord,
+  ): InstalledMachine | null => {
+    const linked = machines.find((m) => m._id === service.machineId);
+    if (linked) return linked;
+    if (!service.machineId && !service.machine?.productName) return null;
+    return {
+      _id: service.machineId || `temp-${service._id}`,
+      productName: service.machine?.productName || "Machine",
+      serialNumber: service.machine?.serialNumber,
+      client: service.machine?.client
+        ? {
+            name: service.machine.client.name,
+            number: service.machine.client.number,
+            location: service.machine.client.location,
+            contactPerson: service.machine.client.contactPerson,
+          }
+        : undefined,
+    };
+  };
+
+  const openLogCallFromService = (service: ServiceRecord) => {
+    const machine = resolveMachineFromService(service);
+    if (!machine?._id || String(machine._id).startsWith("temp-")) {
+      toast({
+        title: "Machine not found",
+        description: "Could not link this service to an installed machine.",
+        variant: "destructive",
+      });
+      return;
+    }
+    void openCallDialogForMachine(machine);
+  };
+
+  const openCallHistoryFromService = (service: ServiceRecord) => {
+    const machine = resolveMachineFromService(service);
+    if (!machine?._id || String(machine._id).startsWith("temp-")) {
+      toast({
+        title: "Machine not found",
+        description: "Could not link this service to an installed machine.",
+        variant: "destructive",
+      });
+      return;
+    }
+    void openHistoryDialogForMachine(machine);
   };
 
   /* ------------------------------- Actions -------------------------------- */
@@ -3467,6 +3550,8 @@ export default function InstalledMachinesPage() {
                   onEdit={openEditServiceDialog}
                   onDelete={deleteService}
                   onClientClick={openClientDetailsFromService}
+                  onLogCall={openLogCallFromService}
+                  onCallHistory={openCallHistoryFromService}
                 />
               ))
             )}
@@ -3496,6 +3581,8 @@ export default function InstalledMachinesPage() {
                   onEdit={openEditServiceDialog}
                   onDelete={deleteService}
                   onClientClick={openClientDetailsFromService}
+                  onLogCall={openLogCallFromService}
+                  onCallHistory={openCallHistoryFromService}
                 />
               ))
             )}
@@ -3543,6 +3630,8 @@ export default function InstalledMachinesPage() {
                   onEdit={openEditServiceDialog}
                   onDelete={deleteService}
                   onClientClick={openClientDetailsFromService}
+                  onLogCall={openLogCallFromService}
+                  onCallHistory={openCallHistoryFromService}
                 />
               ))
             )}

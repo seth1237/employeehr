@@ -134,9 +134,13 @@ export class AuthService {
       const message =
         error instanceof Error ? error.message : "Failed to send login OTP"
 
-      // Password already verified. Do not lock users out when SMTP is down
-      // (local or deployed). Set LOGIN_OTP_STRICT=true to fail instead.
-      if (process.env.LOGIN_OTP_STRICT === "true") {
+      // In production, OTP email failure blocks login. Local/dev may fall through.
+      const strictOtp =
+        process.env.LOGIN_OTP_STRICT === "true" ||
+        (process.env.LOGIN_OTP_STRICT !== "false" &&
+          process.env.NODE_ENV === "production")
+
+      if (strictOtp) {
         return {
           success: false,
           message,

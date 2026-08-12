@@ -64,6 +64,8 @@ import { ApplicationFormController } from "./controllers/applicationFormControll
 import { MeetingController } from "./controllers/meetingController"
 import { StockController } from "./controllers/stockController"
 import dashboardRoutes from "./routes/dashboard.routes"
+import cftIngestRoutes from "./routes/cftIngest.routes"
+import { startCftIngestScheduler } from "./services/cft/cftIngestScheduler"
 
 const app = express()
 const server = createServer(app)
@@ -192,6 +194,7 @@ app.use("/api/complaints", complaintRoutes)
 app.use("/api/vehicles", vehicleRoutes)
 app.use("/api", bookingRoutes)
 app.use("/api/owner", ownerRoutes)
+app.use("/api/cft-ingest", cftIngestRoutes)
 app.use("/api/ai-assistant", aiAssistantRoutes)
 app.use("/api/dashboard", dashboardRoutes)
 
@@ -254,6 +257,9 @@ async function startServer() {
           console.error("[stock-expiry] automated check failed:", error)
         }
       }, expiryCheckIntervalMs)
+
+      // CFT website → cft_raw → Accord ERP (enabled when CFT_IP_SESSION is set)
+      startCftIngestScheduler()
 
     })
   } catch (error) {

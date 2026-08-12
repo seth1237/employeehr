@@ -4,17 +4,11 @@ import type { AuthenticatedRequest } from "../middleware/auth"
 
 export class AuthController {
   private static shouldRequireLoginOtp(req: AuthenticatedRequest) {
-    // Login OTP is opt-in so password login works on local AND deployed hosts.
-    // Enable with REQUIRE_LOGIN_OTP=true (optionally scoped by OTP_REQUIRED_DOMAINS).
-    // Force off with SKIP_LOGIN_OTP=true.
+    // Login OTP is on by default for non-local hosts (including deployed).
+    // Force off with SKIP_LOGIN_OTP=true. Local dev always skips.
 
     if (process.env.SKIP_LOGIN_OTP === "true") {
       console.log("Login OTP bypassed due to SKIP_LOGIN_OTP env var")
-      return false
-    }
-
-    if (process.env.REQUIRE_LOGIN_OTP !== "true") {
-      console.log("Login OTP skipped: REQUIRE_LOGIN_OTP is not enabled")
       return false
     }
 
@@ -68,7 +62,7 @@ export class AuthController {
       return true
     }
 
-    console.log("Login OTP required: REQUIRE_LOGIN_OTP=true", { origin, referer })
+    console.log("Login OTP required", { origin, referer })
     return true
   }
 

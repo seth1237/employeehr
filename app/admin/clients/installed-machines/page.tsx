@@ -259,6 +259,52 @@ const EMPTY_SCHEDULE_FORM: ScheduleInstallationForm = {
   notes: "",
 };
 
+interface ManualAddForm {
+  facilityMode: "existing" | "custom";
+  clientKey: string;
+  customFacilityName: string;
+  customFacilityLocation: string;
+  customFacilityPhone: string;
+  customContactPerson: string;
+  productId: string;
+  serialNumber: string;
+  installationLocation: string;
+  installationDepartment: string;
+  installationDate: string;
+  warrantyUntil: string;
+  installedBy: string;
+  status: string;
+  nextServiceDate: string;
+  attendant: string;
+  attendantRole: string;
+  attendantNumber: string;
+  notes: string;
+  isTrained: boolean;
+}
+
+const EMPTY_MANUAL_ADD_FORM: ManualAddForm = {
+  facilityMode: "existing",
+  clientKey: "",
+  customFacilityName: "",
+  customFacilityLocation: "",
+  customFacilityPhone: "",
+  customContactPerson: "",
+  productId: "",
+  serialNumber: "",
+  installationLocation: "",
+  installationDepartment: "",
+  installationDate: "",
+  warrantyUntil: "",
+  installedBy: "",
+  status: "active",
+  nextServiceDate: "",
+  attendant: "",
+  attendantRole: "",
+  attendantNumber: "",
+  notes: "",
+  isTrained: false,
+};
+
 const SERVICE_TYPE_OPTIONS = [
   "Annual Service",
   "Breakdown",
@@ -561,6 +607,10 @@ export default function InstalledMachinesPage() {
   );
   const [showCandidates, setShowCandidates] = useState(false);
   const [showBulkUploadPanel, setShowBulkUploadPanel] = useState(false);
+  const [showManualAddDialog, setShowManualAddDialog] = useState(false);
+  const [manualAddForm, setManualAddForm] =
+    useState<ManualAddForm>(EMPTY_MANUAL_ADD_FORM);
+  const [products, setProducts] = useState<any[]>([]);
   const [showSchedulePanel, setShowSchedulePanel] = useState(false);
   const [scheduleForm, setScheduleForm] =
     useState<ScheduleInstallationForm>(EMPTY_SCHEDULE_FORM);
@@ -702,7 +752,7 @@ export default function InstalledMachinesPage() {
   const load = async (opts?: { silent?: boolean }) => {
     const silent = startDataLoad(opts, setLoading, setIsRefreshing);
     try {
-      const [mRes, candRes, sRes, tRes, accountsRes, savedRes, groupsRes, rolesRes] = await Promise.all([
+      const [mRes, candRes, sRes, tRes, accountsRes, savedRes, groupsRes, rolesRes, productsRes] = await Promise.all([
         stockApi.getInstalledMachines(),
         stockApi.getInstallableCandidates(),
         stockApi.getMachineServices
@@ -713,6 +763,7 @@ export default function InstalledMachinesPage() {
         stockApi.getSavedClients().catch(() => ({ success: false, data: [] })),
         stockApi.getClientGroups().catch(() => ({ success: false, data: [] })),
         stockApi.getClientContactRoles().catch(() => ({ success: false, data: [] })),
+        stockApi.getProducts().catch(() => ({ success: false, data: [] })),
       ]);
       let usersRes: any = null;
       try {
@@ -761,6 +812,17 @@ export default function InstalledMachinesPage() {
         });
       }
       setCustomers(Array.from(mergedMap.values()));
+
+      const productsArray =
+        productsRes &&
+        (productsRes.data || Array.isArray(productsRes)
+          ? productsRes.data || productsRes
+          : []);
+      setProducts(
+        (productsArray as any[]).filter(
+          (p) => String(p.productType || "physical") !== "service",
+        ),
+      );
       
       const payload = candRes.data ||
         candRes || { categories: [], candidates: [] };
@@ -2088,6 +2150,134 @@ export default function InstalledMachinesPage() {
     }
   };
 
+  const openManualAddDialog = () => {
+    setSection("machines");
+    setShowCandidates(false);
+    setShowBulkUploadPanel(false);
+    setShowSchedulePanel(false);
+    setManualAddForm(EMPTY_MANUAL_ADD_FORM);
+    setShowManualAddDialog(true);
+  };
+
+  const saveManualMachine = async () => {
+    let clientPayload: {
+      name: string;
+      number?: string;
+      location?: string;
+      contactPerson?: string;
+    };
+
+    if (manualAddForm.facilityMode === "existing") {
+      if (!manualAddForm.clientKey) {
+        toast({
+          title: "Facility required",
+          description: "Select a facility or switch to enter a new one.",
+          variant: "destructive",
+        });
+        return;
+      }
+      const customer = customers.find((c) => c.key === manualAddForm.clientKey);
+      if (!customer) {
+        toast({
+          title: "Facility not found",
+          description: "Please select a valid facility.",
+          variant: "destructive",
+        });
+        return;
+      }
+      clientPayload = {
+        name: customer.client?.name || "",
+        number: customer.client?.number || undefined,
+        location: customer.client?.location || undefined,
+        contactPerson: customer.client?.contactPerson || undefined,
+      };
+    } else {
+      if (!manualAddForm.customFacilityName.trim()) {
+        toast({
+          title: "Facility name required",
+          description: "Enter the facility name.",
+          variant: "destructive",
+        });
+        return;
+      }
+      clientPayload = {
+        name: manualAddForm.customFacilityName.trim(),
+        number: manualAddForm.customFacilityPhone.trim() || undefined,
+        location: manualAddForm.customFacilityLocation.trim() || undefined,
+        contactPerson: manualAddForm.customContactPerson.trim() || undefined,
+      };
+    }
+
+    if (!manualAddForm.productId) {
+      toast({
+        title: "Machine required",
+        description: "Select the machine model/product.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const product = products.find((p) => String(p._id) === manualAddForm.productId);
+    if (!product) {
+      toast({
+        title: "Product not found",
+        description: "Please select a valid machine product.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const res = await stockApi.createInstalledMachine({
+        client: clientPayload,
+        productId: product._id,
+        productName: product.name,
+        category: product.category || undefined,
+        serialNumber: manualAddForm.serialNumber.trim() || undefined,
+        installationLocation: manualAddForm.installationLocation.trim() || undefined,
+        installationDepartment:
+          manualAddForm.installationDepartment.trim() || undefined,
+        installationDate: manualAddForm.installationDate || undefined,
+        warrantyUntil: manualAddForm.warrantyUntil || undefined,
+        installedBy: manualAddForm.installedBy.trim() || undefined,
+        status: manualAddForm.status || "active",
+        nextServiceDate: manualAddForm.nextServiceDate || undefined,
+        attendant: manualAddForm.attendant.trim() || undefined,
+        attendantNumber: manualAddForm.attendantNumber.trim() || undefined,
+        attendantRole: manualAddForm.attendantRole.trim() || undefined,
+        notes: manualAddForm.notes.trim() || undefined,
+        isTrained: manualAddForm.isTrained,
+      });
+
+      if (!res?.success && !res?.data) {
+        throw new Error(res?.message || "Failed to create machine");
+      }
+
+      const created = res.data;
+      if (created?._id) {
+        setMachines((prev) => [created, ...prev]);
+      } else {
+        await load({ silent: true });
+      }
+
+      toast({
+        title: "Machine added",
+        description: `${product.name} registered at ${clientPayload.name}.`,
+      });
+      setShowManualAddDialog(false);
+      setManualAddForm(EMPTY_MANUAL_ADD_FORM);
+    } catch (err: any) {
+      toast({
+        title: "Save failed",
+        description: err?.message || "Could not add machine.",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const scheduleInstallation = async () => {
     if (!scheduleForm.invoiceId) return alert("Select an invoice");
     if (!scheduleForm.candidateKey) return alert("Select a machine from the invoice");
@@ -2381,6 +2571,7 @@ export default function InstalledMachinesPage() {
                 if (!showSchedulePanel) {
                   setShowCandidates(false);
                   setShowBulkUploadPanel(false);
+                  setShowManualAddDialog(false);
                 }
               }}
               className="flex items-center gap-2"
@@ -2395,6 +2586,7 @@ export default function InstalledMachinesPage() {
                 if (!showCandidates) {
                   setShowBulkUploadPanel(false);
                   setShowSchedulePanel(false);
+                  setShowManualAddDialog(false);
                 }
               }}
               variant="outline"
@@ -2402,6 +2594,14 @@ export default function InstalledMachinesPage() {
             >
               <Plus className="h-4 w-4" />
               {showCandidates ? "Hide" : "Add"} Machines
+            </Button>
+            <Button
+              variant="outline"
+              className="flex items-center gap-2"
+              onClick={openManualAddDialog}
+            >
+              <Plus className="h-4 w-4" />
+              Add Machine Manually
             </Button>
             <Button
               variant={showBulkUploadPanel ? "default" : "outline"}
@@ -2412,6 +2612,7 @@ export default function InstalledMachinesPage() {
                 if (!showBulkUploadPanel) {
                   setShowCandidates(false);
                   setShowSchedulePanel(false);
+                  setShowManualAddDialog(false);
                 }
               }}
             >
@@ -3666,6 +3867,366 @@ export default function InstalledMachinesPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* ------------------------------ Manual add machine dialog ------------------------------ */}
+      <Dialog open={showManualAddDialog} onOpenChange={setShowManualAddDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Add Machine Manually</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Facility source</Label>
+              <select
+                className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                value={manualAddForm.facilityMode}
+                onChange={(e) =>
+                  setManualAddForm((prev) => ({
+                    ...prev,
+                    facilityMode: e.target.value as "existing" | "custom",
+                    clientKey: "",
+                    customFacilityName: "",
+                    customFacilityLocation: "",
+                    customFacilityPhone: "",
+                    customContactPerson: "",
+                  }))
+                }
+              >
+                <option value="existing">Select existing facility</option>
+                <option value="custom">Enter new facility</option>
+              </select>
+            </div>
+
+            {manualAddForm.facilityMode === "existing" ? (
+              <div>
+                <Label>Facility *</Label>
+                <select
+                  className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                  value={manualAddForm.clientKey}
+                  onChange={(e) =>
+                    setManualAddForm((prev) => ({
+                      ...prev,
+                      clientKey: e.target.value,
+                    }))
+                  }
+                >
+                  <option value="">Select facility…</option>
+                  {customers.map((c) => (
+                    <option key={c.key} value={c.key}>
+                      {c.client?.name}
+                      {c.client?.location ? ` · ${c.client.location}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
+                <div>
+                  <Label>Facility name *</Label>
+                  <Input
+                    value={manualAddForm.customFacilityName}
+                    onChange={(e) =>
+                      setManualAddForm((prev) => ({
+                        ...prev,
+                        customFacilityName: e.target.value,
+                      }))
+                    }
+                    placeholder="e.g., Nairobi Hospital"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Location (optional)</Label>
+                    <Input
+                      value={manualAddForm.customFacilityLocation}
+                      onChange={(e) =>
+                        setManualAddForm((prev) => ({
+                          ...prev,
+                          customFacilityLocation: e.target.value,
+                        }))
+                      }
+                      placeholder="Region / town"
+                    />
+                  </div>
+                  <div>
+                    <Label>Phone (optional)</Label>
+                    <Input
+                      value={manualAddForm.customFacilityPhone}
+                      onChange={(e) =>
+                        setManualAddForm((prev) => ({
+                          ...prev,
+                          customFacilityPhone: e.target.value,
+                        }))
+                      }
+                      placeholder="+254..."
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label>Contact person (optional)</Label>
+                  <Input
+                    value={manualAddForm.customContactPerson}
+                    onChange={(e) =>
+                      setManualAddForm((prev) => ({
+                        ...prev,
+                        customContactPerson: e.target.value,
+                      }))
+                    }
+                    placeholder="Primary contact at facility"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div>
+              <Label>Machine / product *</Label>
+              <select
+                className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                value={manualAddForm.productId}
+                onChange={(e) =>
+                  setManualAddForm((prev) => ({
+                    ...prev,
+                    productId: e.target.value,
+                  }))
+                }
+              >
+                <option value="">Select machine…</option>
+                {products.map((p) => (
+                  <option key={p._id} value={p._id}>
+                    {p.name}
+                    {p.category ? ` · ${p.category}` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Serial number (optional)</Label>
+                <Input
+                  value={manualAddForm.serialNumber}
+                  onChange={(e) =>
+                    setManualAddForm((prev) => ({
+                      ...prev,
+                      serialNumber: e.target.value,
+                    }))
+                  }
+                  placeholder="e.g., SN-2024-001"
+                />
+              </div>
+              <div>
+                <Label>Installation location (optional)</Label>
+                <Input
+                  value={manualAddForm.installationLocation}
+                  onChange={(e) =>
+                    setManualAddForm((prev) => ({
+                      ...prev,
+                      installationLocation: e.target.value,
+                    }))
+                  }
+                  placeholder="e.g., Lab 1, Room 201"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Department (optional)</Label>
+                <Input
+                  value={manualAddForm.installationDepartment}
+                  onChange={(e) =>
+                    setManualAddForm((prev) => ({
+                      ...prev,
+                      installationDepartment: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div>
+                <Label>Machine status</Label>
+                <select
+                  className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                  value={manualAddForm.status}
+                  onChange={(e) =>
+                    setManualAddForm((prev) => ({
+                      ...prev,
+                      status: e.target.value,
+                    }))
+                  }
+                >
+                  {MACHINE_STATUS_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Installation date (optional)</Label>
+                <Input
+                  type="date"
+                  value={manualAddForm.installationDate}
+                  onChange={(e) =>
+                    setManualAddForm((prev) => ({
+                      ...prev,
+                      installationDate: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div>
+                <Label>Warranty until (optional)</Label>
+                <Input
+                  type="date"
+                  value={manualAddForm.warrantyUntil}
+                  onChange={(e) =>
+                    setManualAddForm((prev) => ({
+                      ...prev,
+                      warrantyUntil: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Installed by (optional)</Label>
+                <select
+                  className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                  value={manualAddForm.installedBy}
+                  onChange={(e) =>
+                    setManualAddForm((prev) => ({
+                      ...prev,
+                      installedBy: e.target.value,
+                    }))
+                  }
+                >
+                  <option value="">Select engineer…</option>
+                  {employees.map((employee) => {
+                    const label = getEmployeeLabel(employee);
+                    return (
+                      <option key={employee._id} value={label}>
+                        {label}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+              <div>
+                <Label>Next service date (optional)</Label>
+                <Input
+                  type="date"
+                  value={manualAddForm.nextServiceDate}
+                  onChange={(e) =>
+                    setManualAddForm((prev) => ({
+                      ...prev,
+                      nextServiceDate: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <Label>Attendant role (optional)</Label>
+                <select
+                  className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                  value={manualAddForm.attendantRole}
+                  onChange={(e) =>
+                    setManualAddForm((prev) => ({
+                      ...prev,
+                      attendantRole: e.target.value,
+                    }))
+                  }
+                >
+                  <option value="">Select role…</option>
+                  {contactRoles.map((role) => (
+                    <option key={role} value={role}>
+                      {role}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <Label>Attendant name (optional)</Label>
+                <Input
+                  value={manualAddForm.attendant}
+                  onChange={(e) =>
+                    setManualAddForm((prev) => ({
+                      ...prev,
+                      attendant: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div>
+                <Label>Attendant phone (optional)</Label>
+                <Input
+                  value={manualAddForm.attendantNumber}
+                  onChange={(e) =>
+                    setManualAddForm((prev) => ({
+                      ...prev,
+                      attendantNumber: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label>Notes (optional)</Label>
+              <textarea
+                value={manualAddForm.notes}
+                onChange={(e) =>
+                  setManualAddForm((prev) => ({
+                    ...prev,
+                    notes: e.target.value,
+                  }))
+                }
+                className="w-full rounded border px-3 py-2 text-sm"
+                rows={3}
+                placeholder="Any additional notes"
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Checkbox
+                checked={manualAddForm.isTrained}
+                onCheckedChange={(checked) =>
+                  setManualAddForm((prev) => ({
+                    ...prev,
+                    isTrained: checked === true,
+                  }))
+                }
+              />
+              <Label className="cursor-pointer flex-1 mb-0">
+                Operator is trained on this machine
+              </Label>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <Button
+                onClick={() => void saveManualMachine()}
+                disabled={saving}
+                className="flex-1"
+              >
+                {saving ? "Saving..." : "Add Machine"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setShowManualAddDialog(false)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* ------------------------------ Edit machine dialog ------------------------------ */}
       <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>

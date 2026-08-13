@@ -11,6 +11,8 @@ export interface IStockProduct {
   currentQuantity: number
   assignedUsers: string[]
   isOutsourced?: boolean
+  taxable?: boolean
+  taxRate?: number
   expiryEnabled?: boolean
   expiryDate?: Date | null
   expiryReminderDays?: number
@@ -39,6 +41,8 @@ const stockProductSchema = new Schema<IStockProduct>(
     currentQuantity: { type: Number, required: true, min: 0, default: 0 },
     assignedUsers: [{ type: String }],
     isOutsourced: { type: Boolean, default: false },
+    taxable: { type: Boolean, default: false, index: true },
+    taxRate: { type: Number, min: 0, max: 100, default: 16 },
     expiryEnabled: { type: Boolean, default: false },
     expiryDate: { type: Date, default: null },
     expiryReminderDays: { type: Number, min: 0, default: 7 },

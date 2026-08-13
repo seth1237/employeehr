@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
-import { History, MessageSquare, Search, Send, Users, ChevronDown, X } from "lucide-react"
+import { History, MessageSquare, Search, Send, Users, ChevronDown, ChevronUp, X } from "lucide-react"
 import { TableSkeleton } from "@/components/admin/ui/page-states"
 import {
   Dialog,
@@ -52,6 +52,17 @@ interface ClientGroupOption {
   memberKeys?: string[]
 }
 
+interface BulkSmsRecipient {
+  key: string
+  name: string
+  phone: string
+  normalizedPhone?: string
+  location?: string
+  status: "sent" | "failed" | "skipped"
+  errorMessage?: string
+  sentAt?: string
+}
+
 interface BulkSmsCampaign {
   _id: string
   name: string
@@ -61,8 +72,11 @@ interface BulkSmsCampaign {
   failedCount: number
   skippedCount: number
   status: "completed" | "completed_with_errors" | "failed"
+  recipients?: BulkSmsRecipient[]
   createdAt: string
 }
+
+type CampaignReportTab = "failed" | "sent" | "skipped" | "all"
 
 function MultiSelectFilter({
   label,
@@ -159,6 +173,8 @@ export default function BulkSmsPage() {
   const [status, setStatus] = useState("")
   const [error, setError] = useState("")
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [expandedCampaignId, setExpandedCampaignId] = useState<string | null>(null)
+  const [campaignReportTab, setCampaignReportTab] = useState<CampaignReportTab>("failed")
 
   const [branding, setBranding] = useState<{ primaryColor?: string; secondaryColor?: string }>({})
   const primaryColor = branding.primaryColor || "#0f766e"
@@ -410,11 +426,20 @@ export default function BulkSmsPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
+            <Dialog
+              open={historyOpen}
+              onOpenChange={(open) => {
+                setHistoryOpen(open)
+                if (!open) {
+                  setExpandedCampaignId(null)
+                  setCampaignReportTab("failed")
+                }
+              }}
+            >
               <DialogTrigger asChild>
                 <Button variant="outline"><History className="mr-2 h-4 w-4" /> Campaign History</Button>
               </DialogTrigger>
-              <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+              <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>Campaign History</DialogTitle>
                 </DialogHeader>
@@ -422,7 +447,18 @@ export default function BulkSmsPage() {
                   {campaigns.length === 0 ? (
                     <div className="py-12 text-center text-muted-foreground">No campaigns found.</div>
                   ) : (
-                    campaigns.map((item) => (
+                    campaigns.map((item) => {
+                      const recipients = Array.isArray(item.recipients) ? item.recipients : []
+                      const isExpanded = expandedCampaignId === item._id
+                      const defaultTab: CampaignReportTab =
+                        item.failedCount > 0 ? "failed" : item.sentCount > 0 ? "sent" : "all"
+                      const activeTab = isExpanded ? campaignReportTab : defaultTab
+                      const filteredRecipients =
+                        activeTab === "all"
+                          ? recipients
+                          : recipients.filter((recipient) => recipient.status === activeTab)
+
+                      return (
                       <div key={item._id} className="rounded-xl border p-4 space-y-3">
                         <div className="flex items-start justify-between gap-4">
                           <div>
@@ -442,7 +478,7 @@ export default function BulkSmsPage() {
                         </div>
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2">
                           <div className="space-y-1">
-                            <p className="text-xs text-muted-foreground uppercase font-medium">Audience</p>
+                            <p className="text-xs text-muted-foreground uppercase font-medium">Total</p>
                             <p className="text-xl font-bold">{item.audienceCount}</p>
                           </div>
                           <div className="space-y-1 text-green-600">
@@ -458,8 +494,123 @@ export default function BulkSmsPage() {
                             <p className="text-xl font-bold">{item.skippedCount}</p>
                           </div>
                         </div>
+
+                        <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                          <p className="text-xs text-muted-foreground">
+                            {recipients.length > 0
+                              ? "Open the report to see numbers that sent or failed."
+                              : "No recipient-level details stored for this campaign."}
+                          </p>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={recipients.length === 0}
+                            onClick={() => {
+                              if (isExpanded) {
+                                setExpandedCampaignId(null)
+                                return
+                              }
+                              setExpandedCampaignId(item._id)
+                              setCampaignReportTab(defaultTab)
+                            }}
+                          >
+                            {isExpanded ? (
+                              <>
+                                <ChevronUp className="mr-1.5 h-4 w-4" />
+                                Hide report
+                              </>
+                            ) : (
+                              <>
+                                <ChevronDown className="mr-1.5 h-4 w-4" />
+                                View report
+                              </>
+                            )}
+                          </Button>
+                        </div>
+
+                        {isExpanded && recipients.length > 0 ? (
+                          <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
+                            <div className="flex flex-wrap gap-2">
+                              {(
+                                [
+                                  { key: "failed", label: `Failed (${item.failedCount})` },
+                                  { key: "sent", label: `Sent (${item.sentCount})` },
+                                  { key: "skipped", label: `Skipped (${item.skippedCount})` },
+                                  { key: "all", label: `All (${recipients.length})` },
+                                ] as Array<{ key: CampaignReportTab; label: string }>
+                              ).map((tab) => (
+                                <Button
+                                  key={tab.key}
+                                  type="button"
+                                  size="sm"
+                                  variant={activeTab === tab.key ? "default" : "outline"}
+                                  onClick={() => setCampaignReportTab(tab.key)}
+                                >
+                                  {tab.label}
+                                </Button>
+                              ))}
+                            </div>
+
+                            {filteredRecipients.length === 0 ? (
+                              <p className="py-6 text-center text-sm text-muted-foreground">
+                                No {activeTab === "all" ? "" : `${activeTab} `}recipients in this campaign.
+                              </p>
+                            ) : (
+                              <div className="overflow-x-auto rounded-md border bg-background">
+                                <table className="w-full min-w-[640px] text-sm">
+                                  <thead className="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                                    <tr>
+                                      <th className="px-3 py-2 font-medium">Name</th>
+                                      <th className="px-3 py-2 font-medium">Phone</th>
+                                      <th className="px-3 py-2 font-medium">Location</th>
+                                      <th className="px-3 py-2 font-medium">Status</th>
+                                      <th className="px-3 py-2 font-medium">Details</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {filteredRecipients.map((recipient) => (
+                                      <tr key={`${item._id}-${recipient.key}-${recipient.phone}`} className="border-b last:border-0">
+                                        <td className="px-3 py-2 align-top font-medium">{recipient.name || "—"}</td>
+                                        <td className="px-3 py-2 align-top font-mono text-xs">
+                                          {recipient.normalizedPhone || recipient.phone || "—"}
+                                        </td>
+                                        <td className="px-3 py-2 align-top text-muted-foreground">
+                                          {recipient.location || "—"}
+                                        </td>
+                                        <td className="px-3 py-2 align-top">
+                                          <Badge
+                                            className={
+                                              recipient.status === "sent"
+                                                ? "bg-green-100 text-green-700"
+                                                : recipient.status === "failed"
+                                                  ? "bg-red-100 text-red-700"
+                                                  : "bg-slate-100 text-slate-700"
+                                            }
+                                          >
+                                            {recipient.status}
+                                          </Badge>
+                                        </td>
+                                        <td className="px-3 py-2 align-top text-muted-foreground">
+                                          {recipient.status === "failed"
+                                            ? recipient.errorMessage || "Send failed"
+                                            : recipient.status === "sent"
+                                              ? recipient.sentAt
+                                                ? `Sent ${new Date(recipient.sentAt).toLocaleString()}`
+                                                : "Delivered to provider"
+                                              : "Skipped"}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+                        ) : null}
                       </div>
-                    ))
+                      )
+                    })
                   )}
                 </div>
               </DialogContent>

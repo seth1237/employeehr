@@ -17,6 +17,8 @@ import { ClientCrmController } from "../controllers/clientCrmController";
 const router = Router();
 
 router.get("/public/products", StockController.publicGetProducts);
+router.get("/public/products/:id", StockController.publicGetProductById);
+router.get("/public/categories", StockController.publicGetCategories);
 router.post("/public/quote-requests", StockController.createWebsiteQuotationRequest);
 router.get(
   "/public/quotations/:quotationId/pdf",

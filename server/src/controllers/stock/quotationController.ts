@@ -5,7 +5,7 @@ import { StockQuotation } from "../../models/StockQuotation"
 import { QuotationFollowUp } from "../../models/QuotationFollowUp"
 import { Branch } from "../../models/Branch"
 import { User } from "../../models/User"
-import { buildQuotationItems, generateDocumentNumber, isAdminRole } from "./stockShared"
+import { buildQuotationItems, generateDocumentNumber, isAdminRole, summarizeDocumentTotals } from "./stockShared"
 
 function toValidObjectIds(values: Array<string | undefined | null>) {
   return [
@@ -72,9 +72,7 @@ export class QuotationController {
       const normalizedLocation = String(clientLocation || "N/A").trim() || "N/A"
       const normalizedContactPerson = String(clientContactPerson || "").trim()
       const normalizedItems = await buildQuotationItems(org_id, items || [])
-      const subTotal = Number(
-        normalizedItems.reduce((sum, item) => sum + item.lineTotal, 0).toFixed(2),
-      )
+      const { subTotal, taxTotal, grandTotal } = summarizeDocumentTotals(normalizedItems)
 
       const quotation = await StockQuotation.create({
         org_id,
@@ -87,6 +85,8 @@ export class QuotationController {
         },
         items: normalizedItems,
         subTotal,
+        taxTotal,
+        grandTotal,
         status: req.user?.role === "employee" ? "pending_approval" : "draft",
         createdBy,
         ownerUserId: ownerUserId ? String(ownerUserId).trim() : undefined,
@@ -264,9 +264,7 @@ export class QuotationController {
       const normalizedLocation = String(clientLocation || "N/A").trim() || "N/A"
       const normalizedContactPerson = String(clientContactPerson || "").trim()
       const normalizedItems = await buildQuotationItems(org_id, items || [])
-      const subTotal = Number(
-        normalizedItems.reduce((sum, item) => sum + item.lineTotal, 0).toFixed(2),
-      )
+      const { subTotal, taxTotal, grandTotal } = summarizeDocumentTotals(normalizedItems)
 
       quotation.client = {
         name: String(clientName).trim(),
@@ -276,6 +274,8 @@ export class QuotationController {
       }
       quotation.items = normalizedItems as typeof quotation.items
       quotation.subTotal = subTotal
+      quotation.taxTotal = taxTotal
+      quotation.grandTotal = grandTotal
 
       await quotation.save()
       return res.status(200).json({ success: true, data: quotation })

@@ -264,6 +264,39 @@ function statusBadgeClass(status?: string) {
   return "bg-slate-50 text-slate-700 border-slate-200"
 }
 
+type ReportSectionKey =
+  | "summary"
+  | "callLogs"
+  | "machineFollowUps"
+  | "plannerServices"
+  | "plannerInstallations"
+  | "plannerServicesDue"
+  | "plannerMachineFollowUps"
+  | "plannerClientFollowUps"
+  | "servicesCompleted"
+  | "quotations"
+  | "conversions"
+  | "newClients"
+
+const REPORT_SECTION_OPTIONS: Array<{ key: ReportSectionKey; label: string }> = [
+  { key: "summary", label: "Performance summary" },
+  { key: "callLogs", label: "Call log activity" },
+  { key: "machineFollowUps", label: "Machine follow-up responses" },
+  { key: "plannerServices", label: "Planner — scheduled services" },
+  { key: "plannerInstallations", label: "Planner — scheduled installations" },
+  { key: "plannerServicesDue", label: "Planner — machine services due" },
+  { key: "plannerMachineFollowUps", label: "Planner — machine follow-ups" },
+  { key: "plannerClientFollowUps", label: "Planner — client follow-ups" },
+  { key: "servicesCompleted", label: "Services completed" },
+  { key: "quotations", label: "Quotations generated" },
+  { key: "conversions", label: "Invoices converted" },
+  { key: "newClients", label: "New clients onboarded" },
+]
+
+const DEFAULT_REPORT_SECTIONS = Object.fromEntries(
+  REPORT_SECTION_OPTIONS.map((option) => [option.key, true]),
+) as Record<ReportSectionKey, boolean>
+
 export default function TelesalesActivityPage() {
   const { toast } = useToast()
   const [loading, setLoading] = useState(true)
@@ -278,6 +311,9 @@ export default function TelesalesActivityPage() {
   const [exportTo, setExportTo] = useState("")
   const [exportPersonId, setExportPersonId] = useState<string>("all")
   const [viewPersonId, setViewPersonId] = useState<string>("all")
+  const [reportSections, setReportSections] = useState<Record<ReportSectionKey, boolean>>(
+    () => ({ ...DEFAULT_REPORT_SECTIONS }),
+  )
 
   const primaryColor = branding.primaryColor || "#0f766e"
   const secondaryColor = branding.secondaryColor || "#0ea5e9"
@@ -400,8 +436,32 @@ export default function TelesalesActivityPage() {
     }
   }
 
+  const selectedReportSectionCount = useMemo(
+    () => REPORT_SECTION_OPTIONS.filter((option) => reportSections[option.key]).length,
+    [reportSections],
+  )
+
+  const toggleReportSection = (key: ReportSectionKey, checked: boolean) => {
+    setReportSections((prev) => ({ ...prev, [key]: checked }))
+  }
+
+  const selectAllReportSections = () => {
+    setReportSections({ ...DEFAULT_REPORT_SECTIONS })
+  }
+
+  const clearReportSections = () => {
+    setReportSections(
+      Object.fromEntries(
+        REPORT_SECTION_OPTIONS.map((option) => [option.key, false]),
+      ) as Record<ReportSectionKey, boolean>,
+    )
+  }
+
   const exportPdf = async () => {
     try {
+      if (selectedReportSectionCount === 0) {
+        throw new Error("Select at least one section to include in the report")
+      }
       setExporting(true)
       const range = resolveExportRange()
       const personId =
@@ -441,6 +501,7 @@ export default function TelesalesActivityPage() {
         periodStr: range.label,
         reportTitle: range.title,
         personLabel,
+        sections: reportSections,
       })
       toast({
         title: "Report exported",
@@ -561,7 +622,7 @@ export default function TelesalesActivityPage() {
               size="sm"
               style={{ backgroundColor: primaryColor }}
               className="text-white hover:opacity-90"
-              disabled={!data || exporting}
+              disabled={!data || exporting || selectedReportSectionCount === 0}
               onClick={() => void exportPdf()}
             >
               <Download className="h-4 w-4 mr-1.5" />
@@ -573,6 +634,46 @@ export default function TelesalesActivityPage() {
                 Open Telesales
               </Link>
             </Button>
+          </div>
+        </div>
+
+        <div
+          className="mt-3 rounded-xl border-2 bg-white p-4 space-y-3 shadow-sm"
+          style={{ borderColor: primaryColor }}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-semibold" style={{ color: primaryColor }}>
+                Include in PDF report
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Tick what should appear in the export · {selectedReportSectionCount} selected
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" size="sm" variant="outline" onClick={selectAllReportSections}>
+                Select all
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={clearReportSections}>
+                Clear
+              </Button>
+            </div>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {REPORT_SECTION_OPTIONS.map((option) => (
+              <label
+                key={option.key}
+                className="flex cursor-pointer items-start gap-2 rounded-md border bg-background px-2.5 py-2 text-sm hover:bg-muted/40"
+              >
+                <input
+                  type="checkbox"
+                  className="mt-1 h-4 w-4 accent-teal-700"
+                  checked={reportSections[option.key]}
+                  onChange={(e) => toggleReportSection(option.key, e.target.checked)}
+                />
+                <span className="leading-snug">{option.label}</span>
+              </label>
+            ))}
           </div>
         </div>
 
@@ -675,7 +776,7 @@ export default function TelesalesActivityPage() {
         </div>
       </div>
 
-      <Tabs defaultValue="performance" className="space-y-4">
+      <Tabs defaultValue="reports" className="space-y-4">
         <TabsList>
           <TabsTrigger value="performance">Performance & activity</TabsTrigger>
           <TabsTrigger value="planner">Planner</TabsTrigger>
@@ -952,10 +1053,15 @@ export default function TelesalesActivityPage() {
                 </p>
               )}
 
+              <p className="text-xs text-muted-foreground">
+                Section checklist is at the top of this page under{" "}
+                <span className="font-medium text-foreground">Include in PDF report</span>.
+              </p>
+
               <Button
                 style={{ backgroundColor: primaryColor }}
                 className="text-white hover:opacity-90"
-                disabled={exporting}
+                disabled={exporting || selectedReportSectionCount === 0}
                 onClick={() => void exportPdf()}
               >
                 <Download className="h-4 w-4 mr-1.5" />
@@ -972,23 +1078,32 @@ export default function TelesalesActivityPage() {
             <ActivityTable
               title="Call log activity"
               empty="No calls logged in this period"
-              headers={["Date", "Client", "Purpose", "Focus", "Outcome", "By"]}
+              headers={["Client", "Purpose", "Lead", "Notes discussed"]}
               rows={(activity?.callLogs || []).map((c) => [
-                formatDate(c.createdAt),
-                c.clientName,
-                c.callPurpose,
-                (c.focusCategories || []).join(", ") || "—",
-                <span key={c._id} className="inline-flex items-center gap-1">
-                  <Badge variant="outline" className={statusBadgeClass(c.outcome)}>
-                    {c.outcome}
-                  </Badge>
-                  {c.hasLead ? (
-                    <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">
-                      Lead
-                    </Badge>
-                  ) : null}
+                <span key={`${c._id}-client`} className="font-medium whitespace-nowrap">
+                  {c.clientName || "—"}
                 </span>,
-                c.createdByName,
+                <span key={`${c._id}-purpose`} className="whitespace-nowrap">
+                  {c.callPurpose || "—"}
+                </span>,
+                <Badge
+                  key={`${c._id}-lead`}
+                  variant="outline"
+                  className={
+                    c.hasLead
+                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                      : "bg-slate-50 text-slate-600 border-slate-200"
+                  }
+                >
+                  {c.hasLead ? "Lead" : "No"}
+                </Badge>,
+                <span
+                  key={`${c._id}-note`}
+                  className="block max-w-[280px] whitespace-normal text-[10px] leading-tight text-muted-foreground"
+                  title={c.note || undefined}
+                >
+                  {c.note?.trim() ? c.note.trim() : "—"}
+                </span>,
               ])}
             />
             <ActivityTable
@@ -1126,7 +1241,7 @@ function ActivityTable({
                 rows.map((row, idx) => (
                   <tr key={idx} className="border-b last:border-0 hover:bg-muted/40 transition-colors">
                     {row.map((cell, i) => (
-                      <td key={i} className="px-3 py-2 align-top whitespace-nowrap">
+                      <td key={i} className="px-3 py-2 align-top">
                         {cell}
                       </td>
                     ))}

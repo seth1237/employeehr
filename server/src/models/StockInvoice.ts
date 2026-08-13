@@ -6,6 +6,10 @@ interface IInvoiceItem {
   quantity: number
   unitPrice: number
   lineTotal: number
+  taxable?: boolean
+  taxRate?: number
+  taxAmount?: number
+  totalAfterTax?: number
   description?: string
   productDescription?: string
   productType?: string
@@ -30,6 +34,8 @@ export interface IStockInvoice {
   clientProfileId?: string
   items: IInvoiceItem[]
   subTotal: number
+  taxTotal?: number
+  grandTotal?: number
   etims?: {
     status: "not_posted" | "posted" | "failed"
     kraInvoiceId?: string
@@ -90,6 +96,10 @@ const invoiceItemSchema = new Schema<IInvoiceItem>(
     quantity: { type: Number, required: true, min: 1 },
     unitPrice: { type: Number, required: true, min: 0 },
     lineTotal: { type: Number, required: true, min: 0 },
+    taxable: { type: Boolean, default: false },
+    taxRate: { type: Number, min: 0, max: 100, default: 0 },
+    taxAmount: { type: Number, min: 0, default: 0 },
+    totalAfterTax: { type: Number, min: 0 },
     description: { type: String },
     productDescription: { type: String },
     productType: { type: String },
@@ -114,6 +124,8 @@ const stockInvoiceSchema = new Schema<IStockInvoice>(
     clientProfileId: { type: String },
     items: { type: [invoiceItemSchema], required: true },
     subTotal: { type: Number, required: true, min: 0 },
+    taxTotal: { type: Number, min: 0, default: 0 },
+    grandTotal: { type: Number, min: 0 },
     etims: {
       status: {
         type: String,

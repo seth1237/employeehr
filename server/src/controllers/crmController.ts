@@ -15,7 +15,7 @@ import { StockServiceJob } from "../models/StockServiceJob"
 import { User } from "../models/User"
 import { Types } from "mongoose"
 import { Company } from "../models/Company"
-import { buildQuotationItems, generateDocumentNumber } from "./stock/stockShared"
+import { buildQuotationItems, generateDocumentNumber, summarizeDocumentTotals } from "./stock/stockShared"
 import "../models/Ticket"
 
 export const DEFAULT_CALL_PURPOSES = [
@@ -594,9 +594,8 @@ export class CrmController {
           description: serviceNotes || ticket.title,
         },
       ])
-      const subTotal = Number(
-        quotationItems.reduce((sum, item) => sum + item.lineTotal, 0).toFixed(2),
-      )
+      const { subTotal, taxTotal, grandTotal } =
+        summarizeDocumentTotals(quotationItems)
 
       const quotation = await StockQuotation.create({
         org_id,
@@ -609,6 +608,8 @@ export class CrmController {
         },
         items: quotationItems,
         subTotal,
+        taxTotal,
+        grandTotal,
         status: "draft",
         createdBy: String(userId),
       })

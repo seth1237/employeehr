@@ -266,7 +266,20 @@ export default function QuotationDetailPage({
           <CardContent>
             <p className="text-xl font-semibold">
               KES{" "}
+              {Number(
+                quotation.grandTotal ??
+                  Number(quotation.subTotal || 0) + Number(quotation.taxTotal || 0),
+              ).toLocaleString("en-KE", {
+                minimumFractionDigits: 2,
+              })}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Subtotal{" "}
               {Number(quotation.subTotal || 0).toLocaleString("en-KE", {
+                minimumFractionDigits: 2,
+              })}{" "}
+              · Tax{" "}
+              {Number(quotation.taxTotal || 0).toLocaleString("en-KE", {
                 minimumFractionDigits: 2,
               })}
             </p>
@@ -311,15 +324,25 @@ export default function QuotationDetailPage({
             <table className="w-full text-sm">
               <thead className="bg-muted/50 text-left text-xs uppercase text-muted-foreground">
                 <tr>
-                  <th className="px-4 py-2 font-medium">Product</th>
+                  <th className="px-4 py-2 font-medium">#</th>
+                  <th className="px-4 py-2 font-medium">Description</th>
                   <th className="px-4 py-2 font-medium">Qty</th>
-                  <th className="px-4 py-2 font-medium">Unit</th>
-                  <th className="px-4 py-2 font-medium">Line total</th>
+                  <th className="px-4 py-2 font-medium">Unit price</th>
+                  <th className="px-4 py-2 font-medium">Tax</th>
+                  <th className="px-4 py-2 font-medium">Total</th>
                 </tr>
               </thead>
               <tbody>
-                {(quotation.items || []).map((item, idx) => (
+                {(quotation.items || []).map((item: any, idx: number) => {
+                  const taxAmount = Number(item.taxAmount || 0);
+                  const total = Number(
+                    item.totalAfterTax !== undefined
+                      ? item.totalAfterTax
+                      : Number(item.lineTotal || 0) + taxAmount,
+                  );
+                  return (
                   <tr key={`${item.productName}-${idx}`} className="border-t">
+                    <td className="px-4 py-2 text-muted-foreground">{idx + 1}</td>
                     <td className="px-4 py-2">
                       <div className="font-medium">{item.productName}</div>
                       {item.description && (
@@ -332,11 +355,15 @@ export default function QuotationDetailPage({
                     <td className="px-4 py-2">
                       KES {Number(item.unitPrice || 0).toLocaleString("en-KE")}
                     </td>
+                    <td className="px-4 py-2">
+                      KES {taxAmount.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
                     <td className="px-4 py-2 font-medium">
-                      KES {Number(item.lineTotal || 0).toLocaleString("en-KE")}
+                      KES {total.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

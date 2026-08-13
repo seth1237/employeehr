@@ -41,6 +41,7 @@ import {
   isAdminRole,
   generateDocumentNumber,
   buildQuotationItems,
+  summarizeDocumentTotals,
 } from "./stock/stockShared";
 import { QuotationController } from "./stock/quotationController";
 
@@ -1946,11 +1947,117 @@ export class StockController {
         .sort({ createdAt: -1 })
         .lean();
 
-      return res.status(200).json({ success: true, data: products });
+      const categoryIds = [
+        ...new Set(
+          products
+            .map((product: any) => String(product.category || "").trim())
+            .filter(Boolean),
+        ),
+      ];
+      const categories = categoryIds.length
+        ? await StockCategory.find({ org_id, _id: { $in: categoryIds } })
+            .select({ name: 1 })
+            .lean()
+        : [];
+      const categoryMap = new Map(
+        categories.map((category: any) => [String(category._id), category.name]),
+      );
+
+      const data = products.map((product: any) => ({
+        ...product,
+        productName: product.name,
+        categoryName: product.category
+          ? categoryMap.get(String(product.category)) || undefined
+          : undefined,
+      }));
+
+      return res.status(200).json({ success: true, data });
     } catch (error: any) {
       return res.status(500).json({
         success: false,
         message: error.message || "Failed to fetch public products",
+      });
+    }
+  }
+
+  static async publicGetProductById(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = getTenantFromRequest(req);
+      if (!org_id) {
+        return res.status(400).json({
+          success: false,
+          message: "orgId is required for public product access",
+        });
+      }
+
+      const id = String(req.params.id || "").trim();
+      if (!id) {
+        return res.status(400).json({
+          success: false,
+          message: "Product id is required",
+        });
+      }
+
+      const product = await StockProduct.findOne({
+        _id: id,
+        org_id,
+        isActive: { $ne: false },
+      }).lean();
+
+      if (!product) {
+        return res.status(404).json({
+          success: false,
+          message: "Product not found",
+        });
+      }
+
+      let categoryName: string | undefined;
+      if (product.category) {
+        const category = await StockCategory.findOne({
+          _id: product.category,
+          org_id,
+        })
+          .select({ name: 1 })
+          .lean();
+        categoryName = category?.name;
+      }
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          ...product,
+          productName: product.name,
+          categoryName,
+        },
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to fetch public product",
+      });
+    }
+  }
+
+  static async publicGetCategories(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = getTenantFromRequest(req);
+      if (!org_id) {
+        return res.status(400).json({
+          success: false,
+          message: "orgId is required for public category access",
+        });
+      }
+
+      const categories = await StockCategory.find({ org_id })
+        .sort({ name: 1 })
+        .select({ name: 1, description: 1, createdAt: 1, updatedAt: 1 })
+        .lean();
+
+      return res.status(200).json({ success: true, data: categories });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to fetch public categories",
       });
     }
   }
@@ -2023,11 +2130,8 @@ export class StockController {
       );
 
       const normalizedItems = await buildQuotationItems(org_id, items);
-      const subTotal = Number(
-        normalizedItems
-          .reduce((sum: number, item: any) => sum + item.lineTotal, 0)
-          .toFixed(2),
-      );
+      const { subTotal, taxTotal, grandTotal } =
+        summarizeDocumentTotals(normalizedItems);
 
       const quotation = await StockQuotation.create({
         org_id,
@@ -2040,6 +2144,8 @@ export class StockController {
         },
         items: normalizedItems,
         subTotal,
+        taxTotal,
+        grandTotal,
         status: "pending_approval",
         createdBy: portalUser ? String(portalUser._id) : "website",
         ownerUserId: portalUser ? String(portalUser._id) : undefined,
@@ -4847,6 +4953,11 @@ export class StockController {
         client: quotation.client,
         items: quotation.items,
         subTotal: quotation.subTotal,
+        taxTotal: Number((quotation as any).taxTotal || 0),
+        grandTotal: Number(
+          (quotation as any).grandTotal ||
+            Number(quotation.subTotal || 0) + Number((quotation as any).taxTotal || 0),
+        ),
         status: "issued",
         dispatch: {
           status: "not_assigned",
@@ -4984,11 +5095,8 @@ export class StockController {
       ).trim();
 
       const normalizedItems = await buildQuotationItems(org_id, items || []);
-      const subTotal = Number(
-        normalizedItems
-          .reduce((sum, item) => sum + item.lineTotal, 0)
-          .toFixed(2),
-      );
+      const { subTotal, taxTotal, grandTotal } =
+        summarizeDocumentTotals(normalizedItems);
 
       const stockManagedItems = normalizedItems.filter(
         (i: any) => !i.isOutsourced && i.productType !== "service",
@@ -5031,6 +5139,8 @@ export class StockController {
         },
         items: normalizedItems,
         subTotal,
+        taxTotal,
+        grandTotal,
         status: payNow ? "paid" : "issued",
         dispatch: {
           status: "not_assigned",
@@ -6235,13 +6345,6 @@ export class StockController {
           .json({ success: false, message: "Unauthorized" });
       }
 
-      if (!isAdminRole(req.user?.role)) {
-        return res.status(403).json({
-          success: false,
-          message: "Only admin/HR can create categories",
-        });
-      }
-
       const { name, description } = req.body;
       if (!name) {
         return res
@@ -6254,9 +6357,11 @@ export class StockController {
         name: String(name).trim(),
       });
       if (existing) {
-        return res
-          .status(409)
-          .json({ success: false, message: "Category already exists" });
+        return res.status(200).json({
+          success: true,
+          data: existing,
+          message: "Category already exists",
+        });
       }
 
       const category = await StockCategory.create({
@@ -6306,13 +6411,6 @@ export class StockController {
           .json({ success: false, message: "Unauthorized" });
       }
 
-      if (!isAdminRole(req.user?.role)) {
-        return res.status(403).json({
-          success: false,
-          message: "Only admin/HR can create products",
-        });
-      }
-
       const getVal = (v: any) => (Array.isArray(v) ? v[0] : v);
 
       const name = getVal(req.body.name);
@@ -6324,6 +6422,8 @@ export class StockController {
       const currentQuantity = getVal(req.body.currentQuantity) || 0;
       const assignedUsers = req.body.assignedUsers || [];
       const isOutsourced = getVal(req.body.isOutsourced);
+      const taxable = getVal(req.body.taxable);
+      const taxRate = getVal(req.body.taxRate);
       const expiryEnabled = getVal(req.body.expiryEnabled);
       const expiryDate = getVal(req.body.expiryDate);
       const expiryReminderDays = getVal(req.body.expiryReminderDays) || 7;
@@ -6412,6 +6512,12 @@ export class StockController {
         currentQuantity: Number(currentQuantity),
         assignedUsers: Array.isArray(assignedUsers) ? assignedUsers : [],
         isOutsourced: isOutsourced === "true" || isOutsourced === true,
+        taxable: taxable === "true" || taxable === true,
+        taxRate: Number(
+          taxRate !== undefined && taxRate !== null && taxRate !== ""
+            ? taxRate
+            : 16,
+        ),
         expiryEnabled: expiryEnabled === "true" || expiryEnabled === true,
         expiryDate:
           (expiryEnabled === "true" || expiryEnabled === true) && expiryDate
@@ -6484,7 +6590,7 @@ export class StockController {
       const productsQuery = StockProduct.find(productQuery).sort({ createdAt: -1 })
       if (lite) {
         productsQuery.select(
-          "_id name category startingPrice sellingPrice minAlertQuantity currentQuantity assignedUsers isOutsourced expiryEnabled expiryDate expiryReminderDays productType isRecurring intervalDays manufacturer description isActive createdAt updatedAt",
+          "_id name category startingPrice sellingPrice minAlertQuantity currentQuantity assignedUsers isOutsourced taxable taxRate expiryEnabled expiryDate expiryReminderDays productType isRecurring intervalDays manufacturer description isActive createdAt updatedAt imageUrl",
         )
       }
       const products = await productsQuery.lean();
@@ -6570,10 +6676,15 @@ export class StockController {
           .json({ success: false, message: "Unauthorized" });
 
       if (!isAdminRole(req.user?.role)) {
-        return res.status(403).json({
-          success: false,
-          message: "Only admin/HR can update products",
-        });
+        const bodyKeys = Object.keys(req.body || {}).filter(
+          (key) => !["taxable", "taxRate"].includes(key),
+        );
+        if (bodyKeys.length > 0 || req.file) {
+          return res.status(403).json({
+            success: false,
+            message: "Only admin/HR can update products",
+          });
+        }
       }
 
       const { id } = req.params;
@@ -6587,6 +6698,8 @@ export class StockController {
         currentQuantity,
         assignedUsers,
         isOutsourced,
+        taxable,
+        taxRate,
         isActive,
         expiryEnabled,
         expiryDate,
@@ -6618,6 +6731,14 @@ export class StockController {
       if (isOutsourced !== undefined) {
         const val = getVal(isOutsourced);
         payload.isOutsourced = val === "true" || val === true;
+      }
+      if (taxable !== undefined) {
+        const val = getVal(taxable);
+        payload.taxable = val === "true" || val === true;
+      }
+      if (taxRate !== undefined) {
+        const parsed = Number(getVal(taxRate));
+        if (Number.isFinite(parsed) && parsed >= 0) payload.taxRate = parsed;
       }
       if (isActive !== undefined) {
         const val = getVal(isActive);

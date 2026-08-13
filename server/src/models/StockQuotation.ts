@@ -8,6 +8,10 @@ interface IQuotationItem {
   soldUnitPrice?: number
   unitPrice: number
   lineTotal: number
+  taxable?: boolean
+  taxRate?: number
+  taxAmount?: number
+  totalAfterTax?: number
   description?: string
   productDescription?: string
   productType?: string
@@ -30,6 +34,8 @@ export interface IStockQuotation {
   client: IQuotationClient
   items: IQuotationItem[]
   subTotal: number
+  taxTotal?: number
+  grandTotal?: number
   status: "draft" | "pending_approval" | "converted" | "cancelled"
   createdBy: string
   ownerUserId?: string
@@ -50,6 +56,10 @@ const quotationItemSchema = new Schema<IQuotationItem>(
     soldUnitPrice: { type: Number, min: 0 },
     unitPrice: { type: Number, required: true, min: 0 },
     lineTotal: { type: Number, required: true, min: 0 },
+    taxable: { type: Boolean, default: false },
+    taxRate: { type: Number, min: 0, max: 100, default: 0 },
+    taxAmount: { type: Number, min: 0, default: 0 },
+    totalAfterTax: { type: Number, min: 0 },
     description: { type: String },
     productDescription: { type: String },
     productType: { type: String },
@@ -72,6 +82,8 @@ const stockQuotationSchema = new Schema<IStockQuotation>(
     },
     items: { type: [quotationItemSchema], required: true },
     subTotal: { type: Number, required: true, min: 0 },
+    taxTotal: { type: Number, min: 0, default: 0 },
+    grandTotal: { type: Number, min: 0 },
     status: {
       type: String,
       enum: ["draft", "pending_approval", "converted", "cancelled"],

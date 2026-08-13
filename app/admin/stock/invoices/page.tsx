@@ -456,6 +456,8 @@ export default function InvoicesPage() {
       client: invoice.client,
       items: invoice.items,
       subTotal: invoice.subTotal,
+      taxTotal: (invoice as any).taxTotal,
+      grandTotal: (invoice as any).grandTotal,
       branding,
       invoiceSettings,
       preparedBy,

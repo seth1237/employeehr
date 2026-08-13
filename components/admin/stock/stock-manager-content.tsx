@@ -106,6 +106,8 @@ interface Product {
   currentQuantity: number;
   assignedUsers: string[];
   isOutsourced?: boolean;
+  taxable?: boolean;
+  taxRate?: number;
   expiryEnabled?: boolean;
   expiryDate?: string | null;
   expiryReminderDays?: number;
@@ -250,6 +252,8 @@ export function StockManagerContent({ view }: { view: StockView }) {
     currentQuantity: "0",
     assignedUsers: [] as string[],
     isOutsourced: false,
+    taxable: false,
+    taxRate: "16",
     expiryEnabled: false,
     expiryDate: "",
     expiryReminderDays: "7",
@@ -1714,6 +1718,8 @@ export function StockManagerContent({ view }: { view: StockView }) {
       String(productForm.currentQuantity || 0),
     );
     formData.append("isOutsourced", String(productForm.isOutsourced));
+    formData.append("taxable", String(productForm.taxable));
+    formData.append("taxRate", String(productForm.taxRate || 16));
     formData.append("expiryEnabled", String(productForm.expiryEnabled));
     formData.append("expiryDate", productForm.expiryDate || "");
     formData.append(
@@ -1762,6 +1768,8 @@ export function StockManagerContent({ view }: { view: StockView }) {
       currentQuantity: "0",
       assignedUsers: [],
       isOutsourced: false,
+      taxable: false,
+      taxRate: "16",
       expiryEnabled: false,
       expiryDate: "",
       expiryReminderDays: "7",
@@ -3015,6 +3023,35 @@ export function StockManagerContent({ view }: { view: StockView }) {
                   />
                   <span>Mark product as outsourced</span>
                 </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={productForm.taxable}
+                    onCheckedChange={(value) =>
+                      setProductForm((prev) => ({
+                        ...prev,
+                        taxable: Boolean(value),
+                      }))
+                    }
+                  />
+                  <span>Product is taxable (VAT)</span>
+                </label>
+                {productForm.taxable ? (
+                  <div>
+                    <Label>Tax rate (%)</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={productForm.taxRate}
+                      onChange={(event) =>
+                        setProductForm((prev) => ({
+                          ...prev,
+                          taxRate: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                ) : null}
                 <label className="flex items-center gap-2 text-sm">
                   <Checkbox
                     checked={productForm.expiryEnabled}

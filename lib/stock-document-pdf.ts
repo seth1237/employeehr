@@ -56,7 +56,9 @@ export interface DocumentItem {
   quantity: number;
   unitPrice: number;
   lineTotal: number;
+  taxable?: boolean;
   taxRate?: number;
+  taxAmount?: number;
   totalAfterTax?: number;
   description?: string;
   imageUrl?: string;
@@ -383,17 +385,17 @@ function drawItemsTable(
           {
             key: "description",
             label: "Description",
-            width: 76,
+            width: 72,
             align: "left" as const,
           },
           { key: "quantity", label: "Qty", width: 16, align: "right" as const },
           {
             key: "unitPrice",
-            label: "Unit Price (KSh)",
-            width: 34,
+            label: "Unit Price",
+            width: 28,
             align: "right" as const,
           },
-          { key: "tax", label: "Tax %", width: 18, align: "right" as const },
+          { key: "tax", label: "Tax", width: 28, align: "right" as const },
           {
             key: "totalAfterTax",
             label: "Total",
@@ -578,8 +580,15 @@ function drawItemsTable(
     } else if (includeTax) {
       const taxRate = Number(item.taxRate || 0);
       const baseTotal = Number(item.lineTotal || 0);
+      const taxAmount = Number(
+        item.taxAmount !== undefined
+          ? item.taxAmount
+          : baseTotal * (taxRate / 100),
+      );
       const totalAfterTax = Number(
-        item.totalAfterTax || baseTotal + baseTotal * (taxRate / 100),
+        item.totalAfterTax !== undefined
+          ? item.totalAfterTax
+          : baseTotal + taxAmount,
       );
 
       doc.text(
@@ -595,7 +604,7 @@ function drawItemsTable(
         { align: "right" },
       );
       doc.text(
-        `${taxRate.toFixed(2)}%`,
+        formatAmount(taxAmount),
         columnStartX[4] + columns[4].width - 3,
         y + 7,
         { align: "right" },
@@ -640,10 +649,19 @@ function drawTotalsSection(
   branding?: TenantBranding,
   settings?: InvoiceDocumentSettings,
   skipAutoPageBreak = false,
+  taxTotalOverride?: number,
 ) {
   const primary = branding?.primaryColor || DEFAULT_PRIMARY;
-  const showVat = Boolean(settings?.includeVat === true);
-  const vat = showVat ? subtotal * 0.16 : 0;
+  const hasLineTax =
+    taxTotalOverride !== undefined && Number.isFinite(taxTotalOverride);
+  const showVat = hasLineTax
+    ? Number(taxTotalOverride) > 0
+    : Boolean(settings?.includeVat === true);
+  const vat = hasLineTax
+    ? Number(taxTotalOverride || 0)
+    : showVat
+      ? subtotal * 0.16
+      : 0;
   const grandTotal = subtotal + vat;
 
   const rowH = 7;
@@ -687,7 +705,7 @@ function drawTotalsSection(
 
   if (showVat) {
     rowY += rowH;
-    doc.text("VAT (16%)", labelX, rowY);
+    doc.text(hasLineTax ? "Tax" : "VAT (16%)", labelX, rowY);
     doc.text(formatAmount(vat), valueX, rowY, { align: "right" });
   }
 
@@ -1985,6 +2003,8 @@ export function generateQuotationPdf(params: {
   client: DocumentClient;
   items: DocumentItem[];
   subTotal: number;
+  taxTotal?: number;
+  grandTotal?: number;
   branding?: TenantBranding;
   invoiceSettings?: InvoiceDocumentSettings;
   preparedBy: string;
@@ -2032,7 +2052,19 @@ export function generateQuotationPdf(params: {
   setColorFromHex(doc, DEFAULT_GRAY, "text");
   tableY = tableY + 2;
 
-  const endY = drawItemsTable(doc, tableY, params.items, params.branding);
+  const endY = drawItemsTable(
+    doc,
+    tableY,
+    params.items,
+    params.branding,
+    false,
+    true,
+  );
+
+  const taxTotal =
+    params.taxTotal !== undefined
+      ? Number(params.taxTotal)
+      : params.items.reduce((sum, item) => sum + Number(item.taxAmount || 0), 0);
 
   const totalsY = drawTotalsSection(
     doc,
@@ -2040,6 +2072,8 @@ export function generateQuotationPdf(params: {
     endY,
     params.branding,
     params.invoiceSettings,
+    false,
+    taxTotal,
   );
 
   const termsEndY = drawTermsAndPaymentChannelsSection(
@@ -2082,6 +2116,8 @@ export function generateInvoicePdf(params: {
   client: DocumentClient;
   items: DocumentItem[];
   subTotal: number;
+  taxTotal?: number;
+  grandTotal?: number;
   branding?: TenantBranding;
   invoiceSettings?: InvoiceDocumentSettings;
   preparedBy: string;
@@ -2146,7 +2182,19 @@ export function generateInvoicePdf(params: {
     tableY = refsY + 6;
   }
 
-  const endY = drawItemsTable(doc, tableY, params.items, params.branding);
+  const endY = drawItemsTable(
+    doc,
+    tableY,
+    params.items,
+    params.branding,
+    false,
+    true,
+  );
+
+  const taxTotal =
+    params.taxTotal !== undefined
+      ? Number(params.taxTotal)
+      : params.items.reduce((sum, item) => sum + Number(item.taxAmount || 0), 0);
 
   const totalsY = drawTotalsSection(
     doc,
@@ -2154,6 +2202,8 @@ export function generateInvoicePdf(params: {
     endY,
     params.branding,
     params.invoiceSettings,
+    false,
+    taxTotal,
   );
   const termsEndY = drawTermsAndPaymentChannelsSection(
     doc,
@@ -2816,6 +2866,21 @@ export function generateTelesalesActivityPdf(params: {
   reportTitle?: string;
   personLabel?: string;
   autoSave?: boolean;
+  sections?: Partial<Record<
+    | "summary"
+    | "callLogs"
+    | "machineFollowUps"
+    | "plannerServices"
+    | "plannerInstallations"
+    | "plannerServicesDue"
+    | "plannerMachineFollowUps"
+    | "plannerClientFollowUps"
+    | "servicesCompleted"
+    | "quotations"
+    | "conversions"
+    | "newClients",
+    boolean
+  >>;
 }) {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const primary = params.branding?.primaryColor || DEFAULT_PRIMARY;
@@ -2827,6 +2892,21 @@ export function generateTelesalesActivityPdf(params: {
     if (Number.isNaN(d.getTime())) return "—";
     return d.toLocaleDateString("en-GB");
   };
+  const include = (
+    key:
+      | "summary"
+      | "callLogs"
+      | "machineFollowUps"
+      | "plannerServices"
+      | "plannerInstallations"
+      | "plannerServicesDue"
+      | "plannerMachineFollowUps"
+      | "plannerClientFollowUps"
+      | "servicesCompleted"
+      | "quotations"
+      | "conversions"
+      | "newClients",
+  ) => params.sections?.[key] !== false;
 
   // Header — same visual language as statement of account
   if (params.branding?.logo) {
@@ -2861,29 +2941,32 @@ export function generateTelesalesActivityPdf(params: {
     doc.text(`Telesales: ${params.personLabel}`, 198, 36, { align: "right" });
   }
 
-  // Summary band
-  setColorFromHex(doc, DEFAULT_LIGHT, "fill");
-  doc.rect(12, 40, 186, 34, "F");
+  let y = 44;
 
-  doc.setFontSize(10);
-  doc.setFont("helvetica", "bold");
-  setColorFromHex(doc, DEFAULT_TEXT, "text");
-  doc.text("PERFORMANCE SUMMARY", 15, 48);
+  if (include("summary")) {
+    // Summary band
+    setColorFromHex(doc, DEFAULT_LIGHT, "fill");
+    doc.rect(12, 40, 186, 34, "F");
 
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.5);
-  const summaryLines = [
-    `Calls logged: ${params.performance.callsLogged ?? 0} · Machine follow-ups: ${params.performance.machineFollowUps ?? 0}`,
-    `Quotes generated: ${params.performance.quotesGenerated} (${formatMoney(params.performance.quoteValue)})`,
-    `Invoices converted: ${params.performance.invoicesConverted} (${formatMoney(params.performance.convertedValue)}) · ${params.performance.conversionRate}%`,
-    `New clients: ${params.performance.newClientsOnboarded} · Quotation follow-ups: ${params.performance.quotationFollowUps}`,
-    `Machines scheduled: ${params.performance.machinesScheduled ?? 0} · Services completed: ${params.performance.machineServicesCompleted ?? 0}`,
-  ];
-  summaryLines.forEach((line, i) => {
-    doc.text(line, 15, 55 + i * 4);
-  });
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "bold");
+    setColorFromHex(doc, DEFAULT_TEXT, "text");
+    doc.text("PERFORMANCE SUMMARY", 15, 48);
 
-  let y = 84;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    const summaryLines = [
+      `Calls logged: ${params.performance.callsLogged ?? 0} · Machine follow-ups: ${params.performance.machineFollowUps ?? 0}`,
+      `Quotes generated: ${params.performance.quotesGenerated} (${formatMoney(params.performance.quoteValue)})`,
+      `Invoices converted: ${params.performance.invoicesConverted} (${formatMoney(params.performance.convertedValue)}) · ${params.performance.conversionRate}%`,
+      `New clients: ${params.performance.newClientsOnboarded} · Quotation follow-ups: ${params.performance.quotationFollowUps}`,
+      `Machines scheduled: ${params.performance.machinesScheduled ?? 0} · Services completed: ${params.performance.machineServicesCompleted ?? 0}`,
+    ];
+    summaryLines.forEach((line, i) => {
+      doc.text(line, 15, 55 + i * 4);
+    });
+    y = 84;
+  }
 
   const ensureSpace = (needed: number) => {
     if (y + needed > 275) {
@@ -2906,7 +2989,13 @@ export function generateTelesalesActivityPdf(params: {
   };
 
   const drawTable = (
-    columns: Array<{ h: string; w: number; align?: "left" | "right" }>,
+    columns: Array<{
+      h: string;
+      w: number;
+      align?: "left" | "right";
+      fontSize?: number;
+      lineHeight?: number;
+    }>,
     rows: string[][],
   ) => {
     ensureSpace(14);
@@ -2936,10 +3025,18 @@ export function generateTelesalesActivityPdf(params: {
     }
 
     rows.forEach((row, rowIndex) => {
-      const lineSets = row.map((cell, i) =>
-        doc.splitTextToSize(String(cell || "—"), columns[i].w - 4),
+      const lineSets = row.map((cell, i) => {
+        const fontSize = columns[i].fontSize || 8;
+        doc.setFontSize(fontSize);
+        return doc.splitTextToSize(String(cell || "—"), columns[i].w - 4);
+      });
+      const rh = Math.max(
+        8,
+        ...lineSets.map((lines, i) => {
+          const lineHeight = columns[i].lineHeight || 3.6;
+          return lines.length * lineHeight + 4;
+        }),
       );
-      const rh = Math.max(8, ...lineSets.map((lines) => lines.length * 3.6 + 4));
       ensureSpace(rh + 2);
 
       if (rowIndex % 2 === 0) {
@@ -2952,6 +3049,13 @@ export function generateTelesalesActivityPdf(params: {
       lineSets.forEach((lines, i) => {
         const align = columns[i].align || "left";
         const off = align === "right" ? columns[i].w - 3 : 2;
+        const fontSize = columns[i].fontSize || 8;
+        doc.setFontSize(fontSize);
+        if ((columns[i].fontSize || 8) <= 6.5) {
+          setColorFromHex(doc, DEFAULT_GRAY, "text");
+        } else {
+          setColorFromHex(doc, DEFAULT_TEXT, "text");
+        }
         doc.text(lines, cx + off, y + 5, { align });
         cx += columns[i].w;
       });
@@ -2960,209 +3064,227 @@ export function generateTelesalesActivityPdf(params: {
     y += 6;
   };
 
-  drawSectionHeading("Call log activity");
-  drawTable(
-    [
-      { h: "Date", w: 22 },
-      { h: "Client", w: 40 },
-      { h: "Purpose", w: 36 },
-      { h: "Focus", w: 34 },
-      { h: "Outcome", w: 28 },
-      { h: "By", w: 26 },
-    ],
-    (params.activity.callLogs || []).map((c) => [
-      formatDate(c.createdAt),
-      c.clientName,
-      c.callPurpose,
-      (c.focusCategories || []).join(", ") || "—",
-      c.outcome + (c.hasLead ? " · Lead" : ""),
-      c.createdByName,
-    ]),
-  );
+  if (include("callLogs")) {
+    drawSectionHeading("Call log activity");
+    drawTable(
+      [
+        { h: "Client", w: 42 },
+        { h: "Purpose", w: 36 },
+        { h: "Lead", w: 18 },
+        { h: "Notes discussed", w: 90, fontSize: 6, lineHeight: 2.8 },
+      ],
+      (params.activity.callLogs || []).map((c) => [
+        c.clientName,
+        c.callPurpose,
+        c.hasLead ? "Yes" : "No",
+        String(c.note || "").trim() || "—",
+      ]),
+    );
+  }
 
-  drawSectionHeading("Machine follow-up responses");
-  drawTable(
-    [
-      { h: "Date", w: 22 },
-      { h: "Client", w: 36 },
-      { h: "Machine", w: 40 },
-      { h: "Outcome", w: 30 },
-      { h: "Follow-up", w: 28 },
-      { h: "By", w: 30 },
-    ],
-    (params.activity.machineFollowUps || []).map((c) => [
-      formatDate(c.createdAt),
-      c.clientName,
-      `${c.machineName}${c.serialNumber ? ` (${c.serialNumber})` : ""}`,
-      c.outcome,
-      formatDate(c.followUpDate),
-      c.createdByName,
-    ]),
-  );
+  if (include("machineFollowUps")) {
+    drawSectionHeading("Machine follow-up responses");
+    drawTable(
+      [
+        { h: "Date", w: 22 },
+        { h: "Client", w: 36 },
+        { h: "Machine", w: 40 },
+        { h: "Outcome", w: 30 },
+        { h: "Follow-up", w: 28 },
+        { h: "By", w: 30 },
+      ],
+      (params.activity.machineFollowUps || []).map((c) => [
+        formatDate(c.createdAt),
+        c.clientName,
+        `${c.machineName}${c.serialNumber ? ` (${c.serialNumber})` : ""}`,
+        c.outcome,
+        formatDate(c.followUpDate),
+        c.createdByName,
+      ]),
+    );
+  }
 
-  drawSectionHeading("Planner — scheduled services");
-  drawTable(
-    [
-      { h: "Date", w: 28 },
-      { h: "Service", w: 52 },
-      { h: "Client", w: 48 },
-      { h: "Machine", w: 28 },
-      { h: "Status", w: 30 },
-    ],
-    params.planner.services.map((s) => [
-      formatDate(s.scheduledDate),
-      s.title,
-      s.clientName,
-      s.productName || "—",
-      s.status,
-    ]),
-  );
+  if (include("plannerServices")) {
+    drawSectionHeading("Planner — scheduled services");
+    drawTable(
+      [
+        { h: "Date", w: 28 },
+        { h: "Service", w: 52 },
+        { h: "Client", w: 48 },
+        { h: "Machine", w: 28 },
+        { h: "Status", w: 30 },
+      ],
+      params.planner.services.map((s) => [
+        formatDate(s.scheduledDate),
+        s.title,
+        s.clientName,
+        s.productName || "—",
+        s.status,
+      ]),
+    );
+  }
 
-  drawSectionHeading("Planner — scheduled installations");
-  drawTable(
-    [
-      { h: "Date", w: 28 },
-      { h: "Machine", w: 48 },
-      { h: "Client", w: 44 },
-      { h: "Engineer", w: 36 },
-      { h: "Status", w: 30 },
-    ],
-    params.planner.installations.map((s) => [
-      formatDate(s.installationDate || s.nextServiceDate),
-      `${s.title}${s.serialNumber ? ` (${s.serialNumber})` : ""}`,
-      s.clientName,
-      s.installedBy || "—",
-      s.status,
-    ]),
-  );
+  if (include("plannerInstallations")) {
+    drawSectionHeading("Planner — scheduled installations");
+    drawTable(
+      [
+        { h: "Date", w: 28 },
+        { h: "Machine", w: 48 },
+        { h: "Client", w: 44 },
+        { h: "Engineer", w: 36 },
+        { h: "Status", w: 30 },
+      ],
+      params.planner.installations.map((s) => [
+        formatDate(s.installationDate || s.nextServiceDate),
+        `${s.title}${s.serialNumber ? ` (${s.serialNumber})` : ""}`,
+        s.clientName,
+        s.installedBy || "—",
+        s.status,
+      ]),
+    );
+  }
 
-  drawSectionHeading("Planner — machine services due");
-  drawTable(
-    [
-      { h: "Next service", w: 32 },
-      { h: "Machine", w: 52 },
-      { h: "Client", w: 52 },
-      { h: "Status", w: 50 },
-    ],
-    (params.planner.machineServicesDue || []).map((s) => [
-      formatDate(s.nextServiceDate),
-      `${s.title}${s.serialNumber ? ` (${s.serialNumber})` : ""}`,
-      s.clientName,
-      s.status,
-    ]),
-  );
+  if (include("plannerServicesDue")) {
+    drawSectionHeading("Planner — machine services due");
+    drawTable(
+      [
+        { h: "Next service", w: 32 },
+        { h: "Machine", w: 52 },
+        { h: "Client", w: 52 },
+        { h: "Status", w: 50 },
+      ],
+      (params.planner.machineServicesDue || []).map((s) => [
+        formatDate(s.nextServiceDate),
+        `${s.title}${s.serialNumber ? ` (${s.serialNumber})` : ""}`,
+        s.clientName,
+        s.status,
+      ]),
+    );
+  }
 
-  drawSectionHeading("Planner — machine follow-ups");
-  drawTable(
-    [
-      { h: "Date", w: 28 },
-      { h: "Client", w: 40 },
-      { h: "Machine", w: 44 },
-      { h: "Assigned", w: 40 },
-      { h: "Status", w: 34 },
-    ],
-    (params.planner.machineFollowUps || []).map((s) => [
-      formatDate(s.followUpDate),
-      s.clientName,
-      `${s.title}${s.serialNumber ? ` (${s.serialNumber})` : ""}`,
-      s.assignedToName,
-      s.status,
-    ]),
-  );
+  if (include("plannerMachineFollowUps")) {
+    drawSectionHeading("Planner — machine follow-ups");
+    drawTable(
+      [
+        { h: "Date", w: 28 },
+        { h: "Client", w: 40 },
+        { h: "Machine", w: 44 },
+        { h: "Assigned", w: 40 },
+        { h: "Status", w: 34 },
+      ],
+      (params.planner.machineFollowUps || []).map((s) => [
+        formatDate(s.followUpDate),
+        s.clientName,
+        `${s.title}${s.serialNumber ? ` (${s.serialNumber})` : ""}`,
+        s.assignedToName,
+        s.status,
+      ]),
+    );
+  }
 
-  drawSectionHeading("Planner — client follow-ups");
-  drawTable(
-    [
-      { h: "Date", w: 28 },
-      { h: "Client", w: 44 },
-      { h: "Purpose", w: 40 },
-      { h: "Assigned", w: 40 },
-      { h: "Status", w: 34 },
-    ],
-    params.planner.followUps.map((s) => [
-      formatDate(s.followUpDate),
-      s.clientName,
-      s.callPurpose || s.title,
-      s.assignedToName,
-      s.status,
-    ]),
-  );
+  if (include("plannerClientFollowUps")) {
+    drawSectionHeading("Planner — client follow-ups");
+    drawTable(
+      [
+        { h: "Date", w: 28 },
+        { h: "Client", w: 44 },
+        { h: "Purpose", w: 40 },
+        { h: "Assigned", w: 40 },
+        { h: "Status", w: 34 },
+      ],
+      params.planner.followUps.map((s) => [
+        formatDate(s.followUpDate),
+        s.clientName,
+        s.callPurpose || s.title,
+        s.assignedToName,
+        s.status,
+      ]),
+    );
+  }
 
-  drawSectionHeading("Services completed");
-  drawTable(
-    [
-      { h: "Date", w: 28 },
-      { h: "Service", w: 44 },
-      { h: "Client", w: 44 },
-      { h: "Machine", w: 40 },
-      { h: "Tech", w: 30 },
-    ],
-    (params.activity.machineServicesCompleted || []).map((s) => [
-      formatDate(s.completedDate),
-      s.title,
-      s.clientName,
-      `${s.productName || "—"}${s.serialNumber ? ` (${s.serialNumber})` : ""}`,
-      s.technician || "—",
-    ]),
-  );
+  if (include("servicesCompleted")) {
+    drawSectionHeading("Services completed");
+    drawTable(
+      [
+        { h: "Date", w: 28 },
+        { h: "Service", w: 44 },
+        { h: "Client", w: 44 },
+        { h: "Machine", w: 40 },
+        { h: "Tech", w: 30 },
+      ],
+      (params.activity.machineServicesCompleted || []).map((s) => [
+        formatDate(s.completedDate),
+        s.title,
+        s.clientName,
+        `${s.productName || "—"}${s.serialNumber ? ` (${s.serialNumber})` : ""}`,
+        s.technician || "—",
+      ]),
+    );
+  }
 
-  drawSectionHeading("Quotations generated");
-  drawTable(
-    [
-      { h: "Date", w: 22 },
-      { h: "Quote #", w: 28 },
-      { h: "Client", w: 48 },
-      { h: "Status", w: 28 },
-      { h: "Amount", w: 28, align: "right" },
-      { h: "By", w: 32 },
-    ],
-    params.activity.quotations.map((q) => [
-      formatDate(q.createdAt),
-      q.quotationNumber,
-      q.clientName,
-      q.status,
-      formatMoney(q.subTotal),
-      q.createdByName,
-    ]),
-  );
+  if (include("quotations")) {
+    drawSectionHeading("Quotations generated");
+    drawTable(
+      [
+        { h: "Date", w: 22 },
+        { h: "Quote #", w: 28 },
+        { h: "Client", w: 48 },
+        { h: "Status", w: 28 },
+        { h: "Amount", w: 28, align: "right" },
+        { h: "By", w: 32 },
+      ],
+      params.activity.quotations.map((q) => [
+        formatDate(q.createdAt),
+        q.quotationNumber,
+        q.clientName,
+        q.status,
+        formatMoney(q.subTotal),
+        q.createdByName,
+      ]),
+    );
+  }
 
-  drawSectionHeading("Invoices converted");
-  drawTable(
-    [
-      { h: "Date", w: 22 },
-      { h: "Quote #", w: 26 },
-      { h: "Invoice #", w: 28 },
-      { h: "Client", w: 44 },
-      { h: "Amount", w: 28, align: "right" },
-      { h: "By", w: 38 },
-    ],
-    params.activity.conversions.map((c) => [
-      formatDate(c.convertedAt),
-      c.quotationNumber,
-      c.invoiceNumber,
-      c.clientName,
-      formatMoney(c.subTotal),
-      c.createdByName,
-    ]),
-  );
+  if (include("conversions")) {
+    drawSectionHeading("Invoices converted");
+    drawTable(
+      [
+        { h: "Date", w: 22 },
+        { h: "Quote #", w: 26 },
+        { h: "Invoice #", w: 28 },
+        { h: "Client", w: 44 },
+        { h: "Amount", w: 28, align: "right" },
+        { h: "By", w: 38 },
+      ],
+      params.activity.conversions.map((c) => [
+        formatDate(c.convertedAt),
+        c.quotationNumber,
+        c.invoiceNumber,
+        c.clientName,
+        formatMoney(c.subTotal),
+        c.createdByName,
+      ]),
+    );
+  }
 
-  drawSectionHeading("New clients onboarded");
-  drawTable(
-    [
-      { h: "Date", w: 24 },
-      { h: "Client", w: 50 },
-      { h: "Phone", w: 34 },
-      { h: "Location", w: 44 },
-      { h: "By", w: 34 },
-    ],
-    params.activity.newClients.map((c) => [
-      formatDate(c.createdAt),
-      c.name,
-      c.phone || "—",
-      c.location || "—",
-      c.createdByName,
-    ]),
-  );
+  if (include("newClients")) {
+    drawSectionHeading("New clients onboarded");
+    drawTable(
+      [
+        { h: "Date", w: 24 },
+        { h: "Client", w: 50 },
+        { h: "Phone", w: 34 },
+        { h: "Location", w: 44 },
+        { h: "By", w: 34 },
+      ],
+      params.activity.newClients.map((c) => [
+        formatDate(c.createdAt),
+        c.name,
+        c.phone || "—",
+        c.location || "—",
+        c.createdByName,
+      ]),
+    );
+  }
 
   const timeStr = new Date().toLocaleString("en-KE");
   ensureSpace(10);

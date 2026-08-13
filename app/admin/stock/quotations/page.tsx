@@ -20,7 +20,17 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 
-import { RefreshCw } from "lucide-react";
+import {
+  RefreshCw,
+  X,
+  FileText,
+  Users,
+  Building2,
+  Package,
+  Trash2,
+  Search,
+  ImageOff,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { stockApi } from "@/lib/api";
 import { finishDataLoad, startDataLoad } from "@/lib/silent-load";
@@ -54,9 +64,17 @@ interface Product {
   sellingPrice: number;
   currentQuantity: number;
   isOutsourced?: boolean;
+  taxable?: boolean;
+  taxRate?: number;
+  category?: string;
   categoryDetails?: { _id: string; name: string };
   imageUrl?: string;
   description?: string;
+}
+
+interface StockCategoryOption {
+  _id: string;
+  name: string;
 }
 
 interface User {
@@ -89,7 +107,9 @@ interface QuotationItem {
   soldUnitPrice?: number;
   unitPrice: number;
   lineTotal: number;
+  taxable?: boolean;
   taxRate?: number;
+  taxAmount?: number;
   totalAfterTax?: number;
   isOutsourced?: boolean;
   description?: string;
@@ -104,6 +124,8 @@ interface Quotation {
   client: Client;
   items: QuotationItem[];
   subTotal: number;
+  taxTotal?: number;
+  grandTotal?: number;
   createdBy: string;
   createdByName?: string;
   ownerUserId?: string;
@@ -121,11 +143,28 @@ interface DraftItem {
   productUnitPrice?: number;
   soldUnitPrice?: number;
   unitPrice: number;
+  taxable?: boolean;
   taxRate?: number;
   isOutsourced?: boolean;
   description?: string;
   imageUrl?: string;
   showImageOnQuote?: boolean;
+}
+
+const DEFAULT_VAT_RATE = 16;
+
+function calcLineTax(quantity: number, unitPrice: number, taxable?: boolean, taxRate?: number) {
+  const base = Number(quantity || 0) * Number(unitPrice || 0);
+  const rate = taxable
+    ? Number(taxRate && taxRate > 0 ? taxRate : DEFAULT_VAT_RATE)
+    : 0;
+  const taxAmount = taxable ? Number(((base * rate) / 100).toFixed(2)) : 0;
+  return {
+    base: Number(base.toFixed(2)),
+    taxRate: rate,
+    taxAmount,
+    total: Number((base + taxAmount).toFixed(2)),
+  };
 }
 
 interface StampOption {
@@ -211,6 +250,7 @@ export default function QuotationsPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<StockCategoryOption[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -254,9 +294,20 @@ export default function QuotationsPage() {
   const [productSearch, setProductSearch] = useState("");
   const [itemQuantity, setItemQuantity] = useState("1");
   const [itemUnitPrice, setItemUnitPrice] = useState("");
-  const [itemTaxRate, setItemTaxRate] = useState("0");
   const [itemDescription, setItemDescription] = useState("");
   const [items, setItems] = useState<DraftItem[]>([]);
+  const [quickCreateOpen, setQuickCreateOpen] = useState(false);
+  const [creatingQuickProduct, setCreatingQuickProduct] = useState(false);
+  const [quickProduct, setQuickProduct] = useState({
+    name: "",
+    categoryId: "",
+    newCategoryName: "",
+    price: "",
+    taxable: false,
+    quantity: "1",
+  });
+
+  const isQuickCreateCode = (value: string) => value.trim() === "99";
 
   useEffect(() => {
     const q = searchParams.get("q") || "";
@@ -306,6 +357,7 @@ export default function QuotationsPage() {
     try {
       const [
         productsRes,
+        categoriesRes,
         quotationsRes,
         activityClientsRes,
         savedClientsRes,
@@ -315,6 +367,7 @@ export default function QuotationsPage() {
         branchesRes,
       ] = await Promise.all([
         fetch(`${API_URL}/api/stock/products?lite=1`, { headers: getAuthHeaders() }),
+        fetch(`${API_URL}/api/stock/categories`, { headers: getAuthHeaders() }),
         fetch(`${API_URL}/api/stock/quotations`, { headers: getAuthHeaders() }),
         stockApi.getClients(),
         stockApi.getSavedClients(),
@@ -327,6 +380,7 @@ export default function QuotationsPage() {
       ]);
       const [
         productsJson,
+        categoriesJson,
         quotationsJson,
         activityClientsResp,
         savedClientsResp,
@@ -336,6 +390,7 @@ export default function QuotationsPage() {
         branchesJson,
       ] = await Promise.all([
         productsRes.json(),
+        categoriesRes.json(),
         quotationsRes.json(),
         Promise.resolve(activityClientsRes),
         Promise.resolve(savedClientsRes),
@@ -346,6 +401,7 @@ export default function QuotationsPage() {
       ]);
 
       setProducts(productsJson.data || []);
+      setCategories(categoriesJson.data || []);
       setQuotations(quotationsJson.data || []);
       const activityClients = (activityClientsResp.data || []) as Client[];
       const savedClients = (savedClientsResp.data || []) as Client[];
@@ -665,7 +721,7 @@ export default function QuotationsPage() {
 
   const matchingProducts = products.filter((product) => {
     const query = productSearch.trim().toLowerCase();
-    if (!query) return false;
+    if (!query || isQuickCreateCode(productSearch)) return false;
     return (
       product.name.toLowerCase().includes(query) ||
       (product.categoryDetails?.name || "").toLowerCase().includes(query)
@@ -680,6 +736,50 @@ export default function QuotationsPage() {
     .filter((product) => Number(product.currentQuantity || 0) > 0)
     .slice(0, 8);
 
+  useEffect(() => {
+    if (isQuickCreateCode(productSearch)) {
+      setQuickCreateOpen(true);
+      setQuickProduct((prev) => ({
+        ...prev,
+        quantity: itemQuantity || "1",
+        price: itemUnitPrice || prev.price,
+      }));
+    }
+  }, [productSearch, itemQuantity, itemUnitPrice]);
+
+  const resetQuickProductForm = () => {
+    setQuickProduct({
+      name: "",
+      categoryId: "",
+      newCategoryName: "",
+      price: "",
+      taxable: false,
+      quantity: "1",
+    });
+    setQuickCreateOpen(false);
+    setProductSearch("");
+  };
+
+  const draftTotals = useMemo(() => {
+    return items.reduce(
+      (acc, item) => {
+        const line = calcLineTax(
+          item.quantity,
+          item.soldUnitPrice ?? item.unitPrice,
+          item.taxable,
+          item.taxRate,
+        );
+        acc.subTotal += line.base;
+        acc.taxTotal += line.taxAmount;
+        acc.grandTotal += line.total;
+        return acc;
+      },
+      { subTotal: 0, taxTotal: 0, grandTotal: 0 },
+    );
+  }, [items]);
+
+  const draftSubtotal = draftTotals.grandTotal;
+
   const resetForm = () => {
     setClientName("");
     setClientNumber("");
@@ -693,9 +793,17 @@ export default function QuotationsPage() {
     setProductSearch("");
     setItemQuantity("1");
     setItemUnitPrice("");
-    setItemTaxRate("0");
     setItemDescription("");
     setItems([]);
+    setQuickCreateOpen(false);
+    setQuickProduct({
+      name: "",
+      categoryId: "",
+      newCategoryName: "",
+      price: "",
+      taxable: false,
+      quantity: "1",
+    });
     setEditingQuotationId(null);
     setShowCreate(false);
   };
@@ -759,6 +867,10 @@ export default function QuotationsPage() {
         productUnitPrice: Number(product.sellingPrice || 0),
         soldUnitPrice: unitPrice,
         unitPrice,
+        taxable: Boolean(product.taxable),
+        taxRate: Boolean(product.taxable)
+          ? Number(product.taxRate || DEFAULT_VAT_RATE)
+          : 0,
         description: itemDescription || product.description || "",
         imageUrl: product.imageUrl,
         showImageOnQuote: true,
@@ -769,6 +881,147 @@ export default function QuotationsPage() {
     setItemQuantity("1");
     setItemUnitPrice("");
     setItemDescription("");
+  };
+
+  const addQuickCreatedProduct = async () => {
+    const name = quickProduct.name.trim();
+    const price = Number(quickProduct.price);
+    const quantity = Number(quickProduct.quantity || itemQuantity || 1);
+    const newCategoryName = quickProduct.newCategoryName.trim();
+    let categoryId = quickProduct.categoryId.trim();
+
+    if (!name) {
+      toast({
+        title: "Product name required",
+        description: "Enter the new product name.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!categoryId && !newCategoryName) {
+      toast({
+        title: "Category required",
+        description: "Select an existing category or enter a new one.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!Number.isFinite(price) || price < 0) {
+      toast({
+        title: "Invalid price",
+        description: "Enter a valid selling price.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      toast({
+        title: "Invalid quantity",
+        description: "Quantity must be greater than 0.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setCreatingQuickProduct(true);
+
+      if (!categoryId && newCategoryName) {
+        const categoryRes = await fetch(`${API_URL}/api/stock/categories`, {
+          method: "POST",
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ name: newCategoryName }),
+        });
+        const categoryJson = await categoryRes.json();
+        if (!categoryRes.ok || !categoryJson?.data?._id) {
+          throw new Error(categoryJson?.message || "Failed to create category");
+        }
+        categoryId = String(categoryJson.data._id);
+        setCategories((prev) => {
+          if (prev.some((c) => c._id === categoryId)) return prev;
+          return [...prev, { _id: categoryId, name: categoryJson.data.name || newCategoryName }].sort(
+            (a, b) => a.name.localeCompare(b.name),
+          );
+        });
+      }
+
+      const formData = new FormData();
+      formData.append("name", name);
+      formData.append("category", categoryId);
+      formData.append("buyingPrice", String(price));
+      formData.append("sellingPrice", String(price));
+      formData.append("startingPrice", String(price));
+      formData.append("minAlertQuantity", "0");
+      formData.append("currentQuantity", "0");
+      formData.append("taxable", String(quickProduct.taxable));
+      formData.append("taxRate", String(DEFAULT_VAT_RATE));
+      formData.append("productType", "physical");
+
+      const token = getToken();
+      const productRes = await fetch(`${API_URL}/api/stock/products`, {
+        method: "POST",
+        headers: {
+          Authorization: token ? `Bearer ${token}` : "",
+        },
+        body: formData,
+      });
+      const productJson = await productRes.json();
+      if (!productRes.ok || !productJson?.data?._id) {
+        throw new Error(productJson?.message || "Failed to create product");
+      }
+
+      const created = productJson.data as Product;
+      const categoryName =
+        categories.find((c) => c._id === categoryId)?.name ||
+        newCategoryName ||
+        "Uncategorized";
+
+      const productForList: Product = {
+        ...created,
+        category: categoryId,
+        categoryDetails: { _id: categoryId, name: categoryName },
+        taxable: Boolean(quickProduct.taxable),
+        taxRate: DEFAULT_VAT_RATE,
+        currentQuantity: Number(created.currentQuantity || 0),
+        sellingPrice: Number(created.sellingPrice ?? price),
+      };
+
+      setProducts((prev) => [productForList, ...prev.filter((p) => p._id !== productForList._id)]);
+
+      setItems((prev) => [
+        ...prev,
+        {
+          productId: productForList._id,
+          quantity,
+          productName: productForList.name,
+          productUnitPrice: Number(productForList.sellingPrice || price),
+          soldUnitPrice: Number(productForList.sellingPrice || price),
+          unitPrice: Number(productForList.sellingPrice || price),
+          taxable: Boolean(quickProduct.taxable),
+          taxRate: quickProduct.taxable ? DEFAULT_VAT_RATE : 0,
+          description: "",
+          showImageOnQuote: true,
+        },
+      ]);
+
+      toast({
+        title: "Product created",
+        description: `${productForList.name} saved to inventory and added to this quotation.`,
+      });
+
+      resetQuickProductForm();
+      setItemQuantity("1");
+      setItemUnitPrice("");
+      setItemDescription("");
+    } catch (error: any) {
+      toast({
+        title: "Could not create product",
+        description: error?.message || "Failed to create product",
+        variant: "destructive",
+      });
+    } finally {
+      setCreatingQuickProduct(false);
+    }
   };
 
   const removeDraftItem = (index: number) => {
@@ -808,6 +1061,58 @@ export default function QuotationsPage() {
         };
       }),
     );
+  };
+
+  const updateDraftItemTaxable = (index: number, taxable: boolean) => {
+    setItems((prev) =>
+      prev.map((item, currentIndex) => {
+        if (currentIndex !== index) return item;
+        const product = products.find((p) => p._id === item.productId);
+        return {
+          ...item,
+          taxable,
+          taxRate: taxable
+            ? Number(item.taxRate || product?.taxRate || DEFAULT_VAT_RATE)
+            : 0,
+        };
+      }),
+    );
+
+    // Persist taxable flag on product so next quotation picks it up
+    const item = items[index];
+    if (!item?.productId || String(item.productId).startsWith("outsourced:") || String(item.productId).startsWith("manual:")) {
+      return;
+    }
+    void fetch(`${API_URL}/api/stock/products/${item.productId}`, {
+      method: "PUT",
+      headers: {
+        ...getAuthHeaders(),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        taxable,
+        taxRate: taxable ? Number(item.taxRate || DEFAULT_VAT_RATE) : DEFAULT_VAT_RATE,
+      }),
+    })
+      .then(async (response) => {
+        if (!response.ok) return;
+        setProducts((prev) =>
+          prev.map((product) =>
+            product._id === item.productId
+              ? {
+                  ...product,
+                  taxable,
+                  taxRate: taxable
+                    ? Number(item.taxRate || product.taxRate || DEFAULT_VAT_RATE)
+                    : Number(product.taxRate || DEFAULT_VAT_RATE),
+                }
+              : product,
+          ),
+        );
+      })
+      .catch(() => {
+        // Quotation save still persists taxable via buildQuotationItems
+      });
   };
 
   const createOrUpdateQuotation = async () => {
@@ -905,6 +1210,10 @@ export default function QuotationsPage() {
         productUnitPrice: item.productUnitPrice ?? item.unitPrice,
         soldUnitPrice: item.soldUnitPrice ?? item.unitPrice,
         unitPrice: item.unitPrice,
+        taxable: Boolean(item.taxable),
+        taxRate: Boolean(item.taxable)
+          ? Number(item.taxRate || DEFAULT_VAT_RATE)
+          : 0,
         isOutsourced: Boolean(item.isOutsourced),
         description: item.description,
         imageUrl: item.imageUrl,
@@ -1102,6 +1411,8 @@ export default function QuotationsPage() {
       client: quotation.client,
       items: quotation.items,
       subTotal: quotation.subTotal,
+      taxTotal: quotation.taxTotal,
+      grandTotal: quotation.grandTotal,
       branding,
       invoiceSettings,
       preparedBy,
@@ -1209,6 +1520,12 @@ export default function QuotationsPage() {
             </Button>
             <Button
               onClick={() => (showCreate ? resetForm() : setShowCreate(true))}
+              style={
+                !showCreate
+                  ? { backgroundColor: primaryColor, borderColor: primaryColor }
+                  : undefined
+              }
+              className={!showCreate ? "text-white hover:opacity-90" : undefined}
             >
               {showCreate ? "Close" : "Create Quotation"}
             </Button>
@@ -1343,33 +1660,79 @@ export default function QuotationsPage() {
       {/* Stamp prompt and prepared-by signature management moved to Admin User Settings and Employee Profile */}
 
       {showCreate && (
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              {editingQuotationId ? "Edit Quotation" : "Create Quotation"}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
+        <Card className="overflow-hidden border-0 shadow-md ring-1 ring-black/5">
+          <div
+            className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
+            style={{
+              background: `linear-gradient(to right, ${primaryColor}, ${secondaryColor})`,
+            }}
+          >
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/15 backdrop-blur-sm">
+                <FileText className="h-5 w-5 text-white" />
+              </div>
               <div>
-                <Label>Search Existing Clients</Label>
-                <Input
-                  className="mb-2"
-                  placeholder="Search client by name, location, number or contact person"
-                  value={existingClientSearch}
-                  onChange={(event) => {
-                    setExistingClientSearch(event.target.value);
-                    setShowClientList(true);
-                  }}
-                />
-                <div className="rounded-md border bg-background shadow-sm">
+                <p className="text-[11px] font-medium uppercase tracking-wider text-white/80">
+                  {editingQuotationId ? "Editing draft" : "New document"}
+                </p>
+                <h2 className="text-lg font-semibold leading-tight text-white">
+                  {editingQuotationId ? "Edit Quotation" : "Create Quotation"}
+                </h2>
+              </div>
+            </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={resetForm}
+              className="w-fit border-0 bg-white/15 text-white hover:bg-white/25"
+            >
+              <X className="mr-1.5 h-4 w-4" />
+              Close
+            </Button>
+          </div>
+
+          <CardContent className="space-y-6 p-5 sm:p-6">
+            {/* Step 1: Client */}
+            <section className="space-y-3">
+              <div className="flex items-center gap-2">
+                <div
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white"
+                  style={{ backgroundColor: primaryColor }}
+                >
+                  <Users className="h-3.5 w-3.5" />
+                </div>
+                <h3 className="text-sm font-semibold text-foreground">
+                  Client details
+                </h3>
+              </div>
+
+              <div className="rounded-xl border bg-muted/20 p-3 sm:p-4">
+                <div className="mb-3">
+                  <Label className="text-xs text-muted-foreground">
+                    Search existing clients
+                  </Label>
+                  <div className="relative mt-1">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      className="pl-9"
+                      placeholder="Search by name, location, number or contact person"
+                      value={existingClientSearch}
+                      onChange={(event) => {
+                        setExistingClientSearch(event.target.value);
+                        setShowClientList(true);
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div className="rounded-lg border bg-background shadow-sm">
                   <div className="flex items-center justify-between border-b bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
                     <span>{filteredClients.length} client(s) found</span>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-3">
                       {selectedExistingClient && (
                         <button
                           type="button"
-                          className="underline"
+                          className="underline underline-offset-2 hover:text-foreground"
                           onClick={() => setShowClientList((prev) => !prev)}
                         >
                           {showClientList ? "Collapse" : "Expand"}
@@ -1377,7 +1740,7 @@ export default function QuotationsPage() {
                       )}
                       <button
                         type="button"
-                        className="underline"
+                        className="underline underline-offset-2 hover:text-foreground"
                         onClick={() => {
                           setExistingClientSearch("");
                           setSelectedExistingClient("");
@@ -1395,15 +1758,24 @@ export default function QuotationsPage() {
 
                   {selectedExistingClient && !showClientList ? (
                     <div className="p-3">
-                      <div className="flex items-start justify-between rounded-lg border border-teal-200 bg-teal-50 px-3 py-2">
-                        <div>
-                          <div className="font-medium text-teal-900">
+                      <div
+                        className="flex items-start justify-between gap-3 rounded-lg border px-3 py-2.5"
+                        style={{
+                          borderColor: primaryBorderColor,
+                          backgroundColor: primarySoftColor,
+                        }}
+                      >
+                        <div className="min-w-0">
+                          <div
+                            className="text-[11px] font-medium uppercase tracking-wide"
+                            style={{ color: primaryColor }}
+                          >
                             Client selected
                           </div>
-                          <div className="text-sm text-teal-800">
+                          <div className="truncate font-medium text-foreground">
                             {clientName}
                           </div>
-                          <div className="text-xs text-teal-700">
+                          <div className="truncate text-xs text-muted-foreground">
                             {clientNumber} · {clientLocation}
                             {clientContactPerson
                               ? ` · ${clientContactPerson}`
@@ -1414,6 +1786,7 @@ export default function QuotationsPage() {
                           type="button"
                           variant="outline"
                           size="sm"
+                          className="shrink-0"
                           onClick={() => setShowClientList(true)}
                         >
                           Change
@@ -1421,11 +1794,11 @@ export default function QuotationsPage() {
                       </div>
                     </div>
                   ) : filteredClients.length === 0 ? (
-                    <div className="p-3 text-sm text-muted-foreground">
+                    <div className="p-4 text-center text-sm text-muted-foreground">
                       No saved clients match your search.
                     </div>
                   ) : (
-                    <div className="max-h-64 overflow-auto divide-y">
+                    <div className="max-h-56 overflow-auto divide-y">
                       {filteredClients.map((client) => {
                         const value = JSON.stringify(client);
                         const isSelected = selectedExistingClient === value;
@@ -1434,12 +1807,14 @@ export default function QuotationsPage() {
                             key={value}
                             type="button"
                             onClick={() => selectExistingClient(value)}
-                            className={`w-full px-3 py-3 text-left text-sm transition hover:bg-muted/60 ${isSelected ? "bg-teal-50" : "bg-background"}`}
+                            className={`w-full px-3 py-2.5 text-left text-sm transition hover:bg-muted/60 ${isSelected ? "bg-teal-50" : "bg-background"}`}
                           >
                             <div className="flex items-center justify-between gap-3">
-                              <div>
-                                <div className="font-medium">{client.name}</div>
-                                <div className="text-xs text-muted-foreground">
+                              <div className="min-w-0">
+                                <div className="truncate font-medium">
+                                  {client.name}
+                                </div>
+                                <div className="truncate text-xs text-muted-foreground">
                                   {client.number} · {client.location}
                                   {client.contactPerson
                                     ? ` · ${client.contactPerson}`
@@ -1447,7 +1822,10 @@ export default function QuotationsPage() {
                                 </div>
                               </div>
                               {isSelected && (
-                                <Badge className="bg-teal-100 text-teal-800 hover:bg-teal-100">
+                                <Badge
+                                  className="shrink-0 border-0 text-white"
+                                  style={{ backgroundColor: primaryColor }}
+                                >
                                   Selected
                                 </Badge>
                               )}
@@ -1458,325 +1836,708 @@ export default function QuotationsPage() {
                     </div>
                   )}
                 </div>
-              </div>
-            </div>
 
-            <div className="grid gap-4 md:grid-cols-3">
-              <div>
-                <Label>Client Name</Label>
-                <Input
-                  value={clientName}
-                  onChange={(event) => setClientName(event.target.value)}
-                />
-              </div>
-              <div>
-                <Label>Client Number</Label>
-                <Input
-                  value={clientNumber}
-                  onChange={(event) => setClientNumber(event.target.value)}
-                />
-              </div>
-              <div>
-                <Label>Client Location</Label>
-                <Input
-                  value={clientLocation}
-                  onChange={(event) => setClientLocation(event.target.value)}
-                />
-              </div>
-              <div>
-                <Label>Contact Person (optional)</Label>
-                <Input
-                  value={clientContactPerson}
-                  onChange={(event) =>
-                    setClientContactPerson(event.target.value)
-                  }
-                />
-              </div>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <Label>Quotation Owner</Label>
-                <select
-                  className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-                  value={quotationOwnerId}
-                  onChange={(event) => {
-                    setQuotationOwnerId(event.target.value);
-                    setBranchHint("");
-                  }}
-                >
-                  <option value="">
-                    -- Select who this quotation is for --
-                  </option>
-                  {users
-                    .filter((user) =>
-                      [
-                        "employee",
-                        "manager",
-                        "admin",
-                        "company_admin",
-                        "hr",
-                      ].includes(user.role),
-                    )
-                    .map((user) => (
-                      <option key={user._id} value={user._id}>
-                        {user.firstName} {user.lastName} ({user.role})
-                      </option>
-                    ))}
-                </select>
-              </div>
-              {branches.length > 0 ? (
-                <div>
-                  <Label>Branch</Label>
-                  <div className="flex gap-2">
-                    <select
-                      className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-                      value={quotationBranchId}
-                      onChange={(event) =>
-                        setQuotationBranchId(event.target.value)
-                      }
-                    >
-                      <option value="">-- Select branch --</option>
-                      {branches.map((branch) => (
-                        <option key={branch._id} value={branch._id}>
-                          {branch.name} ({branch.code})
-                        </option>
-                      ))}
-                    </select>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={knowBranch}
-                    >
-                      Know Branch
-                    </Button>
+                <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  <div>
+                    <Label className="text-xs text-muted-foreground">
+                      Client name
+                    </Label>
+                    <Input
+                      className="mt-1"
+                      value={clientName}
+                      onChange={(event) => setClientName(event.target.value)}
+                    />
                   </div>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {branchHint ||
-                      "Choose a user and click Know Branch to auto-fill their assigned branch."}
-                  </p>
-                </div>
-              ) : (
-                <div className="rounded-md border bg-muted/20 p-3 text-xs text-muted-foreground">
-                  This company has no branches yet, so branch selection is
-                  hidden.
-                </div>
-              )}
-            </div>
-
-            <div className="rounded-md border p-4 space-y-4">
-              <div className="grid gap-4 md:grid-cols-4">
-                <div>
-                  <Label>Type Product Name</Label>
-                  <Input
-                    placeholder="Start typing product name"
-                    value={productSearch}
-                    onChange={(event) => setProductSearch(event.target.value)}
-                  />
-                </div>
-                <div>
-                  <Label>Quantity</Label>
-                  <Input
-                    type="number"
-                    min="1"
-                    value={itemQuantity}
-                    onChange={(event) => setItemQuantity(event.target.value)}
-                  />
-                </div>
-                <div>
-                  <Label>Sold Price (optional override)</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    value={itemUnitPrice}
-                    onChange={(event) => setItemUnitPrice(event.target.value)}
-                  />
-                </div>
-                <div className="md:col-span-4">
-                  <Label>
-                    Product Description / Scope of Work (optional, supports
-                    bullet points)
-                  </Label>
-                  <Textarea
-                    placeholder="Enter additional details or bullet points here..."
-                    value={itemDescription}
-                    onChange={(event: React.ChangeEvent<HTMLTextAreaElement>) =>
-                      setItemDescription(event.target.value)
-                    }
-                    className="mt-1"
-                    rows={3}
-                  />
+                  <div>
+                    <Label className="text-xs text-muted-foreground">
+                      Client number
+                    </Label>
+                    <Input
+                      className="mt-1"
+                      value={clientNumber}
+                      onChange={(event) => setClientNumber(event.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">
+                      Client location
+                    </Label>
+                    <Input
+                      className="mt-1"
+                      value={clientLocation}
+                      onChange={(event) =>
+                        setClientLocation(event.target.value)
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">
+                      Contact person (optional)
+                    </Label>
+                    <Input
+                      className="mt-1"
+                      value={clientContactPerson}
+                      onChange={(event) =>
+                        setClientContactPerson(event.target.value)
+                      }
+                    />
+                  </div>
                 </div>
               </div>
+            </section>
 
-              {productSearch.trim() && (
-                <div className="border rounded-md divide-y">
-                  {productSuggestions.length === 0 ? (
-                    <div className="p-3 text-sm text-muted-foreground space-y-2">
-                      <p>No matching products</p>
-                      <p className="text-xs">
-                        Choose a matching inventory item to continue.
+            {/* Step 2: Assignment */}
+            <section className="space-y-3">
+              <div className="flex items-center gap-2">
+                <div
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white"
+                  style={{ backgroundColor: secondaryColor }}
+                >
+                  <Building2 className="h-3.5 w-3.5" />
+                </div>
+                <h3 className="text-sm font-semibold text-foreground">
+                  Owner &amp; branch
+                </h3>
+              </div>
+
+              <div className="rounded-xl border bg-muted/20 p-3 sm:p-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <Label className="text-xs text-muted-foreground">
+                      Quotation owner
+                    </Label>
+                    <select
+                      className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
+                      value={quotationOwnerId}
+                      onChange={(event) => {
+                        setQuotationOwnerId(event.target.value);
+                        setBranchHint("");
+                      }}
+                    >
+                      <option value="">
+                        -- Select who this quotation is for --
+                      </option>
+                      {users
+                        .filter((user) =>
+                          [
+                            "employee",
+                            "manager",
+                            "admin",
+                            "company_admin",
+                            "hr",
+                          ].includes(user.role),
+                        )
+                        .map((user) => (
+                          <option key={user._id} value={user._id}>
+                            {user.firstName} {user.lastName} ({user.role})
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                  {branches.length > 0 ? (
+                    <div>
+                      <Label className="text-xs text-muted-foreground">
+                        Branch
+                      </Label>
+                      <div className="mt-1 flex gap-2">
+                        <select
+                          className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                          value={quotationBranchId}
+                          onChange={(event) =>
+                            setQuotationBranchId(event.target.value)
+                          }
+                        >
+                          <option value="">-- Select branch --</option>
+                          {branches.map((branch) => (
+                            <option key={branch._id} value={branch._id}>
+                              {branch.name} ({branch.code})
+                            </option>
+                          ))}
+                        </select>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="shrink-0"
+                          onClick={knowBranch}
+                        >
+                          Know Branch
+                        </Button>
+                      </div>
+                      <p className="mt-1.5 text-xs text-muted-foreground">
+                        {branchHint ||
+                          "Choose a user and click Know Branch to auto-fill their assigned branch."}
                       </p>
                     </div>
                   ) : (
-                    <>
-                      {productSuggestions.map((product) => (
-                        <button
-                          key={product._id}
-                          type="button"
-                          className="w-full text-left p-3 hover:bg-secondary text-sm"
-                          onClick={() => addItemFromSuggestion(product)}
-                        >
-                          <div className="font-medium flex items-center gap-2">
-                            {product.name}
-                            {product.isOutsourced ? (
-                              <span className="rounded bg-amber-100 px-2 py-0.5 text-[11px] text-amber-800">
-                                Outsourced
-                              </span>
-                            ) : null}
-                          </div>
-                          <div className="text-muted-foreground">
-                            Category: {product.categoryDetails?.name || "N/A"} |
-                            Product Price: {product.sellingPrice} | In stock:{" "}
-                            {product.currentQuantity}
-                          </div>
-                        </button>
-                      ))}
-                      {outOfStockHiddenCount > 0 ? (
-                        <div className="p-3 text-xs text-muted-foreground">
-                          {outOfStockHiddenCount} out-of-stock product(s) hidden
-                          from selectable list.
-                        </div>
-                      ) : null}
-                    </>
+                    <div className="flex items-center rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
+                      This company has no branches yet, so branch selection is
+                      hidden.
+                    </div>
                   )}
                 </div>
-              )}
-            </div>
-
-            {items.length > 0 && (
-              <div className="overflow-x-auto border rounded-md">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-left border-b">
-                      <th className="py-2 px-2">Product</th>
-                      <th className="py-2 px-2">Qty</th>
-                      <th className="py-2 px-2">Product Price</th>
-                      <th className="py-2 px-2">Sold Price (Editable)</th>
-                      <th className="py-2 px-2">Outsourced</th>
-                      <th className="py-2 px-2">Total</th>
-                      <th className="py-2 px-2">Drop</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.map((item, index) => {
-                      const name =
-                        item.productName ||
-                        products.find(
-                          (product) => product._id === item.productId,
-                        )?.name ||
-                        item.productId;
-                      const referencePrice =
-                        item.productUnitPrice ??
-                        products.find(
-                          (product) => product._id === item.productId,
-                        )?.sellingPrice ??
-                        item.unitPrice;
-                      const soldPrice = item.soldUnitPrice ?? item.unitPrice;
-                      return (
-                        <tr
-                          key={`${item.productId}-${index}`}
-                          className="border-b"
-                        >
-                          <td className="py-2 px-2">
-                            <div className="flex items-center gap-2">
-                              {item.imageUrl && (
-                                <img
-                                  src={`${API_URL}${item.imageUrl}`}
-                                  alt={name}
-                                  loading="lazy"
-                                  decoding="async"
-                                  className="h-10 w-10 rounded border object-cover"
-                                />
-                              )}
-                              <div className="font-medium">{name}</div>
-                            </div>
-                            <Textarea
-                              value={item.description || ""}
-                              onChange={(e) =>
-                                updateDraftItemDescription(
-                                  index,
-                                  e.target.value,
-                                )
-                              }
-                              placeholder="Add description/notes..."
-                              className="mt-1 h-16 w-full text-xs"
-                            />
-                            {item.imageUrl && (
-                              <label className="mt-1 flex items-center gap-2 text-[10px] text-muted-foreground cursor-pointer">
-                                <Checkbox
-                                  checked={item.showImageOnQuote}
-                                  onCheckedChange={(val) => {
-                                    setItems((prev) =>
-                                      prev.map((it, idx) =>
-                                        idx === index
-                                          ? { ...it, showImageOnQuote: !!val }
-                                          : it,
-                                      ),
-                                    );
-                                  }}
-                                />
-                                <span>Show image on quotation PDF</span>
-                              </label>
-                            )}
-                          </td>
-                          <td className="py-2 px-2">{item.quantity}</td>
-                          <td className="py-2 px-2">{referencePrice}</td>
-                          <td className="py-2 px-2">
-                            <Input
-                              type="number"
-                              min={Number(referencePrice || 0)}
-                              value={soldPrice}
-                              onChange={(event) =>
-                                updateDraftItemSoldPrice(
-                                  index,
-                                  event.target.value,
-                                )
-                              }
-                              className="h-8"
-                            />
-                            <div className="mt-1 text-[10px] text-muted-foreground">
-                              Min: {referencePrice}
-                            </div>
-                          </td>
-                          <td className="py-2 px-2">
-                            {item.isOutsourced ? "Yes" : "No"}
-                          </td>
-                          <td className="py-2 px-2">
-                            {(item.quantity * soldPrice).toFixed(2)}
-                          </td>
-                          <td className="py-2 px-2">
-                            <Button
-                              size="sm"
-                              type="button"
-                              variant="destructive"
-                              onClick={() => removeDraftItem(index)}
-                            >
-                              Drop
-                            </Button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
               </div>
-            )}
+            </section>
 
+            {/* Step 3: Items */}
+            <section className="space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <div
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white"
+                    style={{ backgroundColor: primaryColor }}
+                  >
+                    <Package className="h-3.5 w-3.5" />
+                  </div>
+                  <h3 className="text-sm font-semibold text-foreground">
+                    Products &amp; items
+                  </h3>
+                </div>
+                {items.length > 0 && (
+                  <Badge variant="outline" className="rounded-full">
+                    {items.length} item{items.length === 1 ? "" : "s"} added
+                  </Badge>
+                )}
+              </div>
+
+              <div className="rounded-xl border bg-muted/20 p-3 sm:p-4 space-y-4">
+                <div className="grid gap-4 md:grid-cols-4">
+                  <div className="md:col-span-2">
+                    <Label className="text-xs text-muted-foreground">
+                      Type product name
+                    </Label>
+                    <div className="relative mt-1">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        className="pl-9"
+                        placeholder='Start typing product name, or enter 99 for new product'
+                        value={productSearch}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          setProductSearch(value);
+                          if (isQuickCreateCode(value)) {
+                            setQuickCreateOpen(true);
+                          } else if (quickCreateOpen && value.trim() !== "99") {
+                            // keep panel open only while code is 99 / user actively creating
+                          }
+                        }}
+                      />
+                    </div>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      Tip: type <span className="font-semibold text-foreground">99</span> to quickly create a new product.
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">
+                      Quantity
+                    </Label>
+                    <Input
+                      className="mt-1"
+                      type="number"
+                      min="1"
+                      value={itemQuantity}
+                      onChange={(event) => setItemQuantity(event.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">
+                      Sold price (optional override)
+                    </Label>
+                    <Input
+                      className="mt-1"
+                      type="number"
+                      min="0"
+                      value={itemUnitPrice}
+                      onChange={(event) =>
+                        setItemUnitPrice(event.target.value)
+                      }
+                    />
+                  </div>
+                </div>
+
+                {(quickCreateOpen || isQuickCreateCode(productSearch)) && (
+                  <div
+                    className="rounded-lg border-2 bg-background p-4 space-y-3 shadow-sm"
+                    style={{ borderColor: primaryBorderColor }}
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-semibold" style={{ color: primaryColor }}>
+                          Quick create product (code 99)
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Fill in the product, then add it to this quotation. It is saved to inventory immediately.
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={resetQuickProductForm}
+                      >
+                        <X className="h-4 w-4 mr-1" />
+                        Close
+                      </Button>
+                    </div>
+
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="md:col-span-2">
+                        <Label className="text-xs text-muted-foreground">Product name *</Label>
+                        <Input
+                          className="mt-1"
+                          value={quickProduct.name}
+                          onChange={(e) =>
+                            setQuickProduct((prev) => ({ ...prev, name: e.target.value }))
+                          }
+                          placeholder="e.g. Theatre Operating Light"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Existing category</Label>
+                        <select
+                          className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
+                          value={quickProduct.categoryId}
+                          onChange={(e) =>
+                            setQuickProduct((prev) => ({
+                              ...prev,
+                              categoryId: e.target.value,
+                              newCategoryName: e.target.value ? "" : prev.newCategoryName,
+                            }))
+                          }
+                        >
+                          <option value="">Select category…</option>
+                          {categories.map((category) => (
+                            <option key={category._id} value={category._id}>
+                              {category.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Or enter new category</Label>
+                        <Input
+                          className="mt-1"
+                          value={quickProduct.newCategoryName}
+                          onChange={(e) =>
+                            setQuickProduct((prev) => ({
+                              ...prev,
+                              newCategoryName: e.target.value,
+                              categoryId: e.target.value.trim() ? "" : prev.categoryId,
+                            }))
+                          }
+                          placeholder="New category name"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Price *</Label>
+                        <Input
+                          className="mt-1"
+                          type="number"
+                          min="0"
+                          value={quickProduct.price}
+                          onChange={(e) =>
+                            setQuickProduct((prev) => ({ ...prev, price: e.target.value }))
+                          }
+                          placeholder="0.00"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Quantity on quote</Label>
+                        <Input
+                          className="mt-1"
+                          type="number"
+                          min="1"
+                          value={quickProduct.quantity}
+                          onChange={(e) =>
+                            setQuickProduct((prev) => ({ ...prev, quantity: e.target.value }))
+                          }
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="inline-flex items-center gap-2 text-sm cursor-pointer">
+                          <Checkbox
+                            checked={quickProduct.taxable}
+                            onCheckedChange={(checked) =>
+                              setQuickProduct((prev) => ({
+                                ...prev,
+                                taxable: checked === true,
+                              }))
+                            }
+                          />
+                          <span>This product is taxed ({DEFAULT_VAT_RATE}% VAT)</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        onClick={() => void addQuickCreatedProduct()}
+                        disabled={creatingQuickProduct}
+                        style={{ backgroundColor: primaryColor }}
+                        className="text-white hover:opacity-90"
+                      >
+                        {creatingQuickProduct
+                          ? "Creating…"
+                          : "Create product & add to quotation"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={resetQuickProductForm}
+                        disabled={creatingQuickProduct}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {productSearch.trim() && !isQuickCreateCode(productSearch) && (
+                  <div className="overflow-hidden rounded-lg border bg-background shadow-sm">
+                    {productSuggestions.length === 0 ? (
+                      <div className="p-4 text-center text-sm text-muted-foreground space-y-1">
+                        <p>No matching products</p>
+                        <p className="text-xs">
+                          Choose a matching inventory item, or type <span className="font-medium text-foreground">99</span> to create a new one.
+                        </p>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="max-h-64 divide-y overflow-auto">
+                          {productSuggestions.map((product) => (
+                            <button
+                              key={product._id}
+                              type="button"
+                              className="flex w-full items-center justify-between gap-3 p-3 text-left text-sm transition hover:bg-muted/60"
+                              onClick={() => addItemFromSuggestion(product)}
+                            >
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 font-medium">
+                                  {product.name}
+                                  {product.isOutsourced ? (
+                                    <span className="rounded bg-amber-100 px-2 py-0.5 text-[11px] text-amber-800">
+                                      Outsourced
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <div className="truncate text-xs text-muted-foreground">
+                                  {product.categoryDetails?.name || "N/A"} · In
+                                  stock: {product.currentQuantity}
+                                </div>
+                              </div>
+                              <span
+                                className="shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold"
+                                style={{
+                                  backgroundColor: primarySoftColor,
+                                  color: primaryColor,
+                                }}
+                              >
+                                KES {product.sellingPrice.toLocaleString("en-KE")}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                        {outOfStockHiddenCount > 0 ? (
+                          <div className="border-t bg-muted/30 p-2.5 text-center text-xs text-muted-foreground">
+                            {outOfStockHiddenCount} out-of-stock product(s)
+                            hidden from selectable list.
+                          </div>
+                        ) : null}
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {items.length === 0 ? (
+                  <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                    No items added yet. Search for a product above, or type{" "}
+                    <span className="font-medium text-foreground">99</span> to
+                    create a new one.
+                  </div>
+                ) : (
+                  <div className="overflow-hidden rounded-lg border bg-background shadow-sm">
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[900px] text-sm">
+                        <thead className="bg-muted/50 text-[11px] uppercase tracking-wide text-muted-foreground">
+                          <tr className="text-left">
+                            <th className="py-2.5 px-3 font-medium">#</th>
+                            <th className="py-2.5 px-3 font-medium">
+                              Description
+                            </th>
+                            <th className="py-2.5 px-3 font-medium">Qty</th>
+                            <th className="py-2.5 px-3 font-medium">
+                              Unit price
+                            </th>
+                            <th className="py-2.5 px-3 font-medium">Taxed</th>
+                            <th className="py-2.5 px-3 font-medium text-right">
+                              Tax
+                            </th>
+                            <th className="py-2.5 px-3 font-medium text-right">
+                              Total
+                            </th>
+                            <th className="py-2.5 px-3 font-medium text-right">
+                              &nbsp;
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {items.map((item, index) => {
+                            const name =
+                              item.productName ||
+                              products.find(
+                                (product) => product._id === item.productId,
+                              )?.name ||
+                              item.productId;
+                            const referencePrice =
+                              item.productUnitPrice ??
+                              products.find(
+                                (product) => product._id === item.productId,
+                              )?.sellingPrice ??
+                              item.unitPrice;
+                            const soldPrice =
+                              item.soldUnitPrice ?? item.unitPrice;
+                            const line = calcLineTax(
+                              item.quantity,
+                              soldPrice,
+                              item.taxable,
+                              item.taxRate,
+                            );
+                            return (
+                              <tr
+                                key={`${item.productId}-${index}`}
+                                className={`border-t align-top ${index % 2 === 0 ? "bg-white" : "bg-muted/10"}`}
+                              >
+                                <td className="py-2.5 px-3 text-muted-foreground">
+                                  {index + 1}
+                                </td>
+                                <td className="py-2.5 px-3 max-w-[280px]">
+                                  <div className="flex items-start gap-2">
+                                    {item.imageUrl ? (
+                                      <img
+                                        src={`${API_URL}${item.imageUrl}`}
+                                        alt={name}
+                                        loading="lazy"
+                                        decoding="async"
+                                        className="h-10 w-10 shrink-0 rounded border object-cover"
+                                      />
+                                    ) : (
+                                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded border bg-muted/40 text-muted-foreground">
+                                        <ImageOff className="h-4 w-4" />
+                                      </div>
+                                    )}
+                                    <div className="min-w-0 flex-1">
+                                      <div className="truncate font-medium">
+                                        {name}
+                                      </div>
+                                      <Textarea
+                                        value={item.description || ""}
+                                        onChange={(e) =>
+                                          updateDraftItemDescription(
+                                            index,
+                                            e.target.value,
+                                          )
+                                        }
+                                        placeholder="Add description/notes..."
+                                        className="mt-1 h-14 w-full text-xs"
+                                      />
+                                      {item.imageUrl && (
+                                        <label className="mt-1 flex items-center gap-2 text-[10px] text-muted-foreground cursor-pointer">
+                                          <Checkbox
+                                            checked={item.showImageOnQuote}
+                                            onCheckedChange={(val) => {
+                                              setItems((prev) =>
+                                                prev.map((it, idx) =>
+                                                  idx === index
+                                                    ? {
+                                                        ...it,
+                                                        showImageOnQuote: !!val,
+                                                      }
+                                                    : it,
+                                                ),
+                                              );
+                                            }}
+                                          />
+                                          <span>Show image on quotation PDF</span>
+                                        </label>
+                                      )}
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="py-2.5 px-3">{item.quantity}</td>
+                                <td className="py-2.5 px-3">
+                                  <Input
+                                    type="number"
+                                    min={Number(referencePrice || 0)}
+                                    value={soldPrice}
+                                    onChange={(event) =>
+                                      updateDraftItemSoldPrice(
+                                        index,
+                                        event.target.value,
+                                      )
+                                    }
+                                    className="h-8 w-28"
+                                  />
+                                  <div className="mt-1 text-[10px] text-muted-foreground">
+                                    Min:{" "}
+                                    {Number(referencePrice).toLocaleString(
+                                      "en-KE",
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="py-2.5 px-3">
+                                  <label className="inline-flex items-center gap-2 text-xs cursor-pointer">
+                                    <Checkbox
+                                      checked={Boolean(item.taxable)}
+                                      onCheckedChange={(checked) =>
+                                        updateDraftItemTaxable(
+                                          index,
+                                          checked === true,
+                                        )
+                                      }
+                                    />
+                                    <span>
+                                      {item.taxable
+                                        ? `Yes (${line.taxRate}%)`
+                                        : "No"}
+                                    </span>
+                                  </label>
+                                </td>
+                                <td className="py-2.5 px-3 text-right tabular-nums">
+                                  {line.taxAmount.toLocaleString("en-KE", {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  })}
+                                </td>
+                                <td className="py-2.5 px-3 text-right font-semibold tabular-nums">
+                                  {line.total.toLocaleString("en-KE", {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  })}
+                                </td>
+                                <td className="py-2.5 px-3 text-right">
+                                  <Button
+                                    size="sm"
+                                    type="button"
+                                    variant="ghost"
+                                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                    onClick={() => removeDraftItem(index)}
+                                    aria-label={`Remove ${name}`}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                        <tfoot>
+                          <tr className="border-t bg-muted/30">
+                            <td
+                              colSpan={5}
+                              className="py-2 px-3 text-right text-xs font-medium uppercase tracking-wide text-muted-foreground"
+                            >
+                              Subtotal
+                            </td>
+                            <td className="py-2 px-3 text-right text-sm tabular-nums">
+                              —
+                            </td>
+                            <td className="py-2 px-3 text-right text-sm font-semibold tabular-nums">
+                              {draftTotals.subTotal.toLocaleString("en-KE", {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}
+                            </td>
+                            <td />
+                          </tr>
+                          <tr className="bg-muted/30">
+                            <td
+                              colSpan={5}
+                              className="py-2 px-3 text-right text-xs font-medium uppercase tracking-wide text-muted-foreground"
+                            >
+                              Tax
+                            </td>
+                            <td className="py-2 px-3 text-right text-sm tabular-nums">
+                              {draftTotals.taxTotal.toLocaleString("en-KE", {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}
+                            </td>
+                            <td className="py-2 px-3 text-right text-sm tabular-nums">
+                              {draftTotals.taxTotal.toLocaleString("en-KE", {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}
+                            </td>
+                            <td />
+                          </tr>
+                          <tr className="border-t bg-muted/40">
+                            <td
+                              colSpan={5}
+                              className="py-2.5 px-3 text-right text-xs font-medium uppercase tracking-wide text-muted-foreground"
+                            >
+                              Grand total
+                            </td>
+                            <td className="py-2.5 px-3 text-right text-sm tabular-nums">
+                              —
+                            </td>
+                            <td
+                              className="py-2.5 px-3 text-right text-base font-bold tabular-nums"
+                              style={{ color: primaryColor }}
+                            >
+                              KES{" "}
+                              {draftTotals.grandTotal.toLocaleString("en-KE", {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}
+                            </td>
+                            <td />
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
+          </CardContent>
+
+          <div className="flex flex-col gap-3 border-t bg-muted/30 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+            <div>
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                Quotation total
+              </p>
+              <p
+                className="text-xl font-bold leading-tight"
+                style={{ color: primaryColor }}
+              >
+                KES{" "}
+                {draftTotals.grandTotal.toLocaleString("en-KE", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                Subtotal{" "}
+                {draftTotals.subTotal.toLocaleString("en-KE", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}{" "}
+                · Tax{" "}
+                {draftTotals.taxTotal.toLocaleString("en-KE", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </p>
+            </div>
             <div className="flex gap-2">
+              <Button variant="outline" onClick={resetForm}>
+                Cancel
+              </Button>
               <Button
                 onClick={createOrUpdateQuotation}
                 disabled={savingQuotation}
+                style={{ backgroundColor: primaryColor, borderColor: primaryColor }}
+                className="text-white hover:opacity-90"
               >
                 {savingQuotation
                   ? "Saving..."
@@ -1784,11 +2545,8 @@ export default function QuotationsPage() {
                     ? "Update Quotation"
                     : "Generate Quotation"}
               </Button>
-              <Button variant="outline" onClick={resetForm}>
-                Cancel
-              </Button>
             </div>
-          </CardContent>
+          </div>
         </Card>
       )}
 

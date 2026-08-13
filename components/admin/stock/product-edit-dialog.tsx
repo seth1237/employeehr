@@ -42,6 +42,8 @@ interface Product {
   supplier?: string;
   manufacturer?: string;
   imageUrl?: string;
+  taxable?: boolean;
+  taxRate?: number;
 }
 
 interface ProductEditDialogProps {
@@ -71,6 +73,8 @@ export function ProductEditDialog({
     reorderLevel: "",
     supplier: "",
     manufacturer: "",
+    taxable: false,
+    taxRate: "16",
   });
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [manufacturers, setManufacturers] = useState<any[]>([]);
@@ -96,6 +100,8 @@ export function ProductEditDialog({
             : "10",
         supplier: product.supplier || "",
         manufacturer: product.manufacturer || "",
+        taxable: Boolean(product.taxable),
+        taxRate: String(product.taxRate || 16),
       });
       setSelectedImage(null);
       fetchManufacturers();
@@ -189,6 +195,8 @@ export function ProductEditDialog({
       submitData.append("minAlertQuantity", String(reorderLevel));
       submitData.append("supplier", formData.supplier.trim() || "");
       submitData.append("manufacturer", formData.manufacturer || "");
+      submitData.append("taxable", String(formData.taxable));
+      submitData.append("taxRate", String(formData.taxRate || 16));
       if (selectedImage) submitData.append("image", selectedImage);
 
       const response = await fetch(
@@ -366,6 +374,37 @@ export function ProductEditDialog({
               </SelectContent>
             </Select>
           </div>
+
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="h-4 w-4"
+              checked={formData.taxable}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  taxable: e.target.checked,
+                }))
+              }
+              disabled={loading}
+            />
+            <span>Product is taxable (VAT)</span>
+          </label>
+          {formData.taxable ? (
+            <div className="space-y-2">
+              <Label htmlFor="taxRate">Tax rate (%)</Label>
+              <Input
+                id="taxRate"
+                name="taxRate"
+                type="number"
+                min={0}
+                max={100}
+                value={formData.taxRate}
+                onChange={handleInputChange}
+                disabled={loading}
+              />
+            </div>
+          ) : null}
 
           <div className="space-y-2">
             <Label>Product Image (Optional)</Label>

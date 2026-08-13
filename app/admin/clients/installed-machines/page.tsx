@@ -49,6 +49,7 @@ import {
 interface InstalledMachine {
   _id: string;
   productName: string;
+  category?: string;
   serialNumber?: string;
   client?: {
     name: string;
@@ -664,6 +665,7 @@ export default function InstalledMachinesPage() {
 
   // Machine list / detail
   const [machineSearch, setMachineSearch] = useState("");
+  const [machineCategoryFilter, setMachineCategoryFilter] = useState("");
   const [machinePage, setMachinePage] = useState(1);
   const machinePageSize = 10;
   const [selectedMachine, setSelectedMachine] =
@@ -1235,21 +1237,38 @@ export default function InstalledMachinesPage() {
     );
   };
 
+  const machineCategoryOptions = useMemo(() => {
+    const categories = new Set<string>();
+    for (const machine of machines) {
+      const category = String(machine.category || "").trim();
+      if (category) categories.add(category);
+    }
+    return Array.from(categories).sort((a, b) => a.localeCompare(b));
+  }, [machines]);
+
   const filteredMachines = useMemo(() => {
     const query = machineSearch.trim().toLowerCase();
-    if (!query) return machines;
-    return machines.filter(
-      (m) =>
+    return machines.filter((m) => {
+      if (machineCategoryFilter) {
+        const category = String(m.category || "").trim();
+        if (category !== machineCategoryFilter) return false;
+      }
+      if (!query) return true;
+      return (
         m.productName.toLowerCase().includes(query) ||
         m.client?.name.toLowerCase().includes(query) ||
         m.serialNumber?.toLowerCase().includes(query) ||
-        m.installationLocation?.toLowerCase().includes(query),
-    );
-  }, [machines, machineSearch]);
+        m.installationLocation?.toLowerCase().includes(query) ||
+        String(m.category || "")
+          .toLowerCase()
+          .includes(query)
+      );
+    });
+  }, [machines, machineSearch, machineCategoryFilter]);
 
   useEffect(() => {
     setMachinePage(1);
-  }, [machineSearch]);
+  }, [machineSearch, machineCategoryFilter]);
 
   const machineTotalPages = Math.max(
     1,
@@ -3144,12 +3163,27 @@ export default function InstalledMachinesPage() {
                         Showing {filteredMachines.length} of {machines.length} machines
                       </p>
                     </div>
-                    <Input
-                      placeholder="Search by machine, client, serial..."
-                      value={machineSearch}
-                      onChange={(e) => setMachineSearch(e.target.value)}
-                      className="w-full sm:w-64"
-                    />
+                    <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+                      <select
+                        value={machineCategoryFilter}
+                        onChange={(e) => setMachineCategoryFilter(e.target.value)}
+                        className="w-full rounded border bg-background px-3 py-2 text-sm sm:w-52"
+                        aria-label="Filter by machine type"
+                      >
+                        <option value="">All machines</option>
+                        {machineCategoryOptions.map((category) => (
+                          <option key={category} value={category}>
+                            {category}
+                          </option>
+                        ))}
+                      </select>
+                      <Input
+                        placeholder="Search by machine, client, serial..."
+                        value={machineSearch}
+                        onChange={(e) => setMachineSearch(e.target.value)}
+                        className="w-full sm:w-64"
+                      />
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -3172,7 +3206,7 @@ export default function InstalledMachinesPage() {
                           No machines found
                         </p>
                         <p className="mt-1 text-sm text-muted-foreground">
-                          Try adjusting your search.
+                          Try adjusting your search or machine filter.
                         </p>
                       </div>
                     </div>

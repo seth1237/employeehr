@@ -362,18 +362,17 @@ export default function QuotationsPage() {
       const initialQuotations = (firstPage?.data || []) as Quotation[];
       setQuotations(initialQuotations);
 
-      const totalPages = Number(firstPage?.meta?.totalPages || 1);
-      void (async () => {
-        const accumulated = [...initialQuotations];
-        for (let nextPage = 2; nextPage <= totalPages; nextPage += 1) {
-          const response = await stockApi.getQuotations(nextPage, 20);
-          if (generation !== quotationLoadGeneration.current) return;
-          accumulated.push(...((response?.data || []) as Quotation[]));
-          setQuotations([...accumulated]);
-        }
-      })().catch(() => {
-        // The first page remains usable if background loading is interrupted.
-      });
+      if (firstPage?.meta?.hasMore) {
+        void stockApi
+          .getQuotations()
+          .then((allRes) => {
+            if (generation !== quotationLoadGeneration.current) return;
+            setQuotations((allRes?.data || []) as Quotation[]);
+          })
+          .catch(() => {
+            // The first page remains usable if background loading is interrupted.
+          });
+      }
 
       void (async () => {
         const [

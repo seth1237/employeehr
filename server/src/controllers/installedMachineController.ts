@@ -133,19 +133,30 @@ export class InstalledMachineController {
       const creditNotes = await CreditNote.find({
         org_id,
         status: { $in: ["issued", "applied"] },
+        invoiceId: { $exists: true, $nin: [null, ""] },
       })
         .select("invoiceId")
         .lean();
-      const reversedInvoiceIds = new Set(
-        creditNotes.map((c: any) => String(c.invoiceId)),
+      const reversedInvoiceIds = Array.from(
+        new Set(
+          creditNotes
+            .map((c: any) => String(c.invoiceId || "").trim())
+            .filter(Boolean),
+        ),
       );
 
       const query: Record<string, any> = {
         org_id,
         isActive: true,
       };
-      if (reversedInvoiceIds.size > 0) {
-        query.invoiceId = { $nin: Array.from(reversedInvoiceIds) };
+      // Keep manually-added machines (no invoiceId) while excluding reversed invoices.
+      if (reversedInvoiceIds.length > 0) {
+        query.$or = [
+          { invoiceId: { $exists: false } },
+          { invoiceId: null },
+          { invoiceId: "" },
+          { invoiceId: { $nin: reversedInvoiceIds } },
+        ];
       }
 
       const machineQuery = InstalledMachine.find(query).sort({ createdAt: -1 });
@@ -234,12 +245,16 @@ export class InstalledMachineController {
         const quotationId = inv.quotationId || null;
         for (const item of inv.items || []) {
           // attach product details where possible
-          const product = await StockProduct.findOne({
-            _id: item.productId,
-            org_id,
-          })
-            .select("category name")
-            .lean();
+          let product: any = null;
+          const productId = String(item.productId || "").trim();
+          if (/^[0-9a-fA-F]{24}$/.test(productId)) {
+            product = await StockProduct.findOne({
+              _id: productId,
+              org_id,
+            })
+              .select("category name")
+              .lean();
+          }
           candidates.push({
             invoiceId,
             quotationId,

@@ -763,18 +763,18 @@ export default function InstalledMachinesPage() {
       const initialMachines = (firstPage?.data || []) as InstalledMachine[];
       setMachines(initialMachines);
 
-      const totalPages = Number(firstPage?.meta?.totalPages || 1);
-      void (async () => {
-        const accumulated = [...initialMachines];
-        for (let nextPage = 2; nextPage <= totalPages; nextPage += 1) {
-          const response = await stockApi.getInstalledMachines(nextPage, 20);
-          if (generation !== machineLoadGeneration.current) return;
-          accumulated.push(...((response?.data || []) as InstalledMachine[]));
-          setMachines([...accumulated]);
-        }
-      })().catch(() => {
-        // Keep the first machine page usable if background loading is interrupted.
-      });
+      // Load the rest in one follow-up request (avoids dozens of page calls).
+      if (firstPage?.meta?.hasMore) {
+        void stockApi
+          .getInstalledMachines()
+          .then((allRes) => {
+            if (generation !== machineLoadGeneration.current) return;
+            setMachines((allRes?.data || []) as InstalledMachine[]);
+          })
+          .catch(() => {
+            // Keep the first machine page usable if background loading is interrupted.
+          });
+      }
 
       void (async () => {
         const [
@@ -788,10 +788,14 @@ export default function InstalledMachinesPage() {
           productsRes,
           usersRes,
         ] = await Promise.all([
-          stockApi.getInstallableCandidates(),
+          stockApi
+            .getInstallableCandidates()
+            .catch(() => ({ success: false, data: { categories: [], candidates: [] } })),
           stockApi.getMachineServices
-            ? stockApi.getMachineServices()
-            : Promise.resolve({ data: [] }),
+            ? stockApi
+                .getMachineServices()
+                .catch(() => ({ success: false, data: [] }))
+            : Promise.resolve({ success: true, data: [] }),
           api.crm.getTickets().catch(() => ({ success: false, data: [] })),
           stockApi
             .getAccountsClients()

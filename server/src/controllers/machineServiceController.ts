@@ -24,7 +24,11 @@ function classifyServiceStatus(service: any, givenDate = new Date()) {
 
 async function populateMachineInfo(orgId: string, services: any[]) {
   const machineIds = Array.from(
-    new Set(services.map((service) => String(service.machineId || "")).filter(Boolean)),
+    new Set(
+      services
+        .map((service) => String(service.machineId || "").trim())
+        .filter((id) => /^[0-9a-fA-F]{24}$/.test(id)),
+    ),
   );
 
   const machines = machineIds.length

@@ -92,7 +92,10 @@ class ApiClient {
           },
           timestamp: new Date().toISOString(),
         };
-        console.error("API request failed:", errorInfo);
+        console.error(
+          `API request failed: ${errorInfo.status} ${errorInfo.endpoint}`,
+          errorInfo,
+        );
         console.error("Full response body:", text);
 
         let errorMessage = "Request failed";

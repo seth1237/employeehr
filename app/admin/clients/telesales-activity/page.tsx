@@ -5,8 +5,11 @@ import Link from "next/link"
 import {
   Activity,
   CalendarClock,
+  ChevronDown,
   Download,
   FileText,
+  History,
+  Phone,
   RefreshCw,
   UserPlus,
   Wrench,
@@ -22,6 +25,19 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 import { useToast } from "@/hooks/use-toast"
 import { getToken } from "@/lib/auth"
 import API_URL from "@/lib/apiBase"
@@ -89,6 +105,10 @@ interface TelesalesActivityData {
     }>
     callLogs?: Array<{
       _id: string
+      conversationId?: string
+      leadId?: string
+      customerId?: string
+      leadStatus?: string
       clientName: string
       clientPhone: string
       callPurpose: string
@@ -163,6 +183,10 @@ interface TelesalesActivityData {
     }>
     followUps: Array<{
       _id: string
+      conversationId?: string
+      leadId?: string
+      customerId?: string
+      leadStatus?: string
       title: string
       clientName: string
       clientPhone?: string
@@ -264,6 +288,52 @@ function statusBadgeClass(status?: string) {
   return "bg-slate-50 text-slate-700 border-slate-200"
 }
 
+type LeadTemperatureStatus = "Warm Lead" | "Cold Lead" | "Dropped"
+
+const LEAD_STATUS_OPTIONS: LeadTemperatureStatus[] = [
+  "Warm Lead",
+  "Cold Lead",
+  "Dropped",
+]
+
+type LeadActionTarget = {
+  conversationId: string
+  leadId?: string
+  clientName: string
+  clientPhone?: string
+  callPurpose?: string
+  leadStatus?: string
+  note?: string
+}
+
+type HistoryTimelineItem = {
+  type: "conversation" | "status"
+  _id: string
+  at?: string
+  clientName?: string
+  callPurpose?: string
+  note?: string
+  outcome?: string
+  status?: string
+  followUpDate?: string
+  createdByName?: string
+  from?: string
+  to?: string
+}
+
+function leadStatusBadgeClass(status?: string) {
+  const s = String(status || "Warm Lead")
+  if (s === "Cold Lead") return "bg-sky-50 text-sky-800 border-sky-200"
+  if (s === "Dropped") return "bg-slate-100 text-slate-700 border-slate-300"
+  return "bg-amber-50 text-amber-800 border-amber-200"
+}
+
+function tomorrowDateInput() {
+  const date = new Date()
+  date.setDate(date.getDate() + 1)
+  return date.toISOString().slice(0, 10)
+}
+
 type ReportSectionKey =
   | "summary"
   | "callLogs"
@@ -314,6 +384,20 @@ export default function TelesalesActivityPage() {
   const [reportSections, setReportSections] = useState<Record<ReportSectionKey, boolean>>(
     () => ({ ...DEFAULT_REPORT_SECTIONS }),
   )
+  const [pdfSectionsOpen, setPdfSectionsOpen] = useState(true)
+  const [followUpTarget, setFollowUpTarget] = useState<LeadActionTarget | null>(null)
+  const [historyTarget, setHistoryTarget] = useState<LeadActionTarget | null>(null)
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyTimeline, setHistoryTimeline] = useState<HistoryTimelineItem[]>([])
+  const [historyLeadStatus, setHistoryLeadStatus] = useState<string>("")
+  const [statusSavingId, setStatusSavingId] = useState<string>("")
+  const [savingFollowUp, setSavingFollowUp] = useState(false)
+  const [followUpForm, setFollowUpForm] = useState({
+    note: "",
+    outcome: "Follow-up Needed",
+    followUpNeeded: true,
+    followUpDate: tomorrowDateInput(),
+  })
 
   const primaryColor = branding.primaryColor || "#0f766e"
   const secondaryColor = branding.secondaryColor || "#0ea5e9"
@@ -454,6 +538,195 @@ export default function TelesalesActivityPage() {
       Object.fromEntries(
         REPORT_SECTION_OPTIONS.map((option) => [option.key, false]),
       ) as Record<ReportSectionKey, boolean>,
+    )
+  }
+
+  const refresh = () => {
+    const from = data?.period.from || presetRange(preset).from
+    const to = data?.period.to || presetRange(preset).to
+    void load(from, to, viewPersonId)
+  }
+
+  const toLeadTarget = (item: {
+    _id: string
+    conversationId?: string
+    leadId?: string
+    clientName: string
+    clientPhone?: string
+    callPurpose?: string
+    leadStatus?: string
+    note?: string
+    title?: string
+  }): LeadActionTarget => ({
+    conversationId: item.conversationId || item._id,
+    leadId: item.leadId || "",
+    clientName: item.clientName,
+    clientPhone: item.clientPhone || "",
+    callPurpose: item.callPurpose || item.title || "",
+    leadStatus: item.leadStatus || "Warm Lead",
+    note: item.note || "",
+  })
+
+  const openFollowUp = (item: LeadActionTarget) => {
+    setFollowUpTarget(item)
+    setFollowUpForm({
+      note: "",
+      outcome: "Follow-up Needed",
+      followUpNeeded: true,
+      followUpDate: tomorrowDateInput(),
+    })
+  }
+
+  const openHistory = async (item: LeadActionTarget) => {
+    setHistoryTarget(item)
+    setHistoryTimeline([])
+    setHistoryLeadStatus(item.leadStatus || "Warm Lead")
+    setHistoryLoading(true)
+    try {
+      const res = await crmApi.getClientTelesalesHistory({
+        conversationId: item.conversationId,
+        leadId: item.leadId,
+        clientName: item.clientName !== "—" ? item.clientName : undefined,
+        clientPhone: item.clientPhone,
+      })
+      if (!res.success) {
+        throw new Error(res.message || "Failed to load history")
+      }
+      setHistoryTimeline(res.data?.timeline || [])
+      setHistoryLeadStatus(res.data?.lead?.leadStatus || item.leadStatus || "Warm Lead")
+    } catch (error: any) {
+      toast({
+        title: "History unavailable",
+        description: error?.message || "Failed to load client history",
+        variant: "destructive",
+      })
+    } finally {
+      setHistoryLoading(false)
+    }
+  }
+
+  const changeLeadStatus = async (item: LeadActionTarget, to: LeadTemperatureStatus) => {
+    if (!to || to === item.leadStatus) return
+    const key = item.conversationId || item.clientName
+    setStatusSavingId(key)
+    try {
+      const res = await crmApi.setTelesalesLeadStatus({
+        to,
+        conversationId: item.conversationId,
+        leadId: item.leadId,
+        clientName: item.clientName !== "—" ? item.clientName : undefined,
+        clientPhone: item.clientPhone,
+        callPurpose: item.callPurpose,
+        reason: `Changed to ${to} from telesales activity`,
+      })
+      if (!res.success) {
+        throw new Error(res.message || "Failed to update status")
+      }
+      toast({
+        title: "Lead status updated",
+        description: `${item.clientName} is now ${to}`,
+      })
+      refresh()
+    } catch (error: any) {
+      toast({
+        title: "Could not update status",
+        description: error?.message || "Failed to change lead status",
+        variant: "destructive",
+      })
+    } finally {
+      setStatusSavingId("")
+    }
+  }
+
+  const saveFollowUp = async () => {
+    if (!followUpTarget || !followUpForm.note.trim()) return
+    const followUpNeeded =
+      followUpForm.followUpNeeded || followUpForm.outcome === "Follow-up Needed"
+    if (followUpNeeded && !followUpForm.followUpDate) {
+      toast({
+        title: "Follow-up date required",
+        description: "Choose the next follow-up date",
+        variant: "destructive",
+      })
+      return
+    }
+    setSavingFollowUp(true)
+    try {
+      const res = await crmApi.createConversation({
+        roomName: "Telesales",
+        note: followUpForm.note.trim(),
+        callPurpose: followUpTarget.callPurpose || "Quotation follow up",
+        outcome: followUpForm.outcome,
+        status: followUpForm.outcome,
+        followUpNeeded,
+        followUpDate: followUpNeeded ? followUpForm.followUpDate : undefined,
+        clientName: followUpTarget.clientName,
+        clientPhone: followUpTarget.clientPhone,
+        lead_id: followUpTarget.leadId || undefined,
+        parentConversationId: followUpTarget.conversationId,
+        source: "telesales_activity",
+      })
+      if (!res.success) {
+        throw new Error(res.message || "Failed to save follow-up")
+      }
+      setFollowUpTarget(null)
+      toast({
+        title: "Follow-up saved",
+        description: followUpNeeded
+          ? "Previous item closed and the next follow-up was added to the planner."
+          : "Previous follow-up closed and the call was logged.",
+      })
+      refresh()
+    } catch (error: any) {
+      toast({
+        title: "Could not save follow-up",
+        description: error?.message || "Failed to log follow-up",
+        variant: "destructive",
+      })
+    } finally {
+      setSavingFollowUp(false)
+    }
+  }
+
+  const renderLeadActions = (item: LeadActionTarget) => {
+    const saving = statusSavingId === (item.conversationId || item.clientName)
+    return (
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-7 px-2 text-xs"
+          onClick={() => openFollowUp(item)}
+        >
+          <Phone className="mr-1 h-3 w-3" />
+          Follow up
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-7 px-2 text-xs"
+          onClick={() => void openHistory(item)}
+        >
+          <History className="mr-1 h-3 w-3" />
+          History
+        </Button>
+        <select
+          className="h-7 rounded-md border bg-background px-1.5 text-xs"
+          value={item.leadStatus || "Warm Lead"}
+          disabled={saving}
+          onChange={(event) =>
+            void changeLeadStatus(item, event.target.value as LeadTemperatureStatus)
+          }
+        >
+          {LEAD_STATUS_OPTIONS.map((status) => (
+            <option key={status} value={status}>
+              {status}
+            </option>
+          ))}
+        </select>
+      </div>
     )
   }
 
@@ -637,45 +910,61 @@ export default function TelesalesActivityPage() {
           </div>
         </div>
 
-        <div
-          className="mt-3 rounded-xl border-2 bg-white p-4 space-y-3 shadow-sm"
-          style={{ borderColor: primaryColor }}
-        >
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <p className="text-sm font-semibold" style={{ color: primaryColor }}>
-                Include in PDF report
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Tick what should appear in the export · {selectedReportSectionCount} selected
-              </p>
+        <Collapsible open={pdfSectionsOpen} onOpenChange={setPdfSectionsOpen}>
+          <div
+            className="mt-3 rounded-xl border-2 bg-white p-4 space-y-3 shadow-sm"
+            style={{ borderColor: primaryColor }}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <CollapsibleTrigger asChild>
+                <button
+                  type="button"
+                  className="flex min-w-0 flex-1 items-start justify-between gap-3 text-left"
+                >
+                  <div>
+                    <p className="text-sm font-semibold" style={{ color: primaryColor }}>
+                      Include in PDF report
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Tick what should appear in the export · {selectedReportSectionCount} selected
+                    </p>
+                  </div>
+                  <ChevronDown
+                    className={`mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground transition-transform ${
+                      pdfSectionsOpen ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
+              </CollapsibleTrigger>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" size="sm" variant="outline" onClick={selectAllReportSections}>
-                Select all
-              </Button>
-              <Button type="button" size="sm" variant="outline" onClick={clearReportSections}>
-                Clear
-              </Button>
-            </div>
+            <CollapsibleContent className="space-y-3">
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" size="sm" variant="outline" onClick={selectAllReportSections}>
+                  Select all
+                </Button>
+                <Button type="button" size="sm" variant="outline" onClick={clearReportSections}>
+                  Clear
+                </Button>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {REPORT_SECTION_OPTIONS.map((option) => (
+                  <label
+                    key={option.key}
+                    className="flex cursor-pointer items-start gap-2 rounded-md border bg-background px-2.5 py-2 text-sm hover:bg-muted/40"
+                  >
+                    <input
+                      type="checkbox"
+                      className="mt-1 h-4 w-4 accent-teal-700"
+                      checked={reportSections[option.key]}
+                      onChange={(e) => toggleReportSection(option.key, e.target.checked)}
+                    />
+                    <span className="leading-snug">{option.label}</span>
+                  </label>
+                ))}
+              </div>
+            </CollapsibleContent>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {REPORT_SECTION_OPTIONS.map((option) => (
-              <label
-                key={option.key}
-                className="flex cursor-pointer items-start gap-2 rounded-md border bg-background px-2.5 py-2 text-sm hover:bg-muted/40"
-              >
-                <input
-                  type="checkbox"
-                  className="mt-1 h-4 w-4 accent-teal-700"
-                  checked={reportSections[option.key]}
-                  onChange={(e) => toggleReportSection(option.key, e.target.checked)}
-                />
-                <span className="leading-snug">{option.label}</span>
-              </label>
-            ))}
-          </div>
-        </div>
+        </Collapsible>
 
         <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
           {kpis.map((kpi) => {
@@ -955,6 +1244,9 @@ export default function TelesalesActivityPage() {
                       status={item.status}
                       overdue={item.overdue}
                       meta={item.assignedToName}
+                      leadStatus={item.leadStatus || "Warm Lead"}
+                      onTitleClick={() => void openHistory(toLeadTarget(item))}
+                      actions={renderLeadActions(toLeadTarget(item))}
                     />
                   ))
                 )}
@@ -1078,24 +1370,25 @@ export default function TelesalesActivityPage() {
             <ActivityTable
               title="Call log activity"
               empty="No calls logged in this period"
-              headers={["Client", "Purpose", "Lead", "Notes discussed"]}
+              headers={["Client", "Purpose", "Status", "Notes discussed", "Actions"]}
               rows={(activity?.callLogs || []).map((c) => [
-                <span key={`${c._id}-client`} className="font-medium whitespace-nowrap">
+                <button
+                  key={`${c._id}-client`}
+                  type="button"
+                  className="font-medium whitespace-nowrap text-left hover:underline"
+                  onClick={() => void openHistory(toLeadTarget(c))}
+                >
                   {c.clientName || "—"}
-                </span>,
+                </button>,
                 <span key={`${c._id}-purpose`} className="whitespace-nowrap">
                   {c.callPurpose || "—"}
                 </span>,
                 <Badge
                   key={`${c._id}-lead`}
                   variant="outline"
-                  className={
-                    c.hasLead
-                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                      : "bg-slate-50 text-slate-600 border-slate-200"
-                  }
+                  className={leadStatusBadgeClass(c.leadStatus)}
                 >
-                  {c.hasLead ? "Lead" : "No"}
+                  {c.leadStatus || (c.hasLead ? "Warm Lead" : "No lead")}
                 </Badge>,
                 <span
                   key={`${c._id}-note`}
@@ -1104,6 +1397,9 @@ export default function TelesalesActivityPage() {
                 >
                   {c.note?.trim() ? c.note.trim() : "—"}
                 </span>,
+                <div key={`${c._id}-actions`} className="min-w-[220px]">
+                  {renderLeadActions(toLeadTarget(c))}
+                </div>,
               ])}
             />
             <ActivityTable
@@ -1192,6 +1488,167 @@ export default function TelesalesActivityPage() {
           </div>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={Boolean(followUpTarget)} onOpenChange={(open) => !open && setFollowUpTarget(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Follow up — {followUpTarget?.clientName || "Client"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label>Outcome</Label>
+              <select
+                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                value={followUpForm.outcome}
+                onChange={(event) => {
+                  const outcome = event.target.value
+                  setFollowUpForm((current) => ({
+                    ...current,
+                    outcome,
+                    followUpNeeded:
+                      outcome === "Follow-up Needed" ? true : current.followUpNeeded,
+                  }))
+                }}
+              >
+                <option value="Interested">Interested</option>
+                <option value="Follow-up Needed">Follow-up Needed</option>
+                <option value="Not Interested">Not Interested</option>
+                <option value="No Answer">No Answer</option>
+                <option value="Quote Requested">Quote Requested</option>
+                <option value="Closed">Closed</option>
+              </select>
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-teal-700"
+                checked={
+                  followUpForm.followUpNeeded ||
+                  followUpForm.outcome === "Follow-up Needed"
+                }
+                onChange={(event) =>
+                  setFollowUpForm((current) => ({
+                    ...current,
+                    followUpNeeded: event.target.checked,
+                  }))
+                }
+              />
+              Schedule another follow-up
+            </label>
+            {(followUpForm.followUpNeeded ||
+              followUpForm.outcome === "Follow-up Needed") && (
+              <div className="space-y-1">
+                <Label>Next follow-up date</Label>
+                <Input
+                  type="date"
+                  value={followUpForm.followUpDate}
+                  onChange={(event) =>
+                    setFollowUpForm((current) => ({
+                      ...current,
+                      followUpDate: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+            )}
+            <div className="space-y-1">
+              <Label>Notes</Label>
+              <Textarea
+                value={followUpForm.note}
+                onChange={(event) =>
+                  setFollowUpForm((current) => ({
+                    ...current,
+                    note: event.target.value,
+                  }))
+                }
+                placeholder="What was discussed?"
+                rows={4}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFollowUpTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void saveFollowUp()}
+              disabled={savingFollowUp || !followUpForm.note.trim()}
+            >
+              {savingFollowUp ? "Saving…" : "Save follow-up"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(historyTarget)} onOpenChange={(open) => !open && setHistoryTarget(null)}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>
+              History — {historyTarget?.clientName || "Client"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            {historyLeadStatus ? (
+              <Badge variant="outline" className={leadStatusBadgeClass(historyLeadStatus)}>
+                {historyLeadStatus}
+              </Badge>
+            ) : null}
+            {historyTarget?.clientPhone ? (
+              <span className="text-muted-foreground">{historyTarget.clientPhone}</span>
+            ) : null}
+          </div>
+          <div className="max-h-[60vh] space-y-3 overflow-y-auto">
+            {historyLoading ? (
+              <p className="py-4 text-center text-sm text-muted-foreground">
+                Loading history…
+              </p>
+            ) : historyTimeline.length === 0 ? (
+              <p className="py-4 text-center text-sm text-muted-foreground">
+                No logged interactions yet.
+              </p>
+            ) : (
+              historyTimeline.map((item) => (
+                <div key={item._id} className="rounded-lg border p-3 text-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-medium">
+                      {item.type === "status"
+                        ? `Status: ${item.from} → ${item.to}`
+                        : item.callPurpose || "Telesales"}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {item.at ? new Date(item.at).toLocaleString() : ""}
+                    </span>
+                  </div>
+                  {item.note ? <p className="mt-2">{item.note}</p> : null}
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {item.type === "status" && item.to ? (
+                      <Badge variant="outline" className={leadStatusBadgeClass(item.to)}>
+                        {item.to}
+                      </Badge>
+                    ) : null}
+                    {item.outcome || item.status ? (
+                      <Badge variant="outline">{item.outcome || item.status}</Badge>
+                    ) : null}
+                    {item.followUpDate ? (
+                      <Badge variant="secondary">
+                        Follow-up: {new Date(item.followUpDate).toLocaleDateString()}
+                      </Badge>
+                    ) : null}
+                    {item.createdByName ? (
+                      <span className="text-xs text-muted-foreground">{item.createdByName}</span>
+                    ) : null}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setHistoryTarget(null)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -1263,6 +1720,9 @@ function PlannerRow({
   status,
   overdue,
   meta,
+  leadStatus,
+  onTitleClick,
+  actions,
 }: {
   title: string
   subtitle: string
@@ -1270,25 +1730,46 @@ function PlannerRow({
   status: string
   overdue?: boolean
   meta?: string
+  leadStatus?: string
+  onTitleClick?: () => void
+  actions?: ReactNode
 }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-1.5 shadow-sm transition-colors hover:bg-muted/20">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-slate-900 leading-snug truncate">{title}</p>
+          {onTitleClick ? (
+            <button
+              type="button"
+              className="text-sm font-semibold text-slate-900 leading-snug truncate hover:underline text-left"
+              onClick={onTitleClick}
+            >
+              {title}
+            </button>
+          ) : (
+            <p className="text-sm font-semibold text-slate-900 leading-snug truncate">{title}</p>
+          )}
           <p className="text-xs text-muted-foreground truncate">{subtitle}</p>
         </div>
-        <Badge
-          variant="outline"
-          className={`flex-shrink-0 ${statusBadgeClass(overdue ? "overdue" : status)}`}
-        >
-          {overdue ? "overdue" : status}
-        </Badge>
+        <div className="flex flex-shrink-0 flex-col items-end gap-1">
+          {leadStatus ? (
+            <Badge variant="outline" className={leadStatusBadgeClass(leadStatus)}>
+              {leadStatus}
+            </Badge>
+          ) : null}
+          <Badge
+            variant="outline"
+            className={statusBadgeClass(overdue ? "overdue" : status)}
+          >
+            {overdue ? "overdue" : status}
+          </Badge>
+        </div>
       </div>
       <div className="flex items-center justify-between text-[11px] text-muted-foreground">
         <span>{date}</span>
         {meta ? <span className="truncate max-w-[50%]">{meta}</span> : null}
       </div>
+      {actions ? <div className="pt-1">{actions}</div> : null}
     </div>
   )
 }

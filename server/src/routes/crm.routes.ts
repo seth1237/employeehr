@@ -20,10 +20,13 @@ router.post("/call-purposes", CrmController.addCallPurpose)
 
 // Telesales Activity (performance + planner)
 router.get("/telesales/activity", CrmController.getTelesalesActivity)
+router.post("/telesales/lead-status", CrmController.setTelesalesLeadStatus)
+router.get("/telesales/client-history", CrmController.getClientTelesalesHistory)
 
 // Leads
 router.get("/leads", CrmController.getLeads)
 router.post("/leads", CrmController.createLead)
+router.patch("/leads/:id/status", CrmController.updateLeadStatus)
 
 // Call Logs
 router.get("/call-logs", CrmController.getCallLogs)

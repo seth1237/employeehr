@@ -24,6 +24,7 @@ export interface IClientConversation extends Document {
   assignedTo?: string // user_id
   followUpDate?: Date
   status: string // e.g., "Interested", "Follow-up Needed"
+  resolvedFromConversationId?: string
   documentName?: string
   createdBy: string // user_id
   createdAt: Date
@@ -58,6 +59,7 @@ const clientConversationSchema = new Schema<IClientConversation>(
     assignedTo: { type: String },
     followUpDate: { type: Date },
     status: { type: String, required: true, default: "Pending" },
+    resolvedFromConversationId: { type: String, index: true },
     documentName: { type: String },
     createdBy: { type: String, required: true },
   },

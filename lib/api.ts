@@ -1358,6 +1358,33 @@ export const crmApi = {
   createCustomer: (data: any) => client.post<any>("/api/crm/customers", data),
   getLeads: () => client.get<any[]>("/api/crm/leads"),
   createLead: (data: any) => client.post<any>("/api/crm/leads", data),
+  updateLeadStatus: (id: string, data: { to: string; reason?: string; conversation_id?: string }) =>
+    client.patch<any>(`/api/crm/leads/${id}/status`, data),
+  setTelesalesLeadStatus: (data: {
+    to: string
+    conversationId?: string
+    leadId?: string
+    clientName?: string
+    clientPhone?: string
+    customer_id?: string
+    callPurpose?: string
+    reason?: string
+    note?: string
+  }) => client.post<any>("/api/crm/telesales/lead-status", data),
+  getClientTelesalesHistory: (query?: {
+    conversationId?: string
+    leadId?: string
+    clientName?: string
+    clientPhone?: string
+  }) => {
+    const params = new URLSearchParams()
+    if (query?.conversationId) params.append("conversationId", query.conversationId)
+    if (query?.leadId) params.append("leadId", query.leadId)
+    if (query?.clientName) params.append("clientName", query.clientName)
+    if (query?.clientPhone) params.append("clientPhone", query.clientPhone)
+    const qs = params.toString()
+    return client.get<any>(`/api/crm/telesales/client-history${qs ? `?${qs}` : ""}`)
+  },
   getCallLogs: () => client.get<any[]>("/api/crm/call-logs"),
   createCallLog: (data: any) => client.post<any>("/api/crm/call-logs", data),
   getTickets: (machine_id?: string) => {

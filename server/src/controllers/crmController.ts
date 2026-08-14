@@ -1,7 +1,7 @@
 import type { Response } from "express"
 import type { AuthenticatedRequest } from "../middleware/auth"
 import { Customer } from "../models/Customer"
-import { Lead } from "../models/Lead"
+import { Lead, LEAD_TEMPERATURE_STATUSES, type ILead, type LeadTemperatureStatus } from "../models/Lead"
 import { CallLog } from "../models/CallLog"
 import { ClientConversation } from "../models/ClientConversation"
 import { Ticket } from "../models/Ticket"
@@ -58,6 +58,224 @@ function toValidObjectIds(values: Array<string | undefined | null>) {
         .filter((value) => value.length > 0 && Types.ObjectId.isValid(value)),
     ),
   ]
+}
+
+function escapeRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
+function isLeadTemperatureStatus(value: string): value is LeadTemperatureStatus {
+  return LEAD_TEMPERATURE_STATUSES.includes(value as LeadTemperatureStatus)
+}
+
+function currentLeadStatus(lead?: { leadStatus?: string | null } | null): LeadTemperatureStatus {
+  const status = String(lead?.leadStatus || "Warm Lead")
+  return isLeadTemperatureStatus(status) ? status : "Warm Lead"
+}
+
+async function findCustomerForClient(params: {
+  org_id: string
+  customerId?: string
+  clientName?: string
+  clientPhone?: string
+}) {
+  if (params.customerId && Types.ObjectId.isValid(params.customerId)) {
+    const byId = await Customer.findOne({ _id: params.customerId, org_id: params.org_id })
+    if (byId) return byId
+  }
+  if (params.clientPhone) {
+    const byPhone = await Customer.findOne({
+      org_id: params.org_id,
+      phoneNumbers: params.clientPhone,
+    })
+    if (byPhone) return byPhone
+  }
+  if (params.clientName) {
+    const byName = await Customer.findOne({
+      org_id: params.org_id,
+      name: new RegExp(`^${escapeRegex(params.clientName)}$`, "i"),
+    })
+    if (byName) return byName
+  }
+  return null
+}
+
+async function ensureLeadForClient(params: {
+  org_id: string
+  userId: string
+  leadId?: string
+  conversationId?: string
+  customerId?: string
+  clientName?: string
+  clientPhone?: string
+  callPurpose?: string
+  note?: string
+  createIfMissing?: boolean
+}): Promise<{ lead: ILead | null; conversation?: any }> {
+  const createIfMissing = params.createIfMissing !== false
+  let conversation: any = null
+  let leadId = String(params.leadId || "").trim()
+  let customerId = String(params.customerId || "").trim()
+  let clientName = String(params.clientName || "").trim()
+  let clientPhone = String(params.clientPhone || "").trim()
+  let callPurpose = String(params.callPurpose || "").trim()
+
+  if (params.conversationId && Types.ObjectId.isValid(params.conversationId)) {
+    conversation = await ClientConversation.findOne({
+      _id: params.conversationId,
+      org_id: params.org_id,
+    })
+    if (conversation) {
+      if (!leadId && conversation.lead_id) leadId = String(conversation.lead_id)
+      if (!customerId && conversation.customer_id) customerId = String(conversation.customer_id)
+      if (!clientName && conversation.clientName) clientName = String(conversation.clientName)
+      if (!clientPhone && conversation.clientPhone) clientPhone = String(conversation.clientPhone)
+      if (!callPurpose && conversation.callPurpose) callPurpose = String(conversation.callPurpose)
+    }
+  }
+
+  if (leadId && Types.ObjectId.isValid(leadId)) {
+    const existing = await Lead.findOne({ _id: leadId, org_id: params.org_id })
+    if (existing) {
+      if (createIfMissing && conversation && !conversation.lead_id) {
+        conversation.lead_id = String(existing._id)
+        if (!conversation.customer_id && existing.customer_id) {
+          conversation.customer_id = String(existing.customer_id)
+        }
+        await conversation.save()
+      }
+      return { lead: existing, conversation }
+    }
+  }
+
+  let customer = await findCustomerForClient({
+    org_id: params.org_id,
+    customerId,
+    clientName,
+    clientPhone,
+  })
+
+  if (customer) {
+    customerId = String(customer._id)
+    const existingLead = await Lead.findOne({
+      org_id: params.org_id,
+      customer_id: customerId,
+    }).sort({ updatedAt: -1 })
+
+    if (existingLead) {
+      if (createIfMissing && conversation && !conversation.lead_id) {
+        conversation.lead_id = String(existingLead._id)
+        conversation.customer_id = customerId
+        await conversation.save()
+      }
+      return { lead: existingLead, conversation }
+    }
+  }
+
+  if (!createIfMissing) {
+    return { lead: null, conversation }
+  }
+
+  if (!customer) {
+    customer = await Customer.create({
+      org_id: params.org_id,
+      name: clientName || "Unknown client",
+      phoneNumbers: clientPhone ? [clientPhone] : [],
+      category: "Other",
+      leadSource: callPurpose || "Telesales",
+      status: "Active",
+      createdBy: String(params.userId),
+    })
+  }
+  customerId = String(customer._id)
+
+  const lead = await Lead.create({
+    org_id: params.org_id,
+    customer_id: customerId,
+    title: `${clientName || "Client"} — ${callPurpose || "Telesales lead"}`,
+    stage: "Follow-up",
+    leadStatus: "Warm Lead",
+    source: callPurpose || "Telesales",
+    owner_id: String(params.userId),
+    notes: params.note || undefined,
+  })
+
+  if (conversation) {
+    conversation.lead_id = String(lead._id)
+    conversation.customer_id = customerId
+    await conversation.save()
+  }
+
+  return { lead, conversation }
+}
+
+async function closeOpenLeadFollowUps(params: {
+  org_id: string
+  leadId?: string
+  customerId?: string
+  clientName?: string
+  clientPhone?: string
+}) {
+  const matchers: Record<string, unknown>[] = []
+  if (params.leadId) matchers.push({ lead_id: String(params.leadId) })
+  if (params.customerId) matchers.push({ customer_id: String(params.customerId) })
+  if (params.clientPhone) matchers.push({ clientPhone: String(params.clientPhone) })
+  if (params.clientName && params.clientName !== "—") {
+    matchers.push({
+      clientName: new RegExp(`^${escapeRegex(params.clientName)}$`, "i"),
+    })
+  }
+  if (matchers.length === 0) return
+
+  await ClientConversation.updateMany(
+    {
+      org_id: params.org_id,
+      status: { $nin: ["Closed", "Not Interested"] },
+      $or: matchers,
+    },
+    { $set: { followUpNeeded: false, status: "Closed" } },
+  )
+}
+
+async function applyLeadStatusChange(params: {
+  lead: ILead
+  org_id: string
+  userId: string
+  to: LeadTemperatureStatus
+  note?: string
+  conversationId?: string
+  clientName?: string
+  clientPhone?: string
+}) {
+  const from = currentLeadStatus(params.lead)
+  if (from !== params.to) {
+    params.lead.leadStatus = params.to
+    params.lead.statusHistory = params.lead.statusHistory || []
+    params.lead.statusHistory.push({
+      from,
+      to: params.to,
+      changedBy: String(params.userId),
+      changedAt: new Date(),
+      note: params.note || undefined,
+      conversation_id: params.conversationId || undefined,
+    })
+    await params.lead.save()
+  } else if (!params.lead.leadStatus) {
+    params.lead.leadStatus = params.to
+    await params.lead.save()
+  }
+
+  if (params.to === "Cold Lead" || params.to === "Dropped") {
+    await closeOpenLeadFollowUps({
+      org_id: params.org_id,
+      leadId: String(params.lead._id),
+      customerId: params.lead.customer_id,
+      clientName: params.clientName,
+      clientPhone: params.clientPhone,
+    })
+  }
+
+  return params.lead
 }
 
 async function syncMachineNextServiceDate(orgId: string, machineId: string) {
@@ -175,8 +393,31 @@ export class CrmController {
       let customerId = String(req.body?.customer_id || "").trim() || undefined
       let leadId = String(req.body?.lead_id || "").trim() || undefined
       let lead = null as any
+      const parentConversationId = String(req.body?.parentConversationId || "").trim()
 
-      if (createLead && outcome === "Interested") {
+      if (parentConversationId && Types.ObjectId.isValid(parentConversationId)) {
+        const parent = await ClientConversation.findOne({
+          _id: parentConversationId,
+          org_id,
+        })
+        if (parent) {
+          if (!leadId && parent.lead_id) leadId = String(parent.lead_id)
+          if (!customerId && parent.customer_id) customerId = String(parent.customer_id)
+          await ClientConversation.updateOne(
+            { _id: parent._id, org_id },
+            { $set: { followUpNeeded: false, status: "Closed" } },
+          )
+        }
+      }
+
+      if (leadId && Types.ObjectId.isValid(leadId)) {
+        lead = await Lead.findOne({ _id: leadId, org_id })
+        if (lead && !customerId && lead.customer_id) {
+          customerId = String(lead.customer_id)
+        }
+      }
+
+      if (createLead && outcome === "Interested" && !lead) {
         if (!customerId) {
           let customer =
             (clientPhone
@@ -188,7 +429,7 @@ export class CrmController {
             (clientName
               ? await Customer.findOne({
                   org_id,
-                  name: new RegExp(`^${clientName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i"),
+                  name: new RegExp(`^${escapeRegex(clientName)}$`, "i"),
                 })
               : null)
 
@@ -214,6 +455,7 @@ export class CrmController {
           customer_id: customerId,
           title: `${clientName || "Client"} — ${callPurpose || "Interested lead"}`,
           stage: followUpNeeded ? "Follow-up" : "Interested",
+          leadStatus: "Warm Lead",
           source: callPurpose || "Telesales call",
           owner_id: String(userId),
           expectedCloseDate: followUpDate,
@@ -224,6 +466,8 @@ export class CrmController {
             .filter(Boolean)
             .join("\n"),
         })
+        leadId = String(lead._id)
+      } else if (lead) {
         leadId = String(lead._id)
       }
 
@@ -250,6 +494,7 @@ export class CrmController {
         assignedTo: req.body?.assignedTo || userId,
         followUpDate,
         status,
+        resolvedFromConversationId: parentConversationId || undefined,
         documentName: req.body?.documentName || undefined,
         createdBy: String(userId),
       })
@@ -263,6 +508,7 @@ export class CrmController {
                 _id: lead._id,
                 title: lead.title,
                 stage: lead.stage,
+                leadStatus: currentLeadStatus(lead),
               }
             : null,
         },
@@ -391,6 +637,227 @@ export class CrmController {
       return res.status(201).json({ success: true, data: lead })
     } catch (error) {
       return res.status(500).json({ success: false, message: "Failed to create lead", error })
+    }
+  }
+
+  static async updateLeadStatus(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.org_id
+      const userId = req.user?.userId
+      if (!org_id || !userId) {
+        return res.status(401).json({ success: false, message: "Unauthorized" })
+      }
+
+      const leadId = String(req.params.id || "").trim()
+      const to = String(req.body?.to || "").trim()
+      if (!leadId || !Types.ObjectId.isValid(leadId)) {
+        return res.status(400).json({ success: false, message: "Invalid lead id" })
+      }
+      if (!isLeadTemperatureStatus(to)) {
+        return res.status(400).json({
+          success: false,
+          message: "Status must be Warm Lead, Cold Lead, or Dropped",
+        })
+      }
+
+      const lead = await Lead.findOne({ _id: leadId, org_id })
+      if (!lead) {
+        return res.status(404).json({ success: false, message: "Lead not found" })
+      }
+
+      await applyLeadStatusChange({
+        lead,
+        org_id,
+        userId: String(userId),
+        to,
+        note: String(req.body?.reason || req.body?.note || "").trim() || undefined,
+        conversationId: String(req.body?.conversation_id || "").trim() || undefined,
+      })
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          _id: lead._id,
+          leadStatus: currentLeadStatus(lead),
+          statusHistory: lead.statusHistory || [],
+        },
+      })
+    } catch (error: unknown) {
+      console.error("updateLeadStatus failed:", error)
+      const message =
+        error instanceof Error ? error.message : "Failed to update lead status"
+      return res.status(500).json({ success: false, message })
+    }
+  }
+
+  static async setTelesalesLeadStatus(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.org_id
+      const userId = req.user?.userId
+      if (!org_id || !userId) {
+        return res.status(401).json({ success: false, message: "Unauthorized" })
+      }
+
+      const to = String(req.body?.to || "").trim()
+      if (!isLeadTemperatureStatus(to)) {
+        return res.status(400).json({
+          success: false,
+          message: "Status must be Warm Lead, Cold Lead, or Dropped",
+        })
+      }
+
+      const conversationId = String(req.body?.conversationId || "").trim() || undefined
+      const { lead, conversation } = await ensureLeadForClient({
+        org_id,
+        userId: String(userId),
+        leadId: String(req.body?.leadId || "").trim() || undefined,
+        conversationId,
+        customerId: String(req.body?.customer_id || "").trim() || undefined,
+        clientName: String(req.body?.clientName || "").trim() || undefined,
+        clientPhone: String(req.body?.clientPhone || "").trim() || undefined,
+        callPurpose: String(req.body?.callPurpose || "").trim() || undefined,
+        note: String(req.body?.note || "").trim() || undefined,
+      })
+
+      if (!lead) {
+        return res.status(400).json({ success: false, message: "Could not resolve a lead for this client" })
+      }
+
+      await applyLeadStatusChange({
+        lead,
+        org_id,
+        userId: String(userId),
+        to,
+        note: String(req.body?.reason || req.body?.note || "").trim() || undefined,
+        conversationId,
+        clientName: conversation?.clientName || String(req.body?.clientName || "").trim(),
+        clientPhone: conversation?.clientPhone || String(req.body?.clientPhone || "").trim(),
+      })
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          _id: lead._id,
+          leadStatus: currentLeadStatus(lead),
+          statusHistory: lead.statusHistory || [],
+        },
+      })
+    } catch (error: unknown) {
+      console.error("setTelesalesLeadStatus failed:", error)
+      const message =
+        error instanceof Error ? error.message : "Failed to update lead status"
+      return res.status(500).json({ success: false, message })
+    }
+  }
+
+  static async getClientTelesalesHistory(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.org_id
+      if (!org_id) {
+        return res.status(401).json({ success: false, message: "Unauthorized" })
+      }
+
+      const conversationId = String(req.query.conversationId || "").trim()
+      const leadIdQuery = String(req.query.leadId || "").trim()
+      const clientName = String(req.query.clientName || "").trim()
+      const clientPhone = String(req.query.clientPhone || "").trim()
+
+      const { lead, conversation } = await ensureLeadForClient({
+        org_id,
+        userId: String(req.user?.userId || ""),
+        leadId: leadIdQuery || undefined,
+        conversationId: conversationId || undefined,
+        clientName: clientName || undefined,
+        clientPhone: clientPhone || undefined,
+        createIfMissing: false,
+      })
+
+      const matchers: Record<string, unknown>[] = []
+      if (lead) matchers.push({ lead_id: String(lead._id) })
+      if (lead?.customer_id) matchers.push({ customer_id: String(lead.customer_id) })
+      if (conversation?.customer_id) matchers.push({ customer_id: String(conversation.customer_id) })
+      const phone = clientPhone || conversation?.clientPhone
+      const name = clientName || conversation?.clientName
+      if (phone) matchers.push({ clientPhone: phone })
+      if (name && name !== "—") {
+        matchers.push({ clientName: new RegExp(`^${escapeRegex(String(name))}$`, "i") })
+      }
+      if (conversationId && Types.ObjectId.isValid(conversationId)) {
+        matchers.push({ _id: conversationId })
+      }
+
+      const conversations = matchers.length
+        ? await ClientConversation.find({ org_id, $or: matchers })
+            .sort({ createdAt: -1 })
+            .limit(80)
+            .lean()
+        : []
+
+      const userIds = toValidObjectIds([
+        ...conversations.map((c) => c.assignedTo || c.createdBy),
+        ...(lead?.statusHistory || []).map((entry) => entry.changedBy),
+        lead?.owner_id,
+      ])
+      const users = userIds.length
+        ? await User.find({ _id: { $in: userIds }, org_id })
+            .select("firstName lastName email")
+            .lean()
+        : []
+      const userMap = new Map(
+        users.map((u) => [
+          String(u._id),
+          `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email || "User",
+        ]),
+      )
+      const nameFor = (id?: string) => (id ? userMap.get(String(id)) || "—" : "—")
+
+      const timeline = [
+        ...conversations.map((c) => ({
+          type: "conversation" as const,
+          _id: String(c._id),
+          at: c.createdAt,
+          clientName: c.clientName || name || "—",
+          callPurpose: c.callPurpose || c.roomName || "Telesales",
+          note: c.note,
+          outcome: c.outcome || c.status,
+          status: c.status,
+          followUpDate: c.followUpDate,
+          createdByName: nameFor(c.assignedTo || c.createdBy),
+        })),
+        ...(lead?.statusHistory || []).map((entry, index) => ({
+          type: "status" as const,
+          _id: `status-${index}-${new Date(entry.changedAt).getTime()}`,
+          at: entry.changedAt,
+          from: entry.from,
+          to: entry.to,
+          note: entry.note,
+          createdByName: nameFor(entry.changedBy),
+        })),
+      ].sort(
+        (a, b) => new Date(b.at || 0).getTime() - new Date(a.at || 0).getTime(),
+      )
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          clientName: name || conversation?.clientName || "Client",
+          clientPhone: phone || conversation?.clientPhone || "",
+          lead: lead
+            ? {
+                _id: String(lead._id),
+                title: lead.title,
+                stage: lead.stage,
+                leadStatus: currentLeadStatus(lead),
+              }
+            : null,
+          timeline,
+        },
+      })
+    } catch (error: unknown) {
+      console.error("getClientTelesalesHistory failed:", error)
+      const message =
+        error instanceof Error ? error.message : "Failed to load client history"
+      return res.status(500).json({ success: false, message })
     }
   }
 
@@ -834,7 +1301,7 @@ export class CrmController {
           .sort({ createdAt: -1 })
           .limit(100)
           .select(
-            "roomName clientName clientPhone note callPurpose focusCategories outcome followUpNeeded followUpDate status assignedTo createdBy createdAt lead_id relatedMachineId relatedMachineName source",
+            "roomName clientName clientPhone note callPurpose focusCategories outcome followUpNeeded followUpDate status assignedTo createdBy createdAt lead_id customer_id relatedMachineId relatedMachineName source",
           )
           .lean(),
         ClientConversation.find(
@@ -919,11 +1386,9 @@ export class CrmController {
           withPerson(
             {
               org_id,
+              status: { $nin: ["Closed", "Not Interested"] },
               $or: [
-                {
-                  followUpNeeded: true,
-                  status: { $nin: ["Closed", "Not Interested"] },
-                },
+                { followUpNeeded: true },
                 { status: "Follow-up Needed" },
                 {
                   followUpDate: { $gte: plannerStart, $lte: plannerEnd },
@@ -936,7 +1401,7 @@ export class CrmController {
           .sort({ followUpDate: 1, createdAt: -1 })
           .limit(120)
           .select(
-            "roomName clientName clientPhone note followUpDate status assignedTo createdBy callPurpose focusCategories outcome followUpNeeded relatedMachineId relatedMachineName source",
+            "roomName clientName clientPhone note followUpDate status assignedTo createdBy callPurpose focusCategories outcome followUpNeeded relatedMachineId relatedMachineName source lead_id customer_id",
           )
           .lean(),
         ClientConversation.aggregate([
@@ -972,6 +1437,32 @@ export class CrmController {
       const followUpQuoteMap = new Map(
         followUpQuotations.map((q) => [String(q._id), q]),
       )
+
+      const conversationLeadIds = toValidObjectIds([
+        ...callLogs.map((c) => (c as any).lead_id),
+        ...conversationFollowUps.map((c) => (c as any).lead_id),
+      ])
+      const conversationLeads = conversationLeadIds.length
+        ? await Lead.find({
+            org_id,
+            _id: { $in: conversationLeadIds },
+          })
+            .select("leadStatus title customer_id")
+            .lean()
+        : []
+      const leadMap = new Map(
+        conversationLeads.map((lead) => [String(lead._id), lead]),
+      )
+      const leadFieldsFor = (c: any) => {
+        const leadId = String(c?.lead_id || "")
+        const lead = leadId ? leadMap.get(leadId) : undefined
+        return {
+          conversationId: String(c?._id || ""),
+          leadId,
+          customerId: String(c?.customer_id || lead?.customer_id || ""),
+          leadStatus: currentLeadStatus(lead),
+        }
+      }
 
       const machineIds = [
         ...new Set(
@@ -1173,6 +1664,7 @@ export class CrmController {
               const categories = mapCategories(c)
               return {
                 _id: String(c._id),
+                ...leadFieldsFor(c),
                 clientName: c.clientName || "—",
                 clientPhone: c.clientPhone || "",
                 callPurpose: (c as any).callPurpose || c.roomName || "Call",
@@ -1303,6 +1795,7 @@ export class CrmController {
               const purpose = String((c as any).callPurpose || "")
               return {
                 _id: String(c._id),
+                ...leadFieldsFor(c),
                 type: "client_followup" as const,
                 title: purpose || c.roomName || "Follow-up",
                 clientName: c.clientName || "—",

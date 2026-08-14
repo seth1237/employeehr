@@ -117,7 +117,26 @@ export class QuotationController {
         query.createdBy = String(userId)
       }
 
-      const quotations = await StockQuotation.find(query).sort({ createdAt: -1 }).lean()
+      const requestedPage = Number(req.query.page)
+      const requestedLimit = Number(req.query.limit)
+      const paginated =
+        Number.isFinite(requestedPage) ||
+        Number.isFinite(requestedLimit)
+      const page = Math.max(1, Number.isFinite(requestedPage) ? requestedPage : 1)
+      const limit = Math.min(
+        100,
+        Math.max(1, Number.isFinite(requestedLimit) ? requestedLimit : 20),
+      )
+
+      const quotationQuery = StockQuotation.find(query).sort({ createdAt: -1 })
+      if (paginated) {
+        quotationQuery.skip((page - 1) * limit).limit(limit)
+      }
+
+      const [quotations, total] = await Promise.all([
+        quotationQuery.lean(),
+        paginated ? StockQuotation.countDocuments(query) : Promise.resolve(0),
+      ])
       const creatorIds = toValidObjectIds(
         quotations.map((quotation) => quotation.createdBy),
       )
@@ -162,7 +181,21 @@ export class QuotationController {
         }
       })
 
-      return res.status(200).json({ success: true, data: enriched })
+      return res.status(200).json({
+        success: true,
+        data: enriched,
+        ...(paginated
+          ? {
+              meta: {
+                page,
+                limit,
+                total,
+                totalPages: Math.ceil(total / limit),
+                hasMore: page * limit < total,
+              },
+            }
+          : {}),
+      })
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Failed to fetch quotations"
       return res.status(500).json({ success: false, message })

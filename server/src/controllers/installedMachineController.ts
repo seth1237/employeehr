@@ -116,21 +116,22 @@ export class InstalledMachineController {
           .status(401)
           .json({ success: false, message: "Unauthorized" });
 
-      // fetch all active installed machines for org
-      const machines = await InstalledMachine.find({
-        org_id,
-        isActive: true,
-      }).lean();
-
-      // Filter out machines whose invoice has an issued/applied credit note
-      const invoiceIds = Array.from(
-        new Set(
-          machines.map((m: any) => String(m.invoiceId || "")).filter(Boolean),
-        ),
+      const requestedPage = Number(req.query.page);
+      const requestedLimit = Number(req.query.limit);
+      const paginated =
+        Number.isFinite(requestedPage) || Number.isFinite(requestedLimit);
+      const page = Math.max(
+        1,
+        Number.isFinite(requestedPage) ? requestedPage : 1,
       );
+      const limit = Math.min(
+        100,
+        Math.max(1, Number.isFinite(requestedLimit) ? requestedLimit : 20),
+      );
+
+      // Exclude machines whose invoice has an issued/applied credit note.
       const creditNotes = await CreditNote.find({
         org_id,
-        invoiceId: { $in: invoiceIds },
         status: { $in: ["issued", "applied"] },
       })
         .select("invoiceId")
@@ -139,11 +140,41 @@ export class InstalledMachineController {
         creditNotes.map((c: any) => String(c.invoiceId)),
       );
 
-      const filtered = machines.filter(
-        (m: any) => !reversedInvoiceIds.has(String(m.invoiceId || "")),
-      );
+      const query: Record<string, any> = {
+        org_id,
+        isActive: true,
+      };
+      if (reversedInvoiceIds.size > 0) {
+        query.invoiceId = { $nin: Array.from(reversedInvoiceIds) };
+      }
 
-      return res.status(200).json({ success: true, data: filtered });
+      const machineQuery = InstalledMachine.find(query).sort({ createdAt: -1 });
+      if (paginated) {
+        machineQuery.skip((page - 1) * limit).limit(limit);
+      }
+
+      const [machines, total] = await Promise.all([
+        machineQuery.lean(),
+        paginated
+          ? InstalledMachine.countDocuments(query)
+          : Promise.resolve(0),
+      ]);
+
+      return res.status(200).json({
+        success: true,
+        data: machines,
+        ...(paginated
+          ? {
+              meta: {
+                page,
+                limit,
+                total,
+                totalPages: Math.ceil(total / limit),
+                hasMore: page * limit < total,
+              },
+            }
+          : {}),
+      });
     } catch (error: any) {
       return res.status(500).json({
         success: false,

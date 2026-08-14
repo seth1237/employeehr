@@ -181,6 +181,7 @@ export interface ApiResponse<T = any> {
     data?: T
     message?: string
     error?: string
+    meta?: Record<string, any>
 }
 
 export interface PaginatedResponse<T> extends ApiResponse<T[]> {

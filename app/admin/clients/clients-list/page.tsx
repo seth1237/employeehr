@@ -155,6 +155,8 @@ export default function AccountsClientsPage() {
   const [groupFilter, setGroupFilter] = useState("all");
   const [selectedClientKeys, setSelectedClientKeys] = useState<string[]>([]);
   const [rows, setRows] = useState<SavedClientRow[]>([]);
+  const clientLoadGeneration = useRef(0);
+  const [visibleClientCount, setVisibleClientCount] = useState(20);
   const [selectedClientKey, setSelectedClientKey] = useState("");
   const [savingClient, setSavingClient] = useState(false);
   const [savingCrm, setSavingCrm] = useState(false);
@@ -347,7 +349,100 @@ export default function AccountsClientsPage() {
   const secondarySoftColor = hexToRgba(secondaryColor, 0.08);
   const primaryBorderColor = hexToRgba(primaryColor, 0.18);
 
+  const mergeClientRows = (
+    accountsRows: AccountsClientRow[],
+    savedClients: Array<{
+      key?: string;
+      name: string;
+      number: string;
+      location: string;
+      contactPerson?: string;
+      email?: string;
+      contacts?: ClientContact[];
+      groupIds?: string[];
+    }>,
+  ) => {
+    const mergedMap = new Map<string, SavedClientRow>();
+
+    for (const row of accountsRows) {
+      mergedMap.set(row.key, {
+        ...row,
+        contacts: row.contacts || [],
+        groupIds: row.groupIds || [],
+        isSavedClient: false,
+      });
+    }
+
+    for (const client of savedClients) {
+      const key =
+        client.key ||
+        [
+          String(client.name || "")
+            .trim()
+            .toLowerCase()
+            .replace(/\s+/g, " "),
+          String(client.number || "")
+            .trim()
+            .toLowerCase()
+            .replace(/\s+/g, " "),
+          String(client.location || "")
+            .trim()
+            .toLowerCase()
+            .replace(/\s+/g, " "),
+        ].join("|");
+      if (!key || key === "||") continue;
+
+      if (mergedMap.has(key)) {
+        const existing = mergedMap.get(key)!;
+        mergedMap.set(key, {
+          ...existing,
+          client: {
+            ...existing.client,
+            contactPerson:
+              client.contactPerson || existing.client.contactPerson,
+            email: client.email || existing.client.email,
+          },
+          contacts:
+            (client.contacts && client.contacts.length > 0
+              ? client.contacts
+              : existing.contacts) || [],
+          groupIds: client.groupIds || existing.groupIds || [],
+          isSavedClient: true,
+        });
+        continue;
+      }
+
+      mergedMap.set(key, {
+        key,
+        client: {
+          name: String(client.name || "").trim(),
+          number: String(client.number || "").trim(),
+          location: String(client.location || "").trim(),
+          contactPerson: client.contactPerson,
+          email: client.email,
+        },
+        quotationsCount: 0,
+        quotationsValue: 0,
+        pendingQuotationsCount: 0,
+        invoicesCount: 0,
+        purchasesValue: 0,
+        paidAmount: 0,
+        debtAmount: 0,
+        salesCount: 0,
+        salesValue: 0,
+        lastActivityAt: undefined,
+        activities: [],
+        contacts: client.contacts || [],
+        groupIds: client.groupIds || [],
+        isSavedClient: true,
+      });
+    }
+
+    return Array.from(mergedMap.values());
+  };
+
   const loadData = async (opts?: SilentLoadOptions) => {
+    const generation = ++clientLoadGeneration.current;
     try {
       await runDataLoad(
         setLoading,
@@ -360,8 +455,8 @@ export default function AccountsClientsPage() {
             brandingResult,
           ] =
             await Promise.all([
-              stockApi.getAccountsClients(),
-              stockApi.getSavedClients(),
+              stockApi.getAccountsClients(1, 20),
+              stockApi.getSavedClients(1, 20),
               stockApi
                 .getClientGroups()
                 .catch(() => ({ success: false, data: [] })),
@@ -372,6 +467,8 @@ export default function AccountsClientsPage() {
                 headers: { Authorization: `Bearer ${getToken()}` },
               }).catch(() => null),
             ]);
+
+          if (generation !== clientLoadGeneration.current) return;
 
           if (brandingResult) {
             try {
@@ -394,6 +491,7 @@ export default function AccountsClientsPage() {
           const savedClients = (clientsResponse.data ||
             clientsResponse ||
             []) as Array<{
+            key?: string;
             name: string;
             number: string;
             location: string;
@@ -403,83 +501,7 @@ export default function AccountsClientsPage() {
             groupIds?: string[];
           }>;
 
-          const mergedMap = new Map<string, SavedClientRow>();
-
-          for (const row of accountsRows) {
-            mergedMap.set(row.key, {
-              ...row,
-              contacts: row.contacts || [],
-              groupIds: row.groupIds || [],
-              isSavedClient: false,
-            });
-          }
-
-          for (const client of savedClients) {
-            const key =
-              (client as any).key ||
-              [
-                String(client.name || "")
-                  .trim()
-                  .toLowerCase()
-                  .replace(/\s+/g, " "),
-                String(client.number || "")
-                  .trim()
-                  .toLowerCase()
-                  .replace(/\s+/g, " "),
-                String(client.location || "")
-                  .trim()
-                  .toLowerCase()
-                  .replace(/\s+/g, " "),
-              ].join("|");
-            if (!key || key === "||") continue;
-
-            if (mergedMap.has(key)) {
-              const existing = mergedMap.get(key)!;
-              mergedMap.set(key, {
-                ...existing,
-                client: {
-                  ...existing.client,
-                  contactPerson:
-                    client.contactPerson || existing.client.contactPerson,
-                  email: client.email || existing.client.email,
-                },
-                contacts:
-                  (client.contacts && client.contacts.length > 0
-                    ? client.contacts
-                    : existing.contacts) || [],
-                groupIds: client.groupIds || existing.groupIds || [],
-                isSavedClient: true,
-              });
-              continue;
-            }
-
-            mergedMap.set(key, {
-              key,
-              client: {
-                name: String(client.name || "").trim(),
-                number: String(client.number || "").trim(),
-                location: String(client.location || "").trim(),
-                contactPerson: client.contactPerson,
-                email: client.email,
-              },
-              quotationsCount: 0,
-              quotationsValue: 0,
-              pendingQuotationsCount: 0,
-              invoicesCount: 0,
-              purchasesValue: 0,
-              paidAmount: 0,
-              debtAmount: 0,
-              salesCount: 0,
-              salesValue: 0,
-              lastActivityAt: undefined,
-              activities: [],
-              contacts: client.contacts || [],
-              groupIds: client.groupIds || [],
-              isSavedClient: true,
-            });
-          }
-
-          const data = Array.from(mergedMap.values());
+          const data = mergeClientRows(accountsRows, savedClients);
           setRows(data);
           const rolesFromClients = data.flatMap((row) =>
             (row.contacts || []).map((contact) => String(contact.role || "").trim()),
@@ -496,6 +518,46 @@ export default function AccountsClientsPage() {
           }
           if (!selectedClientKey && data.length > 0)
             setSelectedClientKey(data[0].key);
+
+          void Promise.all([
+            stockApi.getAccountsClients(),
+            stockApi.getSavedClients(),
+          ])
+            .then(([allAccountsResponse, allClientsResponse]) => {
+              if (generation !== clientLoadGeneration.current) return;
+              const allRows = mergeClientRows(
+                (allAccountsResponse.data || []) as AccountsClientRow[],
+                (allClientsResponse.data || []) as Array<{
+                  key?: string;
+                  name: string;
+                  number: string;
+                  location: string;
+                  contactPerson?: string;
+                  email?: string;
+                  contacts?: ClientContact[];
+                  groupIds?: string[];
+                }>,
+              );
+              setRows(allRows);
+              const remainingRoles = allRows.flatMap((row) =>
+                (row.contacts || []).map((contact) =>
+                  String(contact.role || "").trim(),
+                ),
+              );
+              if (remainingRoles.some(Boolean)) {
+                setContactRoles((current) =>
+                  Array.from(
+                    new Set([
+                      ...current,
+                      ...remainingRoles.filter(Boolean),
+                    ]),
+                  ),
+                );
+              }
+            })
+            .catch(() => {
+              // The first 20 saved clients remain available if enrichment fails.
+            });
         },
         opts,
         setRefreshing,
@@ -603,6 +665,15 @@ export default function AccountsClientsPage() {
     });
     return result;
   }, [rows, search, sortBy, groupFilter, locationFilter, clientGroups]);
+
+  useEffect(() => {
+    setVisibleClientCount(20);
+  }, [search, sortBy, groupFilter, locationFilter]);
+
+  const visibleClientRows = useMemo(
+    () => filteredRows.slice(0, visibleClientCount),
+    [filteredRows, visibleClientCount],
+  );
 
   const selectedClient = useMemo(
     () => rows.find((row) => row.key === selectedClientKey) || null,
@@ -2156,7 +2227,7 @@ export default function AccountsClientsPage() {
                   No clients found.
                 </p>
               ) : (
-                filteredRows.map((row) => {
+                visibleClientRows.map((row) => {
                   const actives = getActiveContacts(row);
                   const pending = pendingQuotationsFor(row);
                   const activeLabel = actives
@@ -2225,6 +2296,19 @@ export default function AccountsClientsPage() {
                 })
               )}
             </div>
+            {visibleClientRows.length < filteredRows.length ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() =>
+                  setVisibleClientCount((current) => current + 20)
+                }
+              >
+                Load 20 more ({filteredRows.length - visibleClientRows.length}{" "}
+                remaining)
+              </Button>
+            ) : null}
           </CardContent>
         </Card>
 

@@ -159,7 +159,8 @@ export default function EmployeeQuotationsPage() {
   );
   const [sortBy, setSortBy] = useState<SortOption>("date-desc");
   const [page, setPage] = useState(1);
-  const pageSize = 10;
+  const pageSize = 20;
+  const quotationLoadGeneration = useRef(0);
 
   const getAuthHeaders = () => {
     const token = getToken();
@@ -170,92 +171,96 @@ export default function EmployeeQuotationsPage() {
   };
 
   const loadData = async () => {
+    const generation = ++quotationLoadGeneration.current;
     try {
       setLoading(true);
 
-      // Use shared stockApi client for consistency with admin page (adds auth headers, consistent error handling)
-      const [
-        productsRes,
-        servicesRes,
-        quotationsRes,
-        activityClientsRes,
-        savedClientsRes,
-        brandingRes,
-        invoiceSettingsRes,
-      ] = await Promise.all([
-        stockApi.getProducts(),
-        // services endpoint is not wrapped in stockApi currently, fall back to fetch
-        fetch(`${API_URL}/api/stock/services`, { headers: getAuthHeaders() })
-          .then((r) => r.json())
-          .catch(() => ({ data: [] })),
-        stockApi.getQuotations(),
-        stockApi.getClients(),
-        stockApi.getSavedClients(),
-        fetch(`${API_URL}/api/company/branding`, { headers: getAuthHeaders() })
-          .then((r) => r.json())
-          .catch(() => ({ data: {} })),
-        fetch(`${API_URL}/api/company/invoice-settings`, {
-          headers: getAuthHeaders(),
-        })
-          .then((r) => r.json())
-          .catch(() => ({ data: {} })),
-      ]);
+      const firstPage = await stockApi.getQuotations(1, 20);
+      if (generation !== quotationLoadGeneration.current) return;
+      const initialQuotations = (firstPage?.data || []) as Quotation[];
+      setQuotations(initialQuotations);
 
-      // stockApi returns ApiResponse objects; normalize them
-      const productsJson =
-        productsRes && (productsRes as any).data ? productsRes : { data: [] };
-      const servicesJson = servicesRes || { data: [] };
-      const quotationsJson =
-        quotationsRes && (quotationsRes as any).data
-          ? quotationsRes
-          : { data: [] };
-      const activityClientsResp = activityClientsRes || { data: [] };
-      const savedClientsResp = savedClientsRes || { data: [] };
-      const brandingJson = brandingRes || { data: {} };
-      const invoiceSettingsJson = invoiceSettingsRes || { data: {} };
+      const totalPages = Number(firstPage?.meta?.totalPages || 1);
+      void (async () => {
+        const accumulated = [...initialQuotations];
+        for (let nextPage = 2; nextPage <= totalPages; nextPage += 1) {
+          const response = await stockApi.getQuotations(nextPage, 20);
+          if (generation !== quotationLoadGeneration.current) return;
+          accumulated.push(...((response?.data || []) as Quotation[]));
+          setQuotations([...accumulated]);
+        }
+      })().catch(() => {
+        // Keep the first page usable if background loading is interrupted.
+      });
 
-      setProducts((productsJson.data as any[]) || []);
-      setServices((servicesJson.data as any[]) || []);
-      setQuotations((quotationsJson.data as any[]) || []);
+      void (async () => {
+        const [
+          productsRes,
+          servicesRes,
+          activityClientsRes,
+          savedClientsRes,
+          brandingRes,
+          invoiceSettingsRes,
+        ] = await Promise.all([
+          stockApi.getProducts(),
+          fetch(`${API_URL}/api/stock/services`, { headers: getAuthHeaders() })
+            .then((r) => r.json())
+            .catch(() => ({ data: [] })),
+          stockApi.getClients(),
+          stockApi.getSavedClients(),
+          fetch(`${API_URL}/api/company/branding`, { headers: getAuthHeaders() })
+            .then((r) => r.json())
+            .catch(() => ({ data: {} })),
+          fetch(`${API_URL}/api/company/invoice-settings`, {
+            headers: getAuthHeaders(),
+          })
+            .then((r) => r.json())
+            .catch(() => ({ data: {} })),
+        ]);
+        if (generation !== quotationLoadGeneration.current) return;
 
-      const activityClients = (activityClientsResp.data || []) as Client[];
-      const savedClients = (savedClientsResp.data || []) as Client[];
-      const mergedClientsMap = new Map<string, Client>();
+        const productsJson =
+          productsRes && (productsRes as any).data ? productsRes : { data: [] };
+        const servicesJson = servicesRes || { data: [] };
+        const activityClientsResp = activityClientsRes || { data: [] };
+        const savedClientsResp = savedClientsRes || { data: [] };
+        const brandingJson = brandingRes || { data: {} };
+        const invoiceSettingsJson = invoiceSettingsRes || { data: {} };
 
-      for (const client of activityClients) {
-        const key = `${String(client.name || "")
-          .trim()
-          .toLowerCase()}|${String(client.number || "")
-          .trim()
-          .toLowerCase()}|${String(client.location || "")
-          .trim()
-          .toLowerCase()}`;
-        if (!key) continue;
-        mergedClientsMap.set(key, { ...client, key });
-      }
+        setProducts((productsJson.data as any[]) || []);
+        setServices((servicesJson.data as any[]) || []);
 
-      for (const client of savedClients) {
-        const key = `${String(client.name || "")
-          .trim()
-          .toLowerCase()}|${String(client.number || "")
-          .trim()
-          .toLowerCase()}|${String(client.location || "")
-          .trim()
-          .toLowerCase()}`;
-        if (!key || mergedClientsMap.has(key)) continue;
-        mergedClientsMap.set(key, { ...client, key });
-      }
+        const activityClients = (activityClientsResp.data || []) as Client[];
+        const savedClients = (savedClientsResp.data || []) as Client[];
+        const mergedClientsMap = new Map<string, Client>();
 
-      setClients(Array.from(mergedClientsMap.values()));
-      setBranding((brandingJson.data as any) || {});
-      setInvoiceSettings((invoiceSettingsJson.data as any) || {});
+        for (const client of [...activityClients, ...savedClients]) {
+          const key = `${String(client.name || "")
+            .trim()
+            .toLowerCase()}|${String(client.number || "")
+            .trim()
+            .toLowerCase()}|${String(client.location || "")
+            .trim()
+            .toLowerCase()}`;
+          if (!key || mergedClientsMap.has(key)) continue;
+          mergedClientsMap.set(key, { ...client, key });
+        }
+
+        setClients(Array.from(mergedClientsMap.values()));
+        setBranding((brandingJson.data as any) || {});
+        setInvoiceSettings((invoiceSettingsJson.data as any) || {});
+      })().catch((error) => {
+        console.error("Load quotation supporting data failed:", error);
+      });
     } catch (error) {
       console.error("Load quotations failed:", error);
       const message =
         error instanceof Error ? error.message : "Failed to load quotations";
       toast({ title: "Error", description: message, variant: "destructive" });
     } finally {
-      setLoading(false);
+      if (generation === quotationLoadGeneration.current) {
+        setLoading(false);
+      }
     }
   };
 

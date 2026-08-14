@@ -64,7 +64,7 @@ export function UserActivityTracker() {
 
     inactivityTimeout.current = window.setTimeout(() => {
       logout()
-    }, 5 * 60 * 1000)
+    }, 30 * 60 * 1000)
   }
 
   // Heartbeat, Visibility Tracking and Auto Logout

@@ -1775,12 +1775,31 @@ export class StockController {
           .status(401)
           .json({ success: false, message: "Unauthorized" });
 
-      const profiles = await StockClient.find({ org_id })
+      const requestedPage = Number(req.query.page);
+      const requestedLimit = Number(req.query.limit);
+      const paginated =
+        Number.isFinite(requestedPage) || Number.isFinite(requestedLimit);
+      const page = Math.max(
+        1,
+        Number.isFinite(requestedPage) ? requestedPage : 1,
+      );
+      const limit = Math.min(
+        100,
+        Math.max(1, Number.isFinite(requestedLimit) ? requestedLimit : 20),
+      );
+
+      const profilesQuery = StockClient.find({ org_id })
         .select(
           "sourceName sourceNumber sourceLocation legalName contactPerson email contacts groupIds",
         )
-        .sort({ updatedAt: -1, createdAt: -1 })
-        .lean();
+        .sort({ updatedAt: -1, createdAt: -1 });
+      if (paginated) {
+        profilesQuery.skip((page - 1) * limit).limit(limit);
+      }
+      const [profiles, total] = await Promise.all([
+        profilesQuery.lean(),
+        paginated ? StockClient.countDocuments({ org_id }) : Promise.resolve(0),
+      ]);
 
       const clients = profiles.map((profile: any) => ({
         key: [
@@ -1798,7 +1817,21 @@ export class StockController {
         groupIds: Array.isArray(profile.groupIds) ? profile.groupIds : [],
       }));
 
-      return res.status(200).json({ success: true, data: clients });
+      return res.status(200).json({
+        success: true,
+        data: clients,
+        ...(paginated
+          ? {
+              meta: {
+                page,
+                limit,
+                total,
+                totalPages: Math.ceil(total / limit),
+                hasMore: page * limit < total,
+              },
+            }
+          : {}),
+      });
     } catch (error: any) {
       return res.status(500).json({
         success: false,
@@ -3791,7 +3824,35 @@ export class StockController {
             new Date(a.lastActivityAt || 0).getTime(),
         );
 
-      return res.status(200).json({ success: true, data });
+      const requestedPage = Number(req.query.page);
+      const requestedLimit = Number(req.query.limit);
+      const paginated =
+        Number.isFinite(requestedPage) || Number.isFinite(requestedLimit);
+      if (!paginated) {
+        return res.status(200).json({ success: true, data });
+      }
+
+      const page = Math.max(
+        1,
+        Number.isFinite(requestedPage) ? requestedPage : 1,
+      );
+      const limit = Math.min(
+        100,
+        Math.max(1, Number.isFinite(requestedLimit) ? requestedLimit : 20),
+      );
+      const total = data.length;
+      const start = (page - 1) * limit;
+      return res.status(200).json({
+        success: true,
+        data: data.slice(start, start + limit),
+        meta: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+          hasMore: page * limit < total,
+        },
+      });
     } catch (error: any) {
       return res.status(500).json({
         success: false,

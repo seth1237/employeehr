@@ -597,6 +597,7 @@ export default function InstalledMachinesPage() {
   // Data
   const [loading, setLoading] = useState(true);
   const [machines, setMachines] = useState<InstalledMachine[]>([]);
+  const machineLoadGeneration = useRef(0);
   const [services, setServices] = useState<ServiceRecord[]>([]);
   const [tickets, setTickets] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
@@ -669,7 +670,7 @@ export default function InstalledMachinesPage() {
   const [machineSearch, setMachineSearch] = useState("");
   const [machineCategoryFilter, setMachineCategoryFilter] = useState("");
   const [machinePage, setMachinePage] = useState(1);
-  const machinePageSize = 10;
+  const machinePageSize = 20;
   const [selectedMachine, setSelectedMachine] =
     useState<InstalledMachine | null>(null);
   const [editingMachine, setEditingMachine] = useState<InstalledMachine | null>(
@@ -755,86 +756,126 @@ export default function InstalledMachinesPage() {
 
   const load = async (opts?: { silent?: boolean }) => {
     const silent = startDataLoad(opts, setLoading, setIsRefreshing);
+    const generation = ++machineLoadGeneration.current;
     try {
-      const [mRes, candRes, sRes, tRes, accountsRes, savedRes, groupsRes, rolesRes, productsRes] = await Promise.all([
-        stockApi.getInstalledMachines(),
-        stockApi.getInstallableCandidates(),
-        stockApi.getMachineServices
-          ? stockApi.getMachineServices()
-          : Promise.resolve({ data: [] }),
-        api.crm.getTickets().catch(() => ({ success: false, data: [] })),
-        stockApi.getAccountsClients().catch(() => ({ success: false, data: [] })),
-        stockApi.getSavedClients().catch(() => ({ success: false, data: [] })),
-        stockApi.getClientGroups().catch(() => ({ success: false, data: [] })),
-        stockApi.getClientContactRoles().catch(() => ({ success: false, data: [] })),
-        stockApi.getProducts().catch(() => ({ success: false, data: [] })),
-      ]);
-      let usersRes: any = null;
-      try {
-        usersRes = await usersApi.getAll();
-      } catch (employeeErr) {
-        console.error("Failed to load employees", employeeErr);
-      }
+      const firstPage = await stockApi.getInstalledMachines(1, 20);
+      if (generation !== machineLoadGeneration.current) return;
+      const initialMachines = (firstPage?.data || []) as InstalledMachine[];
+      setMachines(initialMachines);
 
-      setMachines(mRes.data || []);
-      if (tRes?.success) setTickets(tRes.data || []);
-      setClientGroups(groupsRes?.data || []);
-      if (Array.isArray(rolesRes?.data) && rolesRes.data.length > 0) {
-        setContactRoles(rolesRes.data);
-      }
-      
-      const accountsRows = accountsRes.data || [];
-      const savedClients = savedRes.data || [];
-      const mergedMap = new Map<string, any>();
-      for (const row of accountsRows) {
-        mergedMap.set(row.key, { ...row, contacts: [], groupIds: [], isSavedClient: false });
-      }
-      for (const client of savedClients) {
-        const key = `${String(client.name || "").trim().toLowerCase()}|${String(client.number || "").trim().toLowerCase()}|${String(client.location || "").trim().toLowerCase()}`;
-        if (!key) continue;
-        if (mergedMap.has(key)) {
-          const existing = mergedMap.get(key);
-          existing.client.contactPerson = client.contactPerson || existing.client.contactPerson;
-          existing.client.email = client.email || existing.client.email;
-          existing.contacts = client.contacts || [];
-          existing.groupIds = client.groupIds || [];
-          existing.isSavedClient = true;
-          continue;
+      const totalPages = Number(firstPage?.meta?.totalPages || 1);
+      void (async () => {
+        const accumulated = [...initialMachines];
+        for (let nextPage = 2; nextPage <= totalPages; nextPage += 1) {
+          const response = await stockApi.getInstalledMachines(nextPage, 20);
+          if (generation !== machineLoadGeneration.current) return;
+          accumulated.push(...((response?.data || []) as InstalledMachine[]));
+          setMachines([...accumulated]);
         }
-        mergedMap.set(key, {
-          key,
-          client: {
-            name: String(client.name || "").trim(),
-            number: String(client.number || "").trim(),
-            location: String(client.location || "").trim(),
-            contactPerson: client.contactPerson,
-            email: client.email,
-          },
-          contacts: client.contacts || [],
-          groupIds: client.groupIds || [],
-          isSavedClient: true,
-        });
-      }
-      setCustomers(Array.from(mergedMap.values()));
+      })().catch(() => {
+        // Keep the first machine page usable if background loading is interrupted.
+      });
 
-      const productsArray =
-        productsRes &&
-        (productsRes.data || Array.isArray(productsRes)
-          ? productsRes.data || productsRes
-          : []);
-      setProducts(
-        (productsArray as any[]).filter(
-          (p) => String(p.productType || "physical") !== "service",
-        ),
-      );
-      
-      const payload = candRes.data ||
-        candRes || { categories: [], candidates: [] };
-      setCategories(payload.categories || []);
-      setCandidates(payload.candidates || []);
-      const servicePayload = Array.isArray(sRes?.data) ? sRes.data : [];
-      setServices(servicePayload);
-      setEmployees(Array.isArray(usersRes?.data) ? usersRes.data : []);
+      void (async () => {
+        const [
+          candRes,
+          sRes,
+          tRes,
+          accountsRes,
+          savedRes,
+          groupsRes,
+          rolesRes,
+          productsRes,
+          usersRes,
+        ] = await Promise.all([
+          stockApi.getInstallableCandidates(),
+          stockApi.getMachineServices
+            ? stockApi.getMachineServices()
+            : Promise.resolve({ data: [] }),
+          api.crm.getTickets().catch(() => ({ success: false, data: [] })),
+          stockApi
+            .getAccountsClients()
+            .catch(() => ({ success: false, data: [] })),
+          stockApi
+            .getSavedClients()
+            .catch(() => ({ success: false, data: [] })),
+          stockApi
+            .getClientGroups()
+            .catch(() => ({ success: false, data: [] })),
+          stockApi
+            .getClientContactRoles()
+            .catch(() => ({ success: false, data: [] })),
+          stockApi.getProducts().catch(() => ({ success: false, data: [] })),
+          usersApi.getAll().catch(() => ({ success: false, data: [] })),
+        ]);
+        if (generation !== machineLoadGeneration.current) return;
+
+        if (tRes?.success) setTickets(tRes.data || []);
+        setClientGroups(groupsRes?.data || []);
+        if (Array.isArray(rolesRes?.data) && rolesRes.data.length > 0) {
+          setContactRoles(rolesRes.data);
+        }
+
+        const accountsRows = accountsRes.data || [];
+        const savedClients = savedRes.data || [];
+        const mergedMap = new Map<string, any>();
+        for (const row of accountsRows) {
+          mergedMap.set(row.key, {
+            ...row,
+            contacts: [],
+            groupIds: [],
+            isSavedClient: false,
+          });
+        }
+        for (const client of savedClients) {
+          const key = `${String(client.name || "").trim().toLowerCase()}|${String(client.number || "").trim().toLowerCase()}|${String(client.location || "").trim().toLowerCase()}`;
+          if (!key) continue;
+          if (mergedMap.has(key)) {
+            const existing = mergedMap.get(key);
+            existing.client.contactPerson =
+              client.contactPerson || existing.client.contactPerson;
+            existing.client.email = client.email || existing.client.email;
+            existing.contacts = client.contacts || [];
+            existing.groupIds = client.groupIds || [];
+            existing.isSavedClient = true;
+            continue;
+          }
+          mergedMap.set(key, {
+            key,
+            client: {
+              name: String(client.name || "").trim(),
+              number: String(client.number || "").trim(),
+              location: String(client.location || "").trim(),
+              contactPerson: client.contactPerson,
+              email: client.email,
+            },
+            contacts: client.contacts || [],
+            groupIds: client.groupIds || [],
+            isSavedClient: true,
+          });
+        }
+        setCustomers(Array.from(mergedMap.values()));
+
+        const productsArray =
+          productsRes &&
+          (productsRes.data || Array.isArray(productsRes)
+            ? productsRes.data || productsRes
+            : []);
+        setProducts(
+          (productsArray as any[]).filter(
+            (p) => String(p.productType || "physical") !== "service",
+          ),
+        );
+
+        const payload =
+          candRes.data || candRes || { categories: [], candidates: [] };
+        setCategories(payload.categories || []);
+        setCandidates(payload.candidates || []);
+        setServices(Array.isArray(sRes?.data) ? sRes.data : []);
+        setEmployees(Array.isArray(usersRes?.data) ? usersRes.data : []);
+      })().catch((error) => {
+        console.error("Failed to load supporting machine data", error);
+      });
     } catch (err: any) {
       console.error(err);
       alert(err?.message || "Failed to load installed machines");

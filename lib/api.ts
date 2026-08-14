@@ -750,7 +750,14 @@ export const meetingsApi = {
 // Stock API
 export const stockApi = {
   getClients: () => client.get<any[]>("/api/stock/clients"),
-  getSavedClients: () => client.get<any[]>("/api/stock/clients/saved"),
+  getSavedClients: (page?: number, limit?: number) =>
+    client.get<any[]>(
+      `/api/stock/clients/saved${
+        page || limit
+          ? `?page=${page || 1}&limit=${limit || 20}`
+          : ""
+      }`,
+    ),
   getClientContactRoles: () =>
     client.get<string[]>("/api/stock/clients/contact-roles"),
   renameClientContactRole: (data: { fromRole: string; toRole: string }) =>
@@ -833,7 +840,14 @@ export const stockApi = {
   getInvoiceLifecycle: (invoiceId: string) =>
     client.get<any>(`/api/stock/invoices/${invoiceId}/lifecycle`),
 
-  getQuotations: () => client.get<any[]>("/api/stock/quotations"),
+  getQuotations: (page?: number, limit?: number) =>
+    client.get<any[]>(
+      `/api/stock/quotations${
+        page || limit
+          ? `?page=${page || 1}&limit=${limit || 20}`
+          : ""
+      }`,
+    ),
   getQuotationById: (quotationId: string) =>
     client.get<any>(`/api/stock/quotations/${quotationId}`),
 
@@ -862,8 +876,14 @@ export const stockApi = {
   getWarehouseLocations: (warehouseId: string) =>
     client.get<any[]>(`/api/stock/warehouses/${warehouseId}/locations`),
   // Installed machines
-  getInstalledMachines: () =>
-    client.get<any[]>("/api/stock/installed-machines"),
+  getInstalledMachines: (page?: number, limit?: number) =>
+    client.get<any[]>(
+      `/api/stock/installed-machines${
+        page || limit
+          ? `?page=${page || 1}&limit=${limit || 20}`
+          : ""
+      }`,
+    ),
   createInstalledMachine: (data: any) =>
     client.post<any>("/api/stock/installed-machines", data),
   updateInstalledMachine: (id: string, data: any) =>
@@ -937,7 +957,14 @@ export const stockApi = {
   getQuotationFollowUps: (quotationId: string) =>
     client.get<any[]>(`/api/stock/quotations/${quotationId}/followups`),
 
-  getAccountsClients: () => client.get<any[]>("/api/stock/accounts/clients"),
+  getAccountsClients: (page?: number, limit?: number) =>
+    client.get<any[]>(
+      `/api/stock/accounts/clients${
+        page || limit
+          ? `?page=${page || 1}&limit=${limit || 20}`
+          : ""
+      }`,
+    ),
   saveClient: (data: {
     sourceName: string;
     sourceNumber: string;

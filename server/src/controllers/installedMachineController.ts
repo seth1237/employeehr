@@ -365,6 +365,8 @@ export class InstalledMachineController {
           .json({ success: false, message: "Installed machine id required" });
 
       const allowed = [
+        "productName",
+        "category",
         "serialNumber",
         "installationLocation",
         "installationDepartment",
@@ -383,6 +385,18 @@ export class InstalledMachineController {
       const updates: any = {};
       for (const key of allowed) {
         if (req.body[key] !== undefined) updates[key] = req.body[key];
+      }
+      if (typeof updates.productName === "string") {
+        updates.productName = updates.productName.trim();
+        if (!updates.productName) {
+          return res.status(400).json({
+            success: false,
+            message: "Machine name is required",
+          });
+        }
+      }
+      if (typeof updates.category === "string") {
+        updates.category = updates.category.trim() || undefined;
       }
       if (updates.installationDate)
         updates.installationDate = new Date(updates.installationDate);

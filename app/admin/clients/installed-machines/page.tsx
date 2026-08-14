@@ -267,7 +267,8 @@ interface ManualAddForm {
   customFacilityLocation: string;
   customFacilityPhone: string;
   customContactPerson: string;
-  productId: string;
+  machineCategory: string;
+  machineName: string;
   serialNumber: string;
   installationLocation: string;
   installationDepartment: string;
@@ -290,7 +291,8 @@ const EMPTY_MANUAL_ADD_FORM: ManualAddForm = {
   customFacilityLocation: "",
   customFacilityPhone: "",
   customContactPerson: "",
-  productId: "",
+  machineCategory: "",
+  machineName: "",
   serialNumber: "",
   installationLocation: "",
   installationDepartment: "",
@@ -2099,6 +2101,8 @@ export default function InstalledMachinesPage() {
   const openDetailDialog = (machine: InstalledMachine) => {
     setEditingMachine(machine);
     setDetailForm({
+      productName: machine.productName || "",
+      category: machine.category || "",
       serialNumber: machine.serialNumber || "",
       nextServiceDate: machine.nextServiceDate || "",
       installedBy: machine.installedBy || "",
@@ -2115,10 +2119,23 @@ export default function InstalledMachinesPage() {
 
   const saveDetails = async () => {
     if (!editingMachine || !editingMachine._id) return;
+    if (!String(detailForm.productName || "").trim()) {
+      toast({
+        title: "Machine name required",
+        description: "Enter the name of the machine.",
+        variant: "destructive",
+      });
+      return;
+    }
     setSaving(true);
     try {
-      const res = await stockApi.updateInstalledMachine(editingMachine._id, detailForm);
-      const updated = res?.data || { ...editingMachine, ...detailForm };
+      const payload = {
+        ...detailForm,
+        productName: String(detailForm.productName || "").trim(),
+        category: String(detailForm.category || "").trim() || undefined,
+      };
+      const res = await stockApi.updateInstalledMachine(editingMachine._id, payload);
+      const updated = res?.data || { ...editingMachine, ...payload };
       setMachines((prev) =>
         prev.map((m) => (m._id === editingMachine._id ? { ...m, ...updated } : m)),
       );
@@ -2227,20 +2244,19 @@ export default function InstalledMachinesPage() {
       };
     }
 
-    if (!manualAddForm.productId) {
+    if (!manualAddForm.machineName.trim()) {
       toast({
-        title: "Machine required",
-        description: "Select the machine model/product.",
+        title: "Machine name required",
+        description: "Enter the name of the machine.",
         variant: "destructive",
       });
       return;
     }
 
-    const product = products.find((p) => String(p._id) === manualAddForm.productId);
-    if (!product) {
+    if (!manualAddForm.machineCategory.trim()) {
       toast({
-        title: "Product not found",
-        description: "Please select a valid machine product.",
+        title: "General term required",
+        description: "Enter the machine's general term, such as Maternity.",
         variant: "destructive",
       });
       return;
@@ -2250,9 +2266,9 @@ export default function InstalledMachinesPage() {
     try {
       const res = await stockApi.createInstalledMachine({
         client: clientPayload,
-        productId: product._id,
-        productName: product.name,
-        category: product.category || undefined,
+        productId: `manual-${Date.now()}`,
+        productName: manualAddForm.machineName.trim(),
+        category: manualAddForm.machineCategory.trim(),
         serialNumber: manualAddForm.serialNumber.trim() || undefined,
         installationLocation: manualAddForm.installationLocation.trim() || undefined,
         installationDepartment:
@@ -4012,26 +4028,33 @@ export default function InstalledMachinesPage() {
               </div>
             )}
 
-            <div>
-              <Label>Machine / product *</Label>
-              <select
-                className="mt-1 w-full rounded border px-3 py-2 text-sm"
-                value={manualAddForm.productId}
-                onChange={(e) =>
-                  setManualAddForm((prev) => ({
-                    ...prev,
-                    productId: e.target.value,
-                  }))
-                }
-              >
-                <option value="">Select machine…</option>
-                {products.map((p) => (
-                  <option key={p._id} value={p._id}>
-                    {p.name}
-                    {p.category ? ` · ${p.category}` : ""}
-                  </option>
-                ))}
-              </select>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <Label>Machine general term *</Label>
+                <Input
+                  value={manualAddForm.machineCategory}
+                  onChange={(e) =>
+                    setManualAddForm((prev) => ({
+                      ...prev,
+                      machineCategory: e.target.value,
+                    }))
+                  }
+                  placeholder="e.g., Maternity"
+                />
+              </div>
+              <div>
+                <Label>Machine name *</Label>
+                <Input
+                  value={manualAddForm.machineName}
+                  onChange={(e) =>
+                    setManualAddForm((prev) => ({
+                      ...prev,
+                      machineName: e.target.value,
+                    }))
+                  }
+                  placeholder="e.g., Infant Warmer"
+                />
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -4268,10 +4291,38 @@ export default function InstalledMachinesPage() {
           <DialogHeader>
             <DialogTitle>
               Edit Machine Details
-              {editingMachine ? ` - ${editingMachine.productName}` : ""}
+              {editingMachine
+                ? ` - ${detailForm.productName || editingMachine.productName}`
+                : ""}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <Label>Machine general term</Label>
+                <Input
+                  value={detailForm.category || ""}
+                  onChange={(e) =>
+                    setDetailForm({ ...detailForm, category: e.target.value })
+                  }
+                  placeholder="e.g., Maternity"
+                />
+              </div>
+              <div>
+                <Label>Machine name *</Label>
+                <Input
+                  value={detailForm.productName || ""}
+                  onChange={(e) =>
+                    setDetailForm({
+                      ...detailForm,
+                      productName: e.target.value,
+                    })
+                  }
+                  placeholder="e.g., Infant Warmer"
+                />
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Serial Number (Optional)</Label>

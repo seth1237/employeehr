@@ -1,0 +1,271 @@
+Product Name,Category,Buying Price,Selling Price,Min Alert Quantity,Current Quantity,Description
+Professional Wheelchair,Triage & Emergency,0,0,0,0,"Adult/Kids folding wheelchair with desk-length arms and swing-away footrests
+Frame: Folding steel/aluminum. Weight Capacity: 100-120kg (adult). Features: Desk-length arms, swing-away footrests, rear-wheel locks, solid/pneumatic tires."
+Pulse Oximeter,Triage & Emergency,0,0,0,0,Digital oxygen saturation monitor with LED display for accurate readings
+Digital Thermometer,Triage & Emergency,0,0,0,0,"Fast, accurate temperature measurement with memory function"
+Blood Pressure Monitor,Triage & Emergency,0,0,0,0,Automatic digital monitor with large display and irregular heartbeat detection
+Digital Stethoscope,Triage & Emergency,0,0,0,0,Professional stainless steel stethoscope with superior acoustic quality
+Hospital Bed,ICU Setup,0,0,0,0,"Electric adjustable medical bed with safety rails and mattress included
+5-Crank ICU Bed Electric - Functions: Backrest, Knee rest, Height adjust, Trendelenburg/Reverse, Chair mode. Material: ABS head/foot board, SS frame. Safety: Side rails, 4 brakes."
+Blood Gas & Chemistry Analyser,Laboratory Setup,0,0,0,0,"Edan i15 - Parameters: pH, pCO2, pO2, Na+, K+, Ca++, Cl-, Glu, Lac, Hct
+Parameters: pH, pCO2, pO2, Na+, K+, Ca++, Cl-, Glu, Lac, Hct. Test Speed: <60 seconds per sample. Sample Type: Whole blood (arterial/venous/capillary). Cartridge Life: 30 days or 200 tests."
+Full Hematology Analyser,Laboratory Setup,0,0,0,0,"URIT H30 - 3-Part or 5-Part Differential with 21-34 parameters
+Type: 3-Part Differential (if URIT-3000Plus) or 5-Part (if BH-5390). Throughput: 60 T/H. Parameters: 21-34 parameters + 3 histograms. Sample Volume: Micro sample (8.5µL for whole blood). Storage: 100,000 results."
+Semi Auto Hematology Analyser,Laboratory Setup,0,0,0,0,"URIT H50 - 3-Part Differential with 21 parameters
+Type: 3-Part Differential. Throughput: 30-42 T/H. Parameters: 21 parameters + 3 histograms (RBC, WBC, PLT). Sample Volume: 10-20µL (capillary/venous). Display: LCD Touch Screen. Principle: Electrical Impedance."
+Microscope,Laboratory Setup,0,0,0,0,"Olympus CX23 - Binocular with LED illumination and infinity corrected optical system
+Type: Binocular, LED illumination. Optical System: Infinity Corrected (UIS2). Magnification: 40x – 1000x (4x, 10x, 40x, 100x oil). Head: 30° inclined, rotatable 360°. Focus: Coaxial coarse & fine (fine accuracy 2.5µm)."
+Lab Stool,Laboratory Setup,0,0,0,0,"Hydraulic/pneumatic height adjustment with backrest and PU leather
+Type: Hydraulic/pneumatic height adjustment. Material: PU leather, chrome base. Features: 360° swivel, backrest support, foot ring."
+Autoclave 15L,Laboratory Setup,0,0,0,0,"Vertical/Tabletop manual autoclave with stainless steel chamber
+Type: Vertical / Tabletop, Manual. Max Temp/Pressure: 121°C - 126°C / 0.14 - 0.16 MPa. Timer: 0-60 min. Material: Stainless Steel chamber. Safety: Overheat & dry-burn protection."
+Autoclave 50L,Laboratory Setup,0,0,0,0,"Vertical digital automatic autoclave with full stainless steel construction
+Type: Vertical, Digital/Automatic. Max Temp/Pressure: 134°C / 0.22 MPa. Features: Digital display, auto shut-off, safety lock. Material: Full stainless steel."
+Vital Sign Monitor,Triage & Emergency,0,0,0,0,"Edan iM3 - Parameters: NIBP, HR, SpO2, Temp, Respiration with high-res color display
+Parameters: NIBP, HR, SpO2, Temp, Respiration. Screen: 8.4 inch High-res color TFT. Battery: Built-in rechargeable (4+ hours). Alarms: Visual & audible for adult/pediatric."
+Defibrillator,Triage & Emergency,0,0,0,0,"Biphasic AED or Manual with 7"" ECG display and adjustable energy
+Type: Biphasic (AED or Manual). Energy: 2-200J (adjustable). Screen: 7"" color ECG display. Features: ECG monitoring, paddle/pad adult, battery life >3 hours."
+Oxygen Concentrator 5L,Triage & Emergency,0,0,0,0,"Adjustable flow rate 0-5 L/min with 93% oxygen purity
+Flow Rate: 0-5 L/min (adjustable). Oxygen Purity: 93% ±3%. Sound Level: <45 dB. Features: Nebulizer port, alarm for low purity/power failure."
+Nebulizer,Triage & Emergency,0,0,0,0,"HEMC Model compressor nebulizer with 6-8ml reservoir
+Type: Compressor. Particle Size: MMAD 3-5µm. Nebulization Rate: >0.2 ml/min. Reservoir: 6-8ml."
+Patient Monitor V6,ICU Setup,0,0,0,0,"EEG Spec with ECG, Resp, NIBP, SpO2, Temp, 2-channel EEG and 12.1"" touchscreen
+Parameters: ECG, Resp, NIBP, SpO2, Temp, 2-channel EEG, EtCO2 (optional). Screen: 12.1"" Touchscreen. Battery: 4+ hours. Data Export: USB/LAN."
+Ventilator VG70,ICU Setup,0,0,0,0,"Aeonmed ICU Ventilator with invasive & non-invasive modes
+Type: ICU Ventilator (Invasive & Non-invasive). Modes: VC-V, PC-V, PSV, CPAP, SIMV. Screen: 12"" Touchscreen. Tidal Volume: 20-2000ml. Features: Hot swap battery, inspired O2 monitoring."
+Syringe Pump,ICU Setup,0,0,0,0,"P600 Biolight - Single or Double channel with flow rate 0.1-400 ml/h
+Channels: Single or Double. Syringe Size: 10ml, 20ml, 30ml, 50ml. Flow Rate: 0.1 ml/h to 400 ml/h. Accuracy: ±2%. Anti-bolus: Yes."
+Infusion Pump,ICU Setup,0,0,0,0,"P500 Biolight - Volumetric pump with flow rate 1-1200 ml/h
+Type: Volumetric. Flow Rate: 1 ml/h to 1200 ml/h. VTBI: 0.1 ml to 9999 ml. Air Detector: Ultrasonic (<50µl). Occlusion Alarm: Yes."
+ECG Machine,ICU Setup,0,0,0,0,"Edan SE-1200 - 12 Channels simultaneous with 7"" color LCD and 10,000+ ECG storage
+Channels: 12 Channels (simultaneous). Screen: 7"" Color LCD. Filters: AC, Muscle, Drift. Storage: 10,000+ ECGs. Portable: Rechargeable battery, carry handle."
+Ultrasound Trolley U2,Radiology Department,0,0,0,0,"3 probes (Convex, Linear, Phased array) with 15"" HD LED screen
+Probes: Convex, Linear, Phased array (Cardiac). Screen: 15"" HD LED. Modes: 2D, M, Color Doppler, PW, CW. Ports: USB, HDMI, DICOM 3.0. Battery: 4+ hours."
+X-ray Digital PLX5600,Radiology Department,0,0,0,0,"Digital Radiography with 17x17"" wireless flat panel detector
+Type: Digital Radiography (Flat Panel Detector). Detector: 17x17"" Wireless/Portable. Power: 50kW (or higher). Workstation: Image stitching, AEC, DICOM storage/print. Stand: U-Arm or Ceiling mounted."
+Dental Chair YD-A5,Dental Setup,0,0,0,0,"With integrated compressor and LED operatory light
+Material: PU leather, seamless. Movement: 2-3 program positions, adjustable headrest/armrest. Compressor: Dry type (Oil-free), 50L tank included. Light: LED operatory light."
+Dental X-ray,Dental Setup,0,0,0,0,"Wall mounted intraoral digital or film x-ray with articulating arm
+Type: Intraoral (Digital or Film). kVp: 60-70 kVp. mA: 2-8 mA. Exposure Time: 0.01-2.0 seconds. Arm: Articulating, 360° rotation."
+Autoclave 35L,Dental Setup,0,0,0,0,"All American gravity autoclave with cast aluminum chamber
+Type: Gravity (Electric or Gas). Chamber: Cast aluminum (Non-rusting). Pressure: 15-20 PSI. Temp: 121-126°C. Features: Simple dial operation, no electronics to break."
+Vital Sign Monitor Edan iM3 (Adults),Triage & Emergency,0,0,0,0,"Portable vital signs monitor for adult patients with comprehensive parameters
+Parameters: NIBP, HR, SpO2, Temp, Respiration. Screen: Color LED display. Weight Capacity: Adult. Battery: Rechargeable, 4+ hours."
+Vital Sign Monitor Edan iM3 (Kids),Triage & Emergency,0,0,0,0,"Portable vital signs monitor for pediatric patients with specialized parameters
+Parameters: NIBP, HR, SpO2, Temp, Respiration. Screen: Color LED display. Weight Capacity: Pediatric. Battery: Rechargeable, 4+ hours."
+Wheelchair (Adults),Triage & Emergency,0,0,0,0,"Heavy-duty adult wheelchair with desk-length arms and swing-away footrests
+Frame: Folding steel/aluminum. Weight Capacity: 120kg. Features: Desk-length arms, swing-away footrests, rear-wheel locks."
+Wheelchair (Kids),Triage & Emergency,0,0,0,0,"Specialized pediatric wheelchair with smaller frame and adjustable features
+Frame: Lightweight aluminum. Weight Capacity: 60kg. Features: Adjustable footrests, rear-wheel locks, folding design."
+Luxurious ABS Stretcher,Triage & Emergency,0,0,0,0,"Premium ABS stretcher with smooth finish and comfortable patient support
+Material: Luxurious ABS plastic. Features: Comfortable design, easy transport, durable construction."
+Stretcher Fixed Height,Triage & Emergency,0,0,0,0,"Fixed-height medical stretcher with stability and easy maneuverability
+Height: Fixed, ergonomic level. Features: Stable frame, swivel wheels, safety rails."
+Stretcher Adjustable Height,Triage & Emergency,0,0,0,0,"Adjustable-height stretcher for variable patient transport needs
+Height: Manually adjustable. Features: Height adjustment mechanism, swivel wheels, safety rails."
+Foldable Stretcher,Triage & Emergency,0,0,0,0,"Compact foldable stretcher for emergency response and transport
+Features: Compact foldable design, lightweight, portable with carry handles."
+Oxygen Set - Side Filling Cylinder,Triage & Emergency,0,0,0,0,"Complete oxygen set with regulator, flowmeter and side-filling capability
+Components: Regulator, flowmeter, side-filling cylinder connector. Oxygen Purity: 93%+. Features: Reliable flow control."
+Thermometer Contact Digital,Triage & Emergency,0,0,0,0,"Digital contact thermometer for accurate temperature measurement
+Type: Contact digital. Accuracy: ±0.1°C. Response Time: <10 seconds. Memory: Last reading storage."
+Thermometer Infrared Non-Contact,Triage & Emergency,0,0,0,0,"Non-contact infrared thermometer for contactless temperature measurement
+Type: Non-contact infrared. Range: 32-43°C. Accuracy: ±0.2°C. Response Time: <1 second. Feature: LCD display."
+Weight Scale Height & Weight Mechanical,Triage & Emergency,0,0,0,0,"Combined mechanical scale for height and weight measurement
+Type: Mechanical dual-function. Height Range: 60-210cm. Weight Range: 0-150kg. Accuracy: ±0.5kg."
+Baby Weight Scale Digital,Triage & Emergency,0,0,0,0,"Digital scale specialized for infant weight and height measurement
+Type: Digital. Weight Range: 0-50kg. Height Range: 0-100cm. Accuracy: ±0.1kg. Display: LCD."
+Stethoscope Dual Head,Doctors Room,0,0,0,0,"Professional dual head stethoscope for comprehensive auscultation
+Type: Dual head. Material: Stainless steel. Tubing: Latex-free soft. Features: High-quality acoustics."
+Examination Light LED,Doctors Room,0,0,0,0,"Professional LED examination light with adjustable brightness
+Type: LED. Power: AC powered. Brightness: Adjustable. Features: Cool white light, flicker-free."
+Examination Light Halogen,Doctors Room,0,0,0,0,"Halogen examination light with warm illumination
+Type: Halogen. Power: AC powered. Brightness: High-intensity. Features: Warm light, durable."
+Pen Light Torch,Doctors Room,0,0,0,0,"Compact penlight for pupil and throat examination
+Type: LED penlight. Brightness: High. Features: Compact, pocket-sized, battery-powered."
+Examination Couch Stainless Steel,Doctors Room,0,0,0,0,"Durable stainless steel examination couch with hygienic design
+Material: Stainless steel. Features: Easy to clean, corrosion-resistant, sturdy."
+Examination Couch Painted,Doctors Room,0,0,0,0,"Standard examination couch with painted finish
+Material: Metal with painted finish. Features: Comfortable, durable, easy maintenance."
+Ward Screen Stainless Steel,Doctors Room,0,0,0,0,"Stainless steel privacy screen for ward compartmentalization
+Material: Stainless steel frame. Features: Durable, hygienic, mobile."
+Otoscope,Doctors Room,0,0,0,0,"Diagnostic otoscope for ear examination
+Type: LED otoscope. Features: Multiple specula sizes, bright illumination, durable construction."
+Pedal Bin 18L Plastic,Doctors Room,0,0,0,0,"Pedal-operated waste bin in red, black and yellow options
+Capacity: 18 liters. Material: Plastic. Colors: Red, Black, Yellow. Features: Hygienic pedal operation."
+Pedal Bin 12L Stainless Steel,Doctors Room,0,0,0,0,"Stainless steel pedal waste bin for medical settings
+Capacity: 12 liters. Material: Stainless steel. Features: Durable, easy to clean, hygienic."
+Instrument Trolley,Doctors Room,0,0,0,0,"Mobile trolley for instrument and supply storage
+Material: Stainless steel or metal. Features: Multiple shelves, smooth-rolling wheels, lockable."
+Universal Diagnostic Set,Doctors Room,0,0,0,0,"Complete diagnostic set with multiple examination tools
+Components: Otoscope, ophthalmoscope, thermometer, and more. Features: Comprehensive examination kit."
+X-ray Viewer Single,Doctors Room,0,0,0,0,"Single-panel X-ray light box viewer
+Panels: Single (14x14 inches). Features: Bright LED backlight, adjustable brightness, wall-mountable."
+Hospital Bed Single Crank ABS,Wards,0,0,0,0,"Single crank hospital bed with ABS headboard and canvas mattress
+Type: Single crank. Material: ABS head/foot board. Mattress: Canvas. Features: Height adjustment, side rails."
+Hospital Bed Single Crank Kids,Wards,0,0,0,0,"Pediatric single crank hospital bed with ABS board and canvas mattress
+Type: Single crank, pediatric size. Material: ABS head/foot board. Mattress: Canvas. Features: Safety rails."
+Hospital Bed Two Crank ABS,Wards,0,0,0,0,"Two crank hospital bed with dual height adjustment
+Type: Two crank (backrest, knee). Material: ABS. Mattress: Canvas. Functions: Backrest and knee adjustment."
+Hospital Bed Two Crank Kids,Wards,0,0,0,0,"Pediatric two crank hospital bed with dual adjustment
+Type: Two crank, pediatric. Material: ABS. Mattress: Canvas. Functions: Backrest and knee adjustment."
+Hospital Bed Three Crank Manual,Wards,0,0,0,0,"Three crank manual hospital bed with comprehensive adjustment
+Type: Three crank manual. Functions: Backrest, knee rest, height adjust. Material: Stainless steel frame."
+Hospital Bed Three Crank Manual Kids,Wards,0,0,0,0,"Pediatric three crank manual hospital bed
+Type: Three crank manual, pediatric. Functions: Backrest, knee rest, height. Material: Stainless steel frame."
+Overhead Table Hydraulic ABS,Wards,0,0,0,0,"Hydraulic overhead table with ABS construction
+Material: ABS. Adjustment: Hydraulic. Features: Height adjustable, smooth operation, durable."
+Overhead Table Hydraulic Wooden,Wards,0,0,0,0,"Hydraulic overhead table with wooden construction
+Material: Wooden. Adjustment: Hydraulic. Features: Height adjustable, aesthetic design."
+Bedside Locker,Wards,0,0,0,0,"Bedside storage locker for patient personal items
+Material: Metal or wooden. Features: Secure storage, lockable, easy access."
+Drip Stand,Wards,0,0,0,0,"Adjustable drip stand for IV fluid administration
+Material: Stainless steel or metal. Features: Height adjustable, stable base, smooth wheels."
+Medication Trolley Luxurious,Wards,0,0,0,0,"Premium medication trolley with multiple compartments
+Material: Stainless steel. Features: Multiple shelves, lockable, smooth-rolling wheels."
+Suction Machine DFX 23,Wards,0,0,0,0,"High-powered suction machine for airway clearance
+Model: DFX 23. Power: Electric. Features: Adjustable suction, secure canisters, reliable."
+Suction Machine Sam 14,Wards,0,0,0,0,"Medium-capacity suction machine for clinical use
+Model: Sam 14. Power: Electric. Features: Durable, reliable, easy maintenance."
+Oxygen Concentrator Single Flow 8L,Wards,0,0,0,0,"High-flow oxygen concentrator for intensive care
+Flow Rate: 8 LPM. Oxygen Purity: 93%+. Features: Compact, quiet, alarm system."
+Oxygen Concentrator Single Flow 5L,Wards,0,0,0,0,"Standard oxygen concentrator for ward use
+Flow Rate: 5 LPM. Oxygen Purity: 93%+. Features: Energy efficient, quiet operation."
+Mayo Trolley,Wards,0,0,0,0,"Sterile instrument trolley for surgical procedures
+Material: Stainless steel. Features: Multiple tiers, lockable wheels, autoclavable shelves."
+Dressing Trolley,Wards,0,0,0,0,"Mobile trolley for wound dressing and care supplies
+Material: Stainless steel. Features: Multiple compartments, smooth wheels, organized layout."
+Oxygen Set,Wards,0,0,0,0,"Complete oxygen delivery system for patient use
+Components: Regulator, flowmeter, tubing. Features: Reliable, compatible with standard cylinders."
+Anaesthesia Machine Aeon 8800A,Theatre Set up,0,0,0,0,"Premium anaesthesia machine for surgical theaters
+Model: Aeon 8800A. Features: Advanced controls, integrated monitoring, comprehensive."
+Anaesthesia Machine Aeon 8300A,Theatre Set up,0,0,0,0,"Professional anaesthesia machine for surgical theater
+Model: Aeon 8300A. Features: Reliable, easy to operate, comprehensive anesthesia delivery."
+Anaesthesia Machine Aeon 7200A Full Configuration,Theatre Set up,0,0,0,0,"Full configuration anaesthesia machine for maternity theater
+Model: Aeon 7200A (Full). Features: Complete setup, advanced features, ideal for obstetrics."
+Anaesthesia Machine Aeon 7200A Basic,Theatre Set up,0,0,0,0,"Basic configuration anaesthesia machine for maternity theater
+Model: Aeon 7200A (Basic). Features: Essential functions, user-friendly, suitable for maternity."
+Anaesthesia Machine Aeon 7200,Theatre Set up,0,0,0,0,"Standard anaesthesia machine for maternity theater
+Model: Aeon 7200. Features: Reliable, standard configuration, proven performance."
+Patient Monitor Edan iM8,Theatre Set up,0,0,0,0,"Multi-parameter patient monitor for operating theater
+Parameters: ECG, NIBP, SpO2, Temp, Respiration. Screen: Color display. Features: Real-time monitoring."
+Patient Monitor Edan X10,Theatre Set up,0,0,0,0,"Advanced patient monitor with comprehensive parameters
+Parameters: Multi-parameter monitoring. Screen: Large color display. Features: Advanced analytics."
+Patient Monitor Edan X12,Theatre Set up,0,0,0,0,"High-end patient monitor with extended capabilities
+Parameters: Comprehensive multi-parameter. Screen: HD color display. Features: Advanced diagnostics."
+Operating Table Head Control,Theatre Set up,0,0,0,0,"Operating table with head control and split-leg capability
+Type: Electric head control, split legs. Features: Adjustable height, Trendelenburg, flexible positions."
+Operating Table Hydraulic,Theatre Set up,0,0,0,0,"Hydraulic operating table for general surgical use
+Type: Hydraulic. Features: Manual adjustment, stable, durable construction."
+Operating Table Electric Keling,Theatre Set up,0,0,0,0,"Electric operating table by Keling manufacturer
+Model: Keling. Type: Electric. Features: Motorized adjustment, smooth positioning."
+Operating Table Electric Aeonmed OP750,Theatre Set up,0,0,0,0,"Low-end electric operating table by Aeonmed
+Model: OP750 (Low End). Type: Electric. Features: Standard functions, reliable."
+Operating Table Electric Aeonmed OP850,Theatre Set up,0,0,0,0,"High-end electric operating table by Aeonmed
+Model: OP850/Hayer (High End). Type: Electric. Features: Advanced positioning, comprehensive controls."
+Operating Light LED Dual Arm Keling,Theatre Set up,0,0,0,0,"Dual-arm LED operating light by Keling
+Type: LED dual-arm. Features: Bright illumination, flexible positioning, flicker-free."
+Operating Light LED Single Arm Keling,Theatre Set up,0,0,0,0,"Single-arm LED operating light by Keling
+Type: LED single-arm. Features: Bright, flexible arm, reliable."
+Operating Light LED Aeonmed OL9570,Theatre Set up,0,0,0,0,"Single-arm LED operating light by Aeonmed
+Model: OL9570. Type: LED single-arm. Features: High-quality illumination."
+Operating Light LED Aeonmed OL965070,Theatre Set up,0,0,0,0,"Dual-arm LED operating light by Aeonmed
+Model: OL965070. Type: LED dual-arm. Features: Superior brightness, flexible."
+Operating Light LED Aeonmed OL968080,Theatre Set up,0,0,0,0,"High-end dual-arm LED operating light with camera
+Model: OL968080 (High End). Type: LED dual-arm. Features: Camera integration, exceptional quality."
+Single Arm Pendant CP8300,Theatre Set up,0,0,0,0,"Single-arm surgical pendant system
+Model: CP8300. Features: Flexible arm, equipment mounting, smooth operation."
+Single Arm Pendant CP8400,Theatre Set up,0,0,0,0,"Advanced single-arm surgical pendant system
+Model: CP8400. Features: Enhanced flexibility, multiple utilities, professional grade."
+Diathermy Machine 300W,Theatre Set up,0,0,0,0,"Electrosurgical diathermy machine for surgical procedures
+Power: 300 watts. Features: Reliable cutting and coagulation, safety features."
+Anesthesia Luxurious Trolley,Theatre Set up,0,0,0,0,"Premium trolley for anesthesia equipment and supplies
+Material: Stainless steel. Features: Multiple compartments, organized layout, lockable."
+Suction Machine Sam 35,Theatre Set up,0,0,0,0,"High-capacity suction machine for operating theater
+Model: Sam 35. Power: Electric. Features: High suction power, reliable, durable."
+Defibrillator DM7000,Theatre Set up,0,0,0,0,"Advanced defibrillator for surgical theater
+Model: DM7000. Type: Biphasic. Features: Advanced monitoring, reliable shock delivery."
+General Set,Theatre Set up,0,0,0,0,"Complete general surgical instrument set
+Components: Essential surgical instruments. Features: Comprehensive, stainless steel."
+Suture Set,Theatre Set up,0,0,0,0,"Complete suture kit with various sizes and types
+Components: Multiple suture sizes and materials. Features: Sterile, ready to use."
+Laryngoscope with 4 Blades,Theatre Set up,0,0,0,0,"Complete laryngoscope with four blade sizes
+Blades: 4 different sizes. Features: Clear view, durable construction, reliable."
+MVA Kit,Theatre Set up,0,0,0,0,"Manual vacuum aspiration kit for obstetric procedures
+Type: MVA kit. Components: Complete vacuum aspiration system. Features: Effective, reliable."
+Ambu Bag Adult,Theatre Set up,0,0,0,0,"Silicone ambu bag for adult manual ventilation
+Material: Silicone. Type: Adult. Features: Durable, reliable, latex-free."
+Ambu Bag Neonatal,Theatre Set up,0,0,0,0,"Specialized ambu bag for neonatal resuscitation
+Material: Silicone. Type: Neonatal. Features: Appropriate size, reliable."
+Ambu Bag Child,Theatre Set up,0,0,0,0,"Pediatric-sized ambu bag for child resuscitation
+Material: Silicone. Type: Pediatric. Features: Appropriate sizing, reliable."
+Oxygen Concentrator Theatre,Theatre Set up,0,0,0,0,"Oxygen concentrator for operating theater use
+Flow Rate: 5-8 LPM. Oxygen Purity: 93%+. Features: Reliable, quiet operation."
+Transport Ventilator,Theatre Set up,0,0,0,0,"Portable ventilator for patient transport
+Type: Transport ventilator. Features: Portable, battery-powered, reliable."
+Delivery Bed Manual,Maternity and Neonatal Care,0,0,0,0,"Manual obstetric delivery bed for labor and delivery
+Type: Manual. Features: Adjustable positions, leg support, comfortable."
+Delivery Bed Hydraulic,Maternity and Neonatal Care,0,0,0,0,"Hydraulic delivery bed with smooth operation
+Type: Hydraulic. Features: Height adjustable, smooth operation, reliable."
+Baby Bassinet,Maternity and Neonatal Care,0,0,0,0,"Safe sleeping unit for newborn care
+Features: Safe design, easy access, hygienic."
+Recovery Bed Single Crank,Maternity and Neonatal Care,0,0,0,0,"Single crank recovery bed for post-natal care
+Type: Single crank. Functions: Backrest adjustment. Features: Comfortable, durable."
+Recovery Bed Double Crank,Maternity and Neonatal Care,0,0,0,0,"Double crank recovery bed with dual adjustment
+Type: Double crank. Functions: Backrest and knee. Features: Flexible positioning."
+Incubator BB 200 Dison,Maternity and Neonatal Care,0,0,0,0,"Advanced incubator for neonatal care
+Model: BB 200 Dison. Features: Temperature control, humidity regulation, safety."
+Baby Warmer BN 100,Maternity and Neonatal Care,0,0,0,0,"Infrared baby warmer for neonatal warming
+Model: BN 100. Features: Infrared heating, temperature control, safe."
+Baby Warmer Resustaire BN 200,Maternity and Neonatal Care,0,0,0,0,"Advanced resuscitation warmer for neonatal care
+Model: BN 200. Features: Resuscitation capability, warming, safe."
+Fetal Monitor F9000 Plus Edan,Maternity and Neonatal Care,0,0,0,0,"Advanced fetal monitor with comprehensive features
+Model: F9000 Plus Edan. Features: Fetal heart rate, contraction monitoring, advanced."
+Fetal Monitor F9000 Edan,Maternity and Neonatal Care,0,0,0,0,"Standard fetal monitor for labor monitoring
+Model: F9000 Edan. Features: Fetal HR and contractions, reliable."
+Fetal Monitor F6000 Edan,Maternity and Neonatal Care,0,0,0,0,"Mid-range fetal monitor
+Model: F6000 Edan. Features: Dual channel, reliable monitoring."
+Fetal Monitor F3000 Edan,Maternity and Neonatal Care,0,0,0,0,"Basic fetal monitor for essential monitoring
+Model: F3000 Edan. Features: Essential fetal monitoring, reliable."
+Fetal Doppler Edan Sonotrax,Maternity and Neonatal Care,0,0,0,0,"Portable fetal doppler for heart rate detection
+Model: Sonotrax Edan. Features: Portable, accurate fetal HR, easy to use."
+Phototherapy Unit LED,Maternity and Neonatal Care,0,0,0,0,"LED phototherapy unit for neonatal jaundice treatment
+Type: LED. Features: Effective treatment, safe, energy efficient."
+FetalScope Plastic,Maternity and Neonatal Care,0,0,0,0,"Plastic fetoscope for fetal heart auscultation
+Material: Plastic. Features: Durable, reliable acoustics."
+FetalScope Aluminum,Maternity and Neonatal Care,0,0,0,0,"Aluminum fetoscope for professional use
+Material: Aluminum. Features: Durable, superior acoustics."
+Vacuum Extractor,Maternity and Neonatal Care,0,0,0,0,"Vacuum extraction device for assisted delivery
+Type: Vacuum extractor. Features: Safe, reliable, professional grade."
+Cesarean Set,Maternity and Neonatal Care,0,0,0,0,"Complete surgical set for cesarean section
+Components: Essential cesarean instruments. Features: Comprehensive, sterile."
+Delivery Set,Maternity and Neonatal Care,0,0,0,0,"Complete instrument set for vaginal delivery
+Components: Essential delivery instruments. Features: Complete, sterile."
+Room Heater,Maternity and Neonatal Care,0,0,0,0,"Room heater for maintaining temperature in maternity ward
+Type: Electric room heater. Features: Adjustable temperature, safe."
+Step Stool,Maternity and Neonatal Care,0,0,0,0,"Step stool for patient access and mobility
+Features: Sturdy, non-slip, safe."
+ICU Patient Monitor V5,ICU Setup,0,0,0,0,"Multi-parameter patient monitor for ICU
+Parameters: ECG, NIBP, SpO2, Temp, Respiration. Screen: Color display. Features: Reliable monitoring."
+ICU Patient Monitor V6 EEG,ICU Setup,0,0,0,0,"Advanced ICU monitor with EEG capability
+Parameters: ECG, NIBP, SpO2, Temp, Respiration, 2-channel EEG. Features: Advanced diagnostics."
+ICU Patient Monitor X12 EtCO2,ICU Setup,0,0,0,0,"Comprehensive ICU monitor with end-tidal CO2
+Parameters: Multi-parameter with EtCO2. Features: Advanced respiratory monitoring."
+Stethoscope Professional Litmanns Classic II,Doctors Room,0,0,0,0,"Premium professional stethoscope for diagnostic excellence
+Model: Littmann Classic II. Features: Superior acoustics, dual head, professional grade."
+Examination Couch Radiology,Radiology Department,0,0,0,0,"Specialized examination couch for radiology procedures
+Material: Steel or aluminum. Features: Radiology-compatible, comfortable."
+Ultrasound Gel 5L,Radiology Department,0,0,0,0,"5-liter bottle of ultrasound coupling gel
+Quantity: 5 liters. Type: Ultrasound gel. Features: Sterile, hypoallergenic."
+X-ray Viewer Double,Radiology Department,0,0,0,0,"Double-panel X-ray light box viewer
+Panels: Double (28x14 inches total). Features: Bright LED backlight, wall-mountable."
+Blood Pressure Monitor Digital,Triage & Emergency,0,0,0,0,"Automatic digital blood pressure monitor with memory
+Type: Digital automatic. Features: Large LCD display, heartbeat detector, memory function."
+Blood Pressure Monitor Mercury,Triage & Emergency,0,0,0,0,"Traditional mercury sphygmomanometer
+Type: Mercury. Features: Accurate, reliable, professional standard."
+Blood Pressure Monitor Precision,Triage & Emergency,0,0,0,0,"High-precision blood pressure monitor
+Type: Precision digital. Features: Highly accurate, advanced algorithms."
+Ambu Bag Adult Silicone,Triage & Emergency,0,0,0,0,"Silicone ambu bag for adult resuscitation
+Material: Silicone. Type: Adult. Features: Durable, latex-free, reliable."
+Ambu Bag Child Silicone,Triage & Emergency,0,0,0,0,"Silicone ambu bag for pediatric resuscitation
+Material: Silicone. Type: Child. Features: Appropriate size, latex-free."

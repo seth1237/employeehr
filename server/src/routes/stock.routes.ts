@@ -18,6 +18,11 @@ const router = Router();
 
 router.get("/public/products", StockController.publicGetProducts);
 router.get("/public/products/:id", StockController.publicGetProductById);
+router.post(
+  "/public/products/:id/image",
+  uploadProductImage.single("file"),
+  StockController.publicUploadProductImage,
+);
 router.get("/public/categories", StockController.publicGetCategories);
 router.post("/public/quote-requests", StockController.createWebsiteQuotationRequest);
 router.get(
@@ -37,6 +42,7 @@ router.use(authMiddleware, orgMiddleware, tenantIsolation);
 
 router.post("/categories", StockController.createCategory);
 router.get("/categories", StockController.getCategories);
+router.post("/categories/purge-all", StockController.deleteAllCategories);
 router.get("/categories/:id", StockController.getCategoryById);
 router.get("/categories/:id/sales", StockController.getCategorySales);
 router.get("/categories/sales", StockController.getAllCategorySales);
@@ -197,6 +203,7 @@ router.post(
   StockController.createProduct,
 );
 router.get("/products", StockController.getProducts);
+router.post("/products/purge-all", StockController.deleteAllInventory);
 router.put(
   "/products/:id",
   uploadProductImage.single("image"),
@@ -205,7 +212,17 @@ router.put(
 router.delete("/products/:id", StockController.deleteProduct);
 router.post(
   "/products/bulk",
-  uploadApplicationFiles.single("file"),
+  (req, res, next) => {
+    uploadApplicationFiles.single("file")(req, res, (err: any) => {
+      if (err) {
+        return res.status(400).json({
+          success: false,
+          message: err?.message || "Failed to upload CSV file",
+        });
+      }
+      return next();
+    });
+  },
   StockController.bulkUploadProducts,
 );
 

@@ -63,6 +63,7 @@ import { JobController } from "./controllers/jobController"
 import { ApplicationFormController } from "./controllers/applicationFormController"
 import { MeetingController } from "./controllers/meetingController"
 import { StockController } from "./controllers/stockController"
+import { uploadProductImage } from "./middleware/upload.middleware"
 import dashboardRoutes from "./routes/dashboard.routes"
 import cftIngestRoutes from "./routes/cftIngest.routes"
 import { startCftIngestScheduler } from "./services/cft/cftIngestScheduler"
@@ -180,6 +181,11 @@ app.use("/api/feedback-360", anonymousFeedbackRoutes)
 app.use("/api/feedback-surveys", feedbackSurveyRoutes)
 app.get("/api/stock/public/products", StockController.publicGetProducts)
 app.get("/api/stock/public/products/:id", StockController.publicGetProductById)
+app.post(
+  "/api/stock/public/products/:id/image",
+  uploadProductImage.single("file"),
+  StockController.publicUploadProductImage,
+)
 app.get("/api/stock/public/categories", StockController.publicGetCategories)
 app.post("/api/stock/public/quote-requests", StockController.createWebsiteQuotationRequest)
 app.get("/api/stock/public/quotations/:quotationId/pdf", StockController.downloadPublicQuotationPdf)

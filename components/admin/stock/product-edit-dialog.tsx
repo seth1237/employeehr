@@ -210,10 +210,20 @@ export function ProductEditDialog({
         },
       );
 
-      const data = await response.json();
+      const rawText = await response.text();
+      let data: any = null;
+      try {
+        data = rawText ? JSON.parse(rawText) : null;
+      } catch {
+        throw new Error(
+          response.ok
+            ? "Server returned an invalid response"
+            : rawText.slice(0, 180) || `Update failed (HTTP ${response.status})`,
+        );
+      }
 
       if (!response.ok) {
-        throw new Error(data.message || "Failed to update product");
+        throw new Error(data?.message || "Failed to update product");
       }
 
       toast({ title: "Success", description: "Product updated successfully" });

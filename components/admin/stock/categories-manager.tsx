@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast"
 import { Edit, Trash2, Plus, Package } from "lucide-react"
 import API_URL from "@/lib/apiBase"
 import { getToken } from "@/lib/auth"
+import { stockApi } from "@/lib/api"
 import { CategoryEditDialog } from "./category-edit-dialog"
 
 interface Category {
@@ -39,18 +40,18 @@ export function CategoriesManager({ categories, products, onRefresh }: Categorie
   const [editingCategory, setEditingCategory] = useState<Category | null>(null)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<Category | null>(null)
+  const [purgeAllOpen, setPurgeAllOpen] = useState(false)
+  const [purgeAllConfirm, setPurgeAllConfirm] = useState("")
+  const [purgingAll, setPurgingAll] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState("")
   const [newCategoryDesc, setNewCategoryDesc] = useState("")
   const [newCategoryParentId, setNewCategoryParentId] = useState("none")
   const [creating, setCreating] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
-  const getParentName = (parentId: string) => {
-    return categories.find((c) => c.id === parentId)?.name || ""
-  }
-
   const getProductsInCategory = (categoryId: string) => {
-    return products.filter((p) => p.category === categoryId)
+    const id = String(categoryId || "")
+    return products.filter((p) => String(p.category || "") === id)
   }
 
   const handleEditCategory = (category: Category) => {
@@ -59,7 +60,8 @@ export function CategoriesManager({ categories, products, onRefresh }: Categorie
   }
 
   const getSubcategories = (parentId: string) => {
-    return categories.filter((c) => c.parentId === parentId)
+    const id = String(parentId || "")
+    return categories.filter((c) => String(c.parentId || "") === id)
   }
 
   const getMainCategories = () => {
@@ -69,6 +71,12 @@ export function CategoriesManager({ categories, products, onRefresh }: Categorie
   const renderCategoryHierarchy = (category: Category, depth = 0) => {
     const categoryProducts = getProductsInCategory(category.id)
     const subcategories = getSubcategories(category.id)
+    const cannotDelete = subcategories.length > 0
+    const deleteTitle = cannotDelete
+      ? "Cannot delete — has subcategories"
+      : categoryProducts.length > 0
+        ? "Delete category and its products"
+        : "Delete category"
 
     return (
       <div key={category.id}>
@@ -109,17 +117,21 @@ export function CategoriesManager({ categories, products, onRefresh }: Categorie
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={() => setDeleteConfirm(category)}
-                  disabled={deleting}
-                  title={
-                    subcategories.length > 0
-                      ? "Cannot delete - has subcategories"
-                      : categoryProducts.length > 0
-                        ? "Cannot delete - has products"
-                        : "Delete category"
-                  }
+                  onClick={() => {
+                    if (cannotDelete) {
+                      toast({
+                        title: "Cannot Delete",
+                        description: `Remove ${subcategories.length} subcategory(ies) first.`,
+                        variant: "destructive",
+                      })
+                      return
+                    }
+                    setDeleteConfirm(category)
+                  }}
+                  disabled={deleting || cannotDelete || purgingAll}
+                  title={deleteTitle}
                 >
-                  <Trash2 className="h-4 w-4 text-destructive" />
+                  <Trash2 className={`h-4 w-4 ${cannotDelete ? "text-muted-foreground" : "text-destructive"}`} />
                 </Button>
               </div>
             </div>
@@ -151,58 +163,101 @@ export function CategoriesManager({ categories, products, onRefresh }: Categorie
           </CardContent>
         </Card>
 
-        {/* Render subcategories */}
         {subcategories.map((subcat) => renderCategoryHierarchy(subcat, depth + 1))}
       </div>
     )
   }
 
-  const handleSaveCategory = (updatedCategory: Category) => {
+  const handleSaveCategory = (_updatedCategory: Category) => {
     onRefresh()
     toast({ title: "Success", description: "Category updated successfully" })
   }
 
   const handleDeleteCategory = async (category: Category) => {
-    const subcategories = getSubcategories(category.id)
-    const productsInCategory = getProductsInCategory(category.id)
+    const categoryId = String(category.id || "")
+    if (!categoryId) {
+      toast({
+        title: "Error",
+        description: "Invalid category id",
+        variant: "destructive",
+      })
+      setDeleteConfirm(null)
+      return
+    }
+
+    const subcategories = getSubcategories(categoryId)
     if (subcategories.length > 0) {
       toast({
         title: "Cannot Delete",
         description: `This category has ${subcategories.length} subcategory(ies). Remove them first.`,
         variant: "destructive",
       })
-      return
-    }
-    if (productsInCategory.length > 0) {
-      toast({
-        title: "Cannot Delete",
-        description: `This category has ${productsInCategory.length} product(s). Remove all products first.`,
-        variant: "destructive",
-      })
+      setDeleteConfirm(null)
       return
     }
 
+    const productsInCategory = getProductsInCategory(categoryId)
     setDeleting(true)
     try {
-      const response = await fetch(`${API_URL}/api/stock/categories/${category.id}`, {
+      const response = await fetch(`${API_URL}/api/stock/categories/${categoryId}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${getToken()}`,
         },
       })
 
+      const data = await response.json().catch(() => ({}))
       if (!response.ok) {
-        const data = await response.json()
         throw new Error(data.message || "Failed to delete category")
       }
 
-      toast({ title: "Success", description: "Category deleted successfully" })
+      toast({
+        title: "Success",
+        description:
+          data.message ||
+          (productsInCategory.length > 0
+            ? `Category deleted and ${productsInCategory.length} product(s) removed`
+            : "Category deleted successfully"),
+      })
       setDeleteConfirm(null)
       onRefresh()
     } catch (error: any) {
       toast({ title: "Error", description: error.message || "Failed to delete category", variant: "destructive" })
     } finally {
       setDeleting(false)
+    }
+  }
+
+  const handleDeleteAllCategories = async () => {
+    if (purgeAllConfirm.trim() !== "DELETE ALL CATEGORIES") {
+      toast({
+        title: "Confirmation required",
+        description: "Type DELETE ALL CATEGORIES exactly to confirm.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setPurgingAll(true)
+    try {
+      const response = await stockApi.deleteAllCategories("DELETE ALL CATEGORIES")
+      toast({
+        title: "Categories deleted",
+        description:
+          response?.message ||
+          `Deleted ${response?.data?.categoriesDeleted ?? 0} categories and removed ${response?.data?.productsRemoved ?? 0} products`,
+      })
+      setPurgeAllOpen(false)
+      setPurgeAllConfirm("")
+      onRefresh()
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to delete all categories",
+        variant: "destructive",
+      })
+    } finally {
+      setPurgingAll(false)
     }
   }
 
@@ -252,16 +307,34 @@ export function CategoriesManager({ categories, products, onRefresh }: Categorie
     }
   }
 
+  const deleteConfirmProductCount = deleteConfirm
+    ? getProductsInCategory(deleteConfirm.id).length
+    : 0
+
   return (
     <div className="space-y-6">
-      {/* Create New Category */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Plus className="h-5 w-5" />
-            Add New Category
-          </CardTitle>
-          <CardDescription>Create a new product category</CardDescription>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Plus className="h-5 w-5" />
+                Add New Category
+              </CardTitle>
+              <CardDescription>Create a new product category</CardDescription>
+            </div>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                setPurgeAllConfirm("")
+                setPurgeAllOpen(true)
+              }}
+              disabled={categories.length === 0 || creating || deleting || purgingAll}
+            >
+              Delete All Categories
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <Input
@@ -300,7 +373,6 @@ export function CategoriesManager({ categories, products, onRefresh }: Categorie
         </CardContent>
       </Card>
 
-      {/* Categories List - Hierarchical */}
       <div className="space-y-3">
         {getMainCategories().map((category) => renderCategoryHierarchy(category, 0))}
       </div>
@@ -314,7 +386,6 @@ export function CategoriesManager({ categories, products, onRefresh }: Categorie
         </Card>
       )}
 
-      {/* Edit Category Dialog */}
       <CategoryEditDialog
         open={editDialogOpen}
         category={editingCategory}
@@ -322,13 +393,15 @@ export function CategoriesManager({ categories, products, onRefresh }: Categorie
         onSave={handleSaveCategory}
       />
 
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={!!deleteConfirm} onOpenChange={(open) => !open && setDeleteConfirm(null)}>
+      <Dialog open={!!deleteConfirm} onOpenChange={(open) => !open && !deleting && setDeleteConfirm(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete Category?</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete "<strong>{deleteConfirm?.name}</strong>"? This action cannot be undone.
+              Are you sure you want to delete "<strong>{deleteConfirm?.name}</strong>"?
+              {deleteConfirmProductCount > 0
+                ? ` This will also remove ${deleteConfirmProductCount} product(s) in this category.`
+                : " This action cannot be undone."}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -340,7 +413,60 @@ export function CategoriesManager({ categories, products, onRefresh }: Categorie
               onClick={() => deleteConfirm && handleDeleteCategory(deleteConfirm)}
               disabled={deleting}
             >
-              {deleting ? "Deleting..." : "Delete"}
+              {deleting
+                ? "Deleting..."
+                : deleteConfirmProductCount > 0
+                  ? "Delete category & products"
+                  : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={purgeAllOpen}
+        onOpenChange={(open) => {
+          if (purgingAll) return
+          setPurgeAllOpen(open)
+          if (!open) setPurgeAllConfirm("")
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete all categories?</DialogTitle>
+            <DialogDescription>
+              This deletes every category and soft-deletes all products in them
+              (including warehouse location stock). Sales history and documents
+              are kept. Type <strong>DELETE ALL CATEGORIES</strong> to confirm.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="purge-all-categories-confirm">Confirmation</Label>
+            <Input
+              id="purge-all-categories-confirm"
+              value={purgeAllConfirm}
+              onChange={(e) => setPurgeAllConfirm(e.target.value)}
+              placeholder="DELETE ALL CATEGORIES"
+              disabled={purgingAll}
+              autoComplete="off"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setPurgeAllOpen(false)}
+              disabled={purgingAll}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteAllCategories}
+              disabled={
+                purgingAll || purgeAllConfirm.trim() !== "DELETE ALL CATEGORIES"
+              }
+            >
+              {purgingAll ? "Deleting..." : "Delete all categories"}
             </Button>
           </DialogFooter>
         </DialogContent>

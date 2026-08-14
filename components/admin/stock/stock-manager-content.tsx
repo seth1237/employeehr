@@ -13,6 +13,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -34,7 +42,7 @@ import type {
   TenantBranding,
 } from "@/lib/stock-document-pdf";
 import { STOCK_VIEW_FETCHES } from "@/lib/stock-view-fetch";
-
+import { stockApi } from "@/lib/api";
 const WarehouseManagement = dynamic(() => import("./warehouse-management"), {
   ssr: false,
 });
@@ -224,6 +232,9 @@ export function StockManagerContent({ view }: { view: StockView }) {
   const [statusTab, setStatusTab] = useState<
     "overview" | "categories" | "products"
   >("overview");
+  const [purgeInventoryOpen, setPurgeInventoryOpen] = useState(false);
+  const [purgeInventoryConfirm, setPurgeInventoryConfirm] = useState("");
+  const [purgingInventory, setPurgingInventory] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -1622,6 +1633,39 @@ export function StockManagerContent({ view }: { view: StockView }) {
     URL.revokeObjectURL(url);
   };
 
+  const handlePurgeAllInventory = async () => {
+    if (purgeInventoryConfirm.trim() !== "DELETE ALL INVENTORY") {
+      toast({
+        title: "Confirmation required",
+        description: 'Type DELETE ALL INVENTORY exactly to confirm.',
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setPurgingInventory(true);
+    try {
+      const response = await stockApi.deleteAllInventory("DELETE ALL INVENTORY");
+      toast({
+        title: "Inventory cleared",
+        description:
+          response?.message ||
+          `Removed ${response?.data?.productsRemoved ?? 0} products`,
+      });
+      setPurgeInventoryOpen(false);
+      setPurgeInventoryConfirm("");
+      await fetchAll({ silent: true });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to delete all inventory",
+        variant: "destructive",
+      });
+    } finally {
+      setPurgingInventory(false);
+    }
+  };
+
   const normalizeInputValue = (value?: string) =>
     String(value || "")
       .trim()
@@ -2645,11 +2689,16 @@ export function StockManagerContent({ view }: { view: StockView }) {
               <p className="text-sm">
                 Download sample CSV, fill rows and upload. Required columns:{" "}
                 <strong>
+                  Product Name, Category, Buying Price, Selling Price, Current
+                  Quantity
+                </strong>{" "}
+                (or{" "}
+                <strong>
                   name, category, buyingPrice, sellingPrice, currentQuantity
                 </strong>
-                .
+                ).
                 {branches.length > 0
-                  ? " Select a branch below when uploading stock quantities."
+                  ? " Select a branch only when rows include stock quantities greater than 0."
                   : ""}
               </p>
               {branches.length > 0 ? (
@@ -2691,17 +2740,6 @@ export function StockManagerContent({ view }: { view: StockView }) {
                   onChange={async (e) => {
                     const file = e.target.files && e.target.files[0];
                     if (!file) return;
-                    if (branches.length > 0 && !bulkProductBranchId) {
-                      toast({
-                        title: "Branch required",
-                        description:
-                          "Select the branch where this stock should be recorded.",
-                        variant: "destructive",
-                      });
-                      if (productsFileRef.current)
-                        productsFileRef.current.value = "";
-                      return;
-                    }
                     try {
                       setUploadingProducts(true);
                       const formData = new FormData();
@@ -2716,13 +2754,54 @@ export function StockManagerContent({ view }: { view: StockView }) {
                           body: formData,
                         },
                       );
-                      const res = await parseResponse<{
-                        success: boolean;
+                      const rawText = await response.text();
+                      let payload: {
+                        success?: boolean;
                         message?: string;
-                      }>(response);
-                      if (!res.response.ok)
-                        throw new Error(res.errorMessage || "Upload failed");
-                      toast({ title: res.data?.message || "Upload complete" });
+                        data?: {
+                          createdCount?: number;
+                          updatedCount?: number;
+                          errorCount?: number;
+                          errors?: string[];
+                        };
+                      } | null = null;
+                      if (rawText.trim()) {
+                        try {
+                          payload = JSON.parse(rawText);
+                        } catch {
+                          throw new Error(
+                            response.ok
+                              ? "Server returned an invalid response"
+                              : rawText.slice(0, 180) ||
+                                  `Upload failed (HTTP ${response.status})`,
+                          );
+                        }
+                      } else if (!response.ok) {
+                        throw new Error(
+                          `Upload failed (HTTP ${response.status}${response.statusText ? `: ${response.statusText}` : ""})`,
+                        );
+                      } else {
+                        throw new Error("Server returned an empty response");
+                      }
+
+                      if (!response.ok) {
+                        throw new Error(
+                          payload?.message ||
+                            `Upload failed (HTTP ${response.status})`,
+                        );
+                      }
+
+                      const errorCount = Number(payload?.data?.errorCount || 0);
+                      const errors = payload?.data?.errors || [];
+                      toast({
+                        title: payload?.message || "Upload complete",
+                        description:
+                          errorCount > 0
+                            ? errors.slice(0, 3).join(" · ") ||
+                              `${errorCount} row(s) had errors`
+                            : undefined,
+                        variant: errorCount > 0 ? "destructive" : undefined,
+                      });
                       await fetchAll({ silent: true });
                     } catch (err: any) {
                       toast({
@@ -4102,34 +4181,46 @@ export function StockManagerContent({ view }: { view: StockView }) {
                       </div>
                     )}
                   </div>
-                  <Button
-                    variant="outline"
-                    onClick={() =>
-                      exportAsCsv(
-                        "inventory-status.csv",
-                        [
-                          "Product",
-                          "Category",
-                          "Branch Stock",
-                          "Total Stock",
-                          "Min Alert",
-                          "Selling Price",
-                        ],
-                        filteredProductsForInventory.map((product) => [
-                          product.name,
-                          product.categoryDetails?.name ||
-                            categoryNameById.get(product.category) ||
-                            "",
-                          getDisplayedBranchSummary(product._id),
-                          product.currentQuantity,
-                          product.minAlertQuantity,
-                          product.sellingPrice,
-                        ]),
-                      )
-                    }
-                  >
-                    Export Inventory (Excel)
-                  </Button>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <Button
+                      variant="outline"
+                      onClick={() =>
+                        exportAsCsv(
+                          "inventory-status.csv",
+                          [
+                            "Product",
+                            "Category",
+                            "Branch Stock",
+                            "Total Stock",
+                            "Min Alert",
+                            "Selling Price",
+                          ],
+                          filteredProductsForInventory.map((product) => [
+                            product.name,
+                            product.categoryDetails?.name ||
+                              categoryNameById.get(product.category) ||
+                              "",
+                            getDisplayedBranchSummary(product._id),
+                            product.currentQuantity,
+                            product.minAlertQuantity,
+                            product.sellingPrice,
+                          ]),
+                        )
+                      }
+                    >
+                      Export Inventory (Excel)
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      onClick={() => {
+                        setPurgeInventoryConfirm("");
+                        setPurgeInventoryOpen(true);
+                      }}
+                      disabled={products.length === 0 || purgingInventory}
+                    >
+                      Delete All Inventory
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
 
@@ -4235,15 +4326,17 @@ export function StockManagerContent({ view }: { view: StockView }) {
             <TabsContent value="categories">
               <CategoriesManager
                 categories={categories.map((c) => ({
-                  id: c._id,
+                  id: String(c._id),
                   name: c.name,
                   description: c.description,
+                  parentId: c.parentId ? String(c.parentId) : undefined,
+                  level: c.level,
                 }))}
                 products={products.map((p) => ({
-                  id: p._id,
+                  id: String(p._id),
                   name: p.name,
                   sku: p.sku,
-                  category: p.category,
+                  category: String(p.category || ""),
                 }))}
                 onRefresh={() => fetchAll({ silent: true })}
               />
@@ -4252,10 +4345,10 @@ export function StockManagerContent({ view }: { view: StockView }) {
             <TabsContent value="products">
               <ProductsManager
                 products={products.map((p) => ({
-                  id: p._id,
+                  id: String(p._id),
                   name: p.name,
-                  categoryId: p.category,
-                  category: p.category,
+                  categoryId: String(p.category || ""),
+                  category: String(p.category || ""),
                   description: p.categoryDetails?.name,
                   sku: p.sku,
                   unitPrice: p.sellingPrice,
@@ -4263,13 +4356,66 @@ export function StockManagerContent({ view }: { view: StockView }) {
                   reorderLevel: p.minAlertQuantity,
                 }))}
                 categories={categories.map((c) => ({
-                  id: c._id,
+                  id: String(c._id),
                   name: c.name,
                 }))}
                 onRefresh={() => fetchAll({ silent: true })}
               />
             </TabsContent>
           </Tabs>
+
+          <Dialog
+            open={purgeInventoryOpen}
+            onOpenChange={(open) => {
+              if (purgingInventory) return;
+              setPurgeInventoryOpen(open);
+              if (!open) setPurgeInventoryConfirm("");
+            }}
+          >
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Delete all inventory?</DialogTitle>
+                <DialogDescription>
+                  This soft-deletes every active product and clears warehouse
+                  location stock for your organization. Sales history and
+                  documents are kept. Type{" "}
+                  <strong>DELETE ALL INVENTORY</strong> to confirm.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-2">
+                <Label htmlFor="purge-inventory-confirm">Confirmation</Label>
+                <Input
+                  id="purge-inventory-confirm"
+                  value={purgeInventoryConfirm}
+                  onChange={(event) =>
+                    setPurgeInventoryConfirm(event.target.value)
+                  }
+                  placeholder="DELETE ALL INVENTORY"
+                  disabled={purgingInventory}
+                  autoComplete="off"
+                />
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setPurgeInventoryOpen(false)}
+                  disabled={purgingInventory}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={handlePurgeAllInventory}
+                  disabled={
+                    purgingInventory ||
+                    purgeInventoryConfirm.trim() !== "DELETE ALL INVENTORY"
+                  }
+                >
+                  {purgingInventory ? "Deleting..." : "Delete all inventory"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </>
       )}
 

@@ -712,22 +712,60 @@ function parseCsvLine(line: string): string[] {
 }
 
 function parseCsv(content: string): Array<Record<string, string>> {
-  const lines = content
-    .split(/\r?\n/)
-    .map((line) => line.trimEnd())
-    .filter((line) => line.length > 0);
+  const normalized = String(content || "").replace(/^\uFEFF/, "");
+  if (!normalized.trim()) return [];
 
-  if (lines.length < 1) return [];
+  const rows: string[][] = [];
+  let cell = "";
+  let row: string[] = [];
+  let inQuotes = false;
 
-  const headers = parseCsvLine(lines[0]).map((header) => header.trim());
+  for (let index = 0; index < normalized.length; index += 1) {
+    const char = normalized[index];
+    const next = normalized[index + 1];
 
-  return lines.slice(1).map((line) => {
-    const values = parseCsvLine(line);
-    const row: Record<string, string> = {};
+    if (char === '"') {
+      if (inQuotes && next === '"') {
+        cell += '"';
+        index += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === "," && !inQuotes) {
+      row.push(cell.trim());
+      cell = "";
+      continue;
+    }
+
+    if ((char === "\n" || char === "\r") && !inQuotes) {
+      if (char === "\r" && next === "\n") index += 1;
+      row.push(cell.trim());
+      cell = "";
+      if (row.some((value) => value.length > 0)) rows.push(row);
+      row = [];
+      continue;
+    }
+
+    cell += char;
+  }
+
+  row.push(cell.trim());
+  if (row.some((value) => value.length > 0)) rows.push(row);
+
+  if (rows.length < 1) return [];
+
+  const headers = rows[0].map((header) => header.trim()).filter(Boolean);
+  if (!headers.length) return [];
+
+  return rows.slice(1).map((values) => {
+    const record: Record<string, string> = {};
     headers.forEach((header, headerIndex) => {
-      row[header] = values[headerIndex] ?? "";
+      record[header] = values[headerIndex] ?? "";
     });
-    return row;
+    return record;
   });
 }
 
@@ -2034,6 +2072,105 @@ export class StockController {
       return res.status(500).json({
         success: false,
         message: error.message || "Failed to fetch public product",
+      });
+    }
+  }
+
+  /**
+   * Website admin: upload/replace a product image without ERP login.
+   * Secured by orgId (+ optional WEBSITE_UPLOAD_SECRET / X-Website-Key).
+   */
+  static async publicUploadProductImage(
+    req: AuthenticatedRequest,
+    res: Response,
+  ) {
+    try {
+      const org_id = getTenantFromRequest(req);
+      if (!org_id) {
+        return res.status(400).json({
+          success: false,
+          message: "orgId is required for website product image upload",
+        });
+      }
+
+      const configuredSecret = String(
+        process.env.WEBSITE_UPLOAD_SECRET ||
+          process.env.ERP_WEBSITE_UPLOAD_SECRET ||
+          "",
+      ).trim();
+      if (configuredSecret) {
+        const provided = String(
+          req.headers["x-website-key"] ||
+            req.headers["x-upload-secret"] ||
+            req.body?.uploadSecret ||
+            req.query?.uploadSecret ||
+            "",
+        ).trim();
+        if (!provided || provided !== configuredSecret) {
+          return res.status(401).json({
+            success: false,
+            message: "Invalid website upload secret",
+          });
+        }
+      }
+
+      const id = String(req.params.id || "").trim();
+      if (!id) {
+        return res.status(400).json({
+          success: false,
+          message: "Product id is required",
+        });
+      }
+
+      const file = req.file as Express.Multer.File | undefined;
+      if (!file) {
+        return res.status(400).json({
+          success: false,
+          message: "Image file is required",
+        });
+      }
+
+      const product = await StockProduct.findOne({
+        _id: id,
+        org_id,
+        isActive: { $ne: false },
+      });
+      if (!product) {
+        return res.status(404).json({
+          success: false,
+          message: "Product not found",
+        });
+      }
+
+      const imageUrl = await StockController.processProductImage(file);
+      product.imageUrl = imageUrl;
+      await product.save();
+
+      let categoryName: string | undefined;
+      if (product.category) {
+        const category = await StockCategory.findOne({
+          _id: product.category,
+          org_id,
+        })
+          .select({ name: 1 })
+          .lean();
+        categoryName = category?.name;
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: "Product image updated",
+        data: {
+          ...product.toObject(),
+          productName: product.name,
+          categoryName,
+          imageUrl,
+        },
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to upload product image",
       });
     }
   }
@@ -6949,12 +7086,18 @@ export class StockController {
           const sellingPrice = parseAmount(
             row.sellingPrice || row["Selling Price"] || "0",
           );
-          const minAlertQuantity = Number(
+          const minAlertQuantityRaw = Number(
             row.minAlertQuantity || row["Min Alert Quantity"] || "0",
           );
-          const currentQuantity = Number(
+          const currentQuantityRaw = Number(
             row.currentQuantity || row["Current Quantity"] || "0",
           );
+          const minAlertQuantity = Number.isFinite(minAlertQuantityRaw)
+            ? minAlertQuantityRaw
+            : 0;
+          const currentQuantity = Number.isFinite(currentQuantityRaw)
+            ? currentQuantityRaw
+            : 0;
           const branchId = resolveBranchId(row);
           const description = String(
             row.description || row["Description"] || row.notes || "",
@@ -6969,12 +7112,25 @@ export class StockController {
           if (categoryName) {
             categoryId = categoryMap.get(categoryName.toLowerCase()) || "";
             if (!categoryId) {
-              const newCat = await StockCategory.create({
-                org_id,
-                name: categoryName,
-                createdBy: actorId,
-              });
-              categoryId = String(newCat._id);
+              try {
+                const newCat = await StockCategory.create({
+                  org_id,
+                  name: categoryName,
+                  createdBy: actorId,
+                });
+                categoryId = String(newCat._id);
+              } catch (catError: any) {
+                if (catError?.code === 11000) {
+                  const existingCat = await StockCategory.findOne({
+                    org_id,
+                    name: categoryName,
+                  }).lean();
+                  if (!existingCat) throw catError;
+                  categoryId = String(existingCat._id);
+                } else {
+                  throw catError;
+                }
+              }
               categoryMap.set(categoryName.toLowerCase(), categoryId);
             }
           }
@@ -7004,16 +7160,26 @@ export class StockController {
 
           if (existingProduct) {
             await StockProduct.findOneAndUpdate(
-              { org_id, name },
+              { _id: existingProduct._id, org_id },
               {
                 $set: {
                   category: categoryId || existingProduct.category,
-                  startingPrice: startingPrice || existingProduct.startingPrice,
-                  sellingPrice: sellingPrice || existingProduct.sellingPrice,
-                  minAlertQuantity,
+                  startingPrice:
+                    Number.isFinite(startingPrice) && startingPrice >= 0
+                      ? startingPrice
+                      : existingProduct.startingPrice,
+                  sellingPrice:
+                    Number.isFinite(sellingPrice) && sellingPrice >= 0
+                      ? sellingPrice
+                      : existingProduct.sellingPrice,
+                  minAlertQuantity: Number.isFinite(minAlertQuantity)
+                    ? minAlertQuantity
+                    : existingProduct.minAlertQuantity,
                   currentQuantity:
-                    existingProduct.currentQuantity + currentQuantity,
+                    Number(existingProduct.currentQuantity || 0) +
+                    (Number.isFinite(currentQuantity) ? currentQuantity : 0),
                   description: description || existingProduct.description,
+                  isActive: true,
                 },
               },
             );
@@ -7023,12 +7189,18 @@ export class StockController {
               org_id,
               name,
               category: categoryId || undefined,
-              startingPrice,
-              sellingPrice,
-              minAlertQuantity,
-              currentQuantity,
+              startingPrice: Number.isFinite(startingPrice) ? startingPrice : 0,
+              sellingPrice: Number.isFinite(sellingPrice) ? sellingPrice : 0,
+              minAlertQuantity: Number.isFinite(minAlertQuantity)
+                ? minAlertQuantity
+                : 0,
+              currentQuantity: Number.isFinite(currentQuantity)
+                ? currentQuantity
+                : 0,
               description,
+              assignedUsers: [],
               createdBy: actorId,
+              isActive: true,
             });
             productId = String(created._id);
             createdCount += 1;
@@ -8447,9 +8619,35 @@ export class StockController {
       }
 
       const { id } = req.params;
+      const categoryId = String(id || "").trim();
+      if (!categoryId || !Types.ObjectId.isValid(categoryId)) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Invalid category id" });
+      }
+
+      const productsInCategory = await StockProduct.find({
+        org_id,
+        category: categoryId,
+        isActive: { $ne: false },
+      })
+        .select("_id")
+        .lean();
+      const productIds = productsInCategory.map((p) => String(p._id));
+
+      if (productIds.length > 0) {
+        await StockProduct.updateMany(
+          { org_id, _id: { $in: productIds } },
+          { $set: { isActive: false, currentQuantity: 0 } },
+        );
+        await StockProductLocation.deleteMany({
+          org_id,
+          productId: { $in: productIds },
+        });
+      }
 
       const category = await StockCategory.findOneAndDelete({
-        _id: id,
+        _id: categoryId,
         org_id,
       });
 
@@ -8459,13 +8657,134 @@ export class StockController {
           .json({ success: false, message: "Category not found" });
       }
 
-      return res
-        .status(200)
-        .json({ success: true, message: "Category deleted successfully" });
+      return res.status(200).json({
+        success: true,
+        message:
+          productIds.length > 0
+            ? `Category deleted and ${productIds.length} product(s) removed`
+            : "Category deleted successfully",
+        data: { productsRemoved: productIds.length },
+      });
     } catch (error: any) {
       return res.status(500).json({
         success: false,
         message: error.message || "Failed to delete category",
+      });
+    }
+  }
+
+  /**
+   * Maintenance: delete every category and soft-delete products in them.
+   * Requires typed confirmation.
+   */
+  static async deleteAllCategories(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id;
+      const actorId = req.user?.userId;
+      if (!org_id || !actorId) {
+        return res
+          .status(401)
+          .json({ success: false, message: "Unauthorized" });
+      }
+
+      if (!isAdminRole(req.user?.role)) {
+        return res.status(403).json({
+          success: false,
+          message: "Only admin/HR can delete all categories",
+        });
+      }
+
+      const confirm = String(req.body?.confirm || "").trim();
+      if (confirm !== "DELETE ALL CATEGORIES") {
+        return res.status(400).json({
+          success: false,
+          message: "Type DELETE ALL CATEGORIES to confirm",
+        });
+      }
+
+      const productResult = await StockProduct.updateMany(
+        { org_id, isActive: { $ne: false } },
+        {
+          $set: {
+            isActive: false,
+            currentQuantity: 0,
+          },
+        },
+      );
+
+      const locationResult = await StockProductLocation.deleteMany({ org_id });
+      const categoryResult = await StockCategory.deleteMany({ org_id });
+
+      return res.status(200).json({
+        success: true,
+        message: `Deleted ${categoryResult.deletedCount || 0} categories and removed ${productResult.modifiedCount || 0} products`,
+        data: {
+          categoriesDeleted: Number(categoryResult.deletedCount || 0),
+          productsRemoved: Number(productResult.modifiedCount || 0),
+          locationsCleared: Number(locationResult.deletedCount || 0),
+        },
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to delete all categories",
+      });
+    }
+  }
+
+  /**
+   * Maintenance: soft-delete all inventory products for this org and clear
+   * warehouse location quantities. Requires typed confirmation.
+   */
+  static async deleteAllInventory(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id;
+      const actorId = req.user?.userId;
+      if (!org_id || !actorId) {
+        return res
+          .status(401)
+          .json({ success: false, message: "Unauthorized" });
+      }
+
+      if (!isAdminRole(req.user?.role)) {
+        return res.status(403).json({
+          success: false,
+          message: "Only admin/HR can delete all inventory",
+        });
+      }
+
+      const confirm = String(req.body?.confirm || "").trim();
+      if (confirm !== "DELETE ALL INVENTORY") {
+        return res.status(400).json({
+          success: false,
+          message: 'Type DELETE ALL INVENTORY to confirm',
+        });
+      }
+
+      const productResult = await StockProduct.updateMany(
+        { org_id, isActive: { $ne: false } },
+        {
+          $set: {
+            isActive: false,
+            currentQuantity: 0,
+          },
+        },
+      );
+
+      const locationResult = await StockProductLocation.deleteMany({ org_id });
+
+      return res.status(200).json({
+        success: true,
+        message: `Removed ${productResult.modifiedCount || 0} products and cleared location stock`,
+        data: {
+          productsRemoved: Number(productResult.modifiedCount || 0),
+          locationsCleared: Number(locationResult.deletedCount || 0),
+        },
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to delete all inventory",
       });
     }
   }
@@ -8871,7 +9190,9 @@ export class StockController {
     file: Express.Multer.File,
   ): Promise<string> {
     const filename = `product-${Date.now()}-${Math.round(Math.random() * 1e9)}.webp`;
-    const uploadPath = path.join(process.cwd(), "uploads/products", filename);
+    const uploadDir = path.join(process.cwd(), "uploads/products");
+    await fs.mkdir(uploadDir, { recursive: true });
+    const uploadPath = path.join(uploadDir, filename);
 
     await sharp(file.buffer).webp({ quality: 80 }).toFile(uploadPath);
 

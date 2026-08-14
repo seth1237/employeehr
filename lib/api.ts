@@ -814,6 +814,10 @@ export const stockApi = {
     client.delete<any>(`/api/stock/clients/groups/${groupId}`),
 
   getProducts: () => client.get<any[]>("/api/stock/products"),
+  deleteAllInventory: (confirm: string) =>
+    client.post<any>("/api/stock/products/purge-all", { confirm }),
+  deleteAllCategories: (confirm: string) =>
+    client.post<any>("/api/stock/categories/purge-all", { confirm }),
 
   globalSearch: (q: string) =>
     client.get<{

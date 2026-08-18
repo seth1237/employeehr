@@ -8,6 +8,7 @@ import { StockQuotation } from "../models/StockQuotation"
 import { StockProduct } from "../models/StockProduct"
 import { StockClient, DEFAULT_CONTACT_ROLES } from "../models/StockClient"
 import { StockClientGroup } from "../models/StockClientGroup"
+import { StockCategory } from "../models/StockCategory"
 import { SalesClientActivity } from "../models/SalesClientActivity"
 import { User } from "../models/User"
 import { createOrUpdateStockClient } from "../services/stockClientSave.service"
@@ -388,7 +389,17 @@ export class SalesController {
         personEmail: String(req.body?.personEmail || "").trim() || undefined,
         visitType: req.body?.visitType || "scheduled",
         purpose: String(req.body?.purpose || "").trim() || undefined,
-        outcome: req.body?.outcome || undefined,
+        outcome: String(req.body?.outcome || "").trim() || undefined,
+        outcomeDetail: String(req.body?.outcomeDetail || "").trim() || undefined,
+        interestCategories: Array.isArray(req.body?.interestCategories)
+          ? req.body.interestCategories
+              .map((item: any) => ({
+                categoryId: String(item.categoryId || "").trim(),
+                categoryName: String(item.categoryName || "").trim(),
+                note: String(item.note || "").trim() || undefined,
+              }))
+              .filter((item: any) => item.categoryId && item.categoryName)
+          : [],
         checkInAt: new Date(),
         gps: parseGps(req.body?.gps),
         nextAction: String(req.body?.nextAction || "").trim() || undefined,
@@ -400,6 +411,24 @@ export class SalesController {
       return res.status(201).json({ success: true, data: visit })
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Failed to log visit"
+      return res.status(500).json({ success: false, message })
+    }
+  }
+
+  static async getCategories(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.org_id
+      if (!org_id) return res.status(401).json({ success: false, message: "Unauthorized" })
+      const categories = await StockCategory.find({ org_id }).sort({ name: 1 }).select("_id name").lean()
+      return res.status(200).json({
+        success: true,
+        data: categories.map((category) => ({
+          _id: String(category._id),
+          name: category.name,
+        })),
+      })
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to load categories"
       return res.status(500).json({ success: false, message })
     }
   }

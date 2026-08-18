@@ -151,8 +151,20 @@ export default function AdminSalesReportsPage() {
                             <span className="font-medium">{visit.clientName}</span>
                             {" · "}
                             {visit.visitType}
+                            {visit.purpose ? ` · ${visit.purpose}` : ""}
                             {visit.outcome ? ` · ${visit.outcome}` : ""}
+                            {visit.outcomeDetail ? ` · ${visit.outcomeDetail}` : ""}
                             {visit.gps?.lat ? " · GPS captured" : ""}
+                            {(visit.interestCategories || []).length > 0 ? (
+                              <p className="mt-0.5 text-teal-800">
+                                Interest:{" "}
+                                {visit.interestCategories
+                                  .map((item: any) =>
+                                    item.note ? `${item.categoryName} (${item.note})` : item.categoryName,
+                                  )
+                                  .join(", ")}
+                              </p>
+                            ) : null}
                           </div>
                         ))}
                       </div>

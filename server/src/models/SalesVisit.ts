@@ -7,12 +7,7 @@ export type SalesVisitType =
   | "cold call"
   | "service call"
 
-export type SalesVisitOutcome =
-  | "quote requested"
-  | "follow-up needed"
-  | "no interest"
-  | "complaint"
-  | "information only"
+export type SalesVisitOutcome = string
 
 export interface ISalesVisit extends Document {
   org_id: string
@@ -29,6 +24,12 @@ export interface ISalesVisit extends Document {
   visitType: SalesVisitType
   purpose?: string
   outcome?: SalesVisitOutcome
+  outcomeDetail?: string
+  interestCategories?: Array<{
+    categoryId: string
+    categoryName: string
+    note?: string
+  }>
   checkInAt: Date
   gps?: { lat: number; lng: number; accuracy?: number }
   nextAction?: string
@@ -58,16 +59,16 @@ const salesVisitSchema = new Schema<ISalesVisit>(
       default: "scheduled",
     },
     purpose: { type: String },
-    outcome: {
-      type: String,
-      enum: [
-        "quote requested",
-        "follow-up needed",
-        "no interest",
-        "complaint",
-        "information only",
-      ],
-    },
+    outcome: { type: String },
+    outcomeDetail: { type: String },
+    interestCategories: [
+      {
+        _id: false,
+        categoryId: { type: String, required: true },
+        categoryName: { type: String, required: true },
+        note: { type: String },
+      },
+    ],
     checkInAt: { type: Date, required: true, default: Date.now },
     gps: {
       lat: { type: Number },

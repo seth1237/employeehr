@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { ChevronLeft, UserPlus } from "lucide-react"
+import { ChevronLeft, PackagePlus, UserPlus, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -139,7 +139,95 @@ const emptyForm = {
   personEmail: "",
   facilityPhone: "",
   county: "",
+  outcome: "",
+  outcomeDetail: "",
+  interestCategoryId: "",
+  interestNote: "",
   notes: "",
+}
+
+type InterestCategory = {
+  categoryId: string
+  categoryName: string
+  note?: string
+}
+
+type OutcomeOption = {
+  id: string
+  label: string
+  placeholder: string
+  showsInterest?: boolean
+}
+
+function purposeResponses(reason?: string): OutcomeOption[] {
+  const value = String(reason || "").toLowerCase()
+  if (value.includes("quotation") || value.includes("quote")) {
+    return [
+      { id: "Quote requested", label: "Quote requested", placeholder: "What to quote and by when", showsInterest: true },
+      { id: "Reviewing quotation", label: "Reviewing quotation", placeholder: "Who is reviewing / when they will decide", showsInterest: true },
+      { id: "Needs revision", label: "Needs revision", placeholder: "What to change on the quote", showsInterest: true },
+      { id: "Awaiting approval", label: "Awaiting client approval", placeholder: "Approver and expected date", showsInterest: true },
+      { id: "Ready to order", label: "Ready to convert / order", placeholder: "PO, quantity, or next step", showsInterest: true },
+      { id: "Not proceeding", label: "Not proceeding", placeholder: "Why they declined" },
+    ]
+  }
+  if (value.includes("debt") || value.includes("cheque") || value.includes("collection")) {
+    return [
+      { id: "Cheque collected", label: "Cheque collected", placeholder: "Cheque no, bank, amount, date" },
+      { id: "Cash collected", label: "Cash collected", placeholder: "Amount and receipt reference" },
+      { id: "Promised payment", label: "Promised payment", placeholder: "Amount and promised date" },
+      { id: "Partial payment", label: "Partial payment", placeholder: "Paid / balance remaining" },
+      { id: "Disputed", label: "Disputed / query", placeholder: "What they queried" },
+      { id: "Not available", label: "Person not available", placeholder: "Who to call next" },
+    ]
+  }
+  if (value.includes("introduction")) {
+    return [
+      { id: "Interested", label: "Interested", placeholder: "What they asked about", showsInterest: true },
+      { id: "Requested follow-up", label: "Requested a follow-up", placeholder: "When and with who", showsInterest: true },
+      { id: "Introduced only", label: "Introduced only", placeholder: "Who else to meet" },
+      { id: "Not interested", label: "Not interested", placeholder: "Reason" },
+    ]
+  }
+  if (value.includes("inquiry") || value.includes("enquiry") || value.includes("business")) {
+    return [
+      { id: "Need identified", label: "Need identified", placeholder: "Describe the need", showsInterest: true },
+      { id: "Requested information", label: "Requested information", placeholder: "What they want sent", showsInterest: true },
+      { id: "To quote later", label: "To quote later", placeholder: "When to follow up", showsInterest: true },
+      { id: "Not ready", label: "Not ready", placeholder: "When to check again" },
+    ]
+  }
+  if (value.includes("installation")) {
+    return [
+      { id: "Installation completed", label: "Installation completed", placeholder: "What was installed", showsInterest: true },
+      { id: "Partial installation", label: "Partial installation", placeholder: "What is pending", showsInterest: true },
+      { id: "Delayed", label: "Delayed", placeholder: "Reason and new date" },
+      { id: "Issues found", label: "Issues found", placeholder: "Describe the issue", showsInterest: true },
+    ]
+  }
+  if (value.includes("service")) {
+    return [
+      { id: "Service completed", label: "Service completed", placeholder: "Work done", showsInterest: true },
+      { id: "Parts needed", label: "Parts / product needed", placeholder: "What is needed", showsInterest: true },
+      { id: "Follow-up booked", label: "Follow-up booked", placeholder: "Date and reason", showsInterest: true },
+      { id: "Could not complete", label: "Could not complete", placeholder: "Why" },
+    ]
+  }
+  if (value.includes("appointment")) {
+    return [
+      { id: "Held as planned", label: "Held as planned", placeholder: "Client response", showsInterest: true },
+      { id: "Rescheduled", label: "Rescheduled", placeholder: "New date and time" },
+      { id: "No-show", label: "No-show", placeholder: "Next action" },
+      { id: "Cancelled", label: "Cancelled", placeholder: "Reason" },
+    ]
+  }
+  return [
+    { id: "Interested", label: "Interested / need noted", placeholder: "What they need", showsInterest: true },
+    { id: "Follow-up needed", label: "Follow-up needed", placeholder: "Next action", showsInterest: true },
+    { id: "Information only", label: "Information only", placeholder: "What was shared" },
+    { id: "No interest", label: "No interest", placeholder: "Reason" },
+    { id: "Complaint", label: "Complaint", placeholder: "Issue raised" },
+  ]
 }
 
 export default function SalesReportPage() {
@@ -157,18 +245,23 @@ export default function SalesReportPage() {
   const [matchedClient, setMatchedClient] = useState<any | null>(null)
   const [matching, setMatching] = useState(false)
   const [form, setForm] = useState(emptyForm)
+  const [categories, setCategories] = useState<Array<{ _id: string; name: string }>>([])
+  const [interestCategories, setInterestCategories] = useState<InterestCategory[]>([])
+  const [showInterest, setShowInterest] = useState(false)
 
   const loadPlanners = useCallback(async () => {
     setLoading(true)
     try {
-      const [plannerRes, optionsRes] = await Promise.all([
+      const [plannerRes, optionsRes, categoriesRes] = await Promise.all([
         salesApi.getPlanners(),
         salesApi.getClientOptions().catch(() => ({ data: { roles: DEFAULT_ROLES, counties: KENYA_COUNTIES } })),
+        salesApi.getCategories().catch(() => ({ data: [] })),
       ])
       const list = (plannerRes.data || []).filter((p: Planner) => p.status !== "rejected")
       setPlanners(list)
       setRoles(optionsRes.data?.roles?.length ? optionsRes.data.roles : DEFAULT_ROLES)
       setCounties(optionsRes.data?.counties?.length ? optionsRes.data.counties : KENYA_COUNTIES)
+      setCategories(categoriesRes.data || [])
     } catch (error: any) {
       toast({ title: "Could not load planners", description: error?.message, variant: "destructive" })
     } finally {
@@ -258,11 +351,35 @@ export default function SalesReportPage() {
   const pickClient = (planned: PlannerVisit) => {
     setSelectedClient(planned)
     setForm(emptyForm)
+    setInterestCategories([])
+    setShowInterest(false)
     void matchClient(planned)
   }
 
   const resolvedRole = form.personRole === "Other" ? form.customRole.trim() : form.personRole
   const clientSaved = Boolean(matchedClient?._id)
+  const purpose = selectedClient?.reason === "Other" ? selectedClient.customReason : selectedClient?.reason
+  const outcomeOptions = purposeResponses(purpose)
+  const selectedOutcome = outcomeOptions.find((option) => option.id === form.outcome)
+  const needsInterest = Boolean(selectedOutcome?.showsInterest) || showInterest
+
+  const addInterestCategory = () => {
+    const category = categories.find((item) => item._id === form.interestCategoryId)
+    if (!category) {
+      toast({ title: "Select a product category", variant: "destructive" })
+      return
+    }
+    if (interestCategories.some((item) => item.categoryId === category._id)) {
+      toast({ title: "That category is already added" })
+      return
+    }
+    setInterestCategories((current) => [
+      ...current,
+      { categoryId: category._id, categoryName: category.name, note: form.interestNote.trim() || undefined },
+    ])
+    setShowInterest(true)
+    setForm((c) => ({ ...c, interestCategoryId: "", interestNote: "" }))
+  }
 
   const logVisit = async () => {
     if (!selectedPlanner || !selectedClient) return
@@ -272,6 +389,18 @@ export default function SalesReportPage() {
     }
     if (!resolvedRole) {
       toast({ title: "Select the role of the person met", variant: "destructive" })
+      return
+    }
+    if (!form.outcome) {
+      toast({ title: "Select the client response / visit outcome", variant: "destructive" })
+      return
+    }
+    if (needsInterest && interestCategories.length === 0) {
+      toast({
+        title: "Add a product of interest",
+        description: "Select a category for the need or interest you noted.",
+        variant: "destructive",
+      })
       return
     }
     if (!clientSaved) {
@@ -323,7 +452,10 @@ export default function SalesReportPage() {
         clientPhone: form.facilityPhone.trim() || matchedClient?.phone,
         customer_id: customerId,
         visitType: "scheduled",
-        purpose: selectedClient.reason === "Other" ? selectedClient.customReason : selectedClient.reason,
+        purpose,
+        outcome: form.outcome,
+        outcomeDetail: form.outcomeDetail.trim() || undefined,
+        interestCategories,
         personMet: form.personMet.trim(),
         personRole: resolvedRole,
         personPhone: form.personPhone.trim() || undefined,
@@ -333,6 +465,8 @@ export default function SalesReportPage() {
       })
       toast({ title: "Visit report saved" })
       setForm(emptyForm)
+      setInterestCategories([])
+      setShowInterest(false)
       void loadVisits(selectedPlanner.date)
     } catch (error: any) {
       toast({ title: "Could not save visit", description: error?.message, variant: "destructive" })
@@ -650,6 +784,158 @@ export default function SalesReportPage() {
               </div>
             </div>
 
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+              <div className="space-y-2">
+                <div>
+                  <Label>Client response</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Report for {purpose || "this visit"}. Pick the outcome, then fill the box beside it.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  {outcomeOptions.map((option) => {
+                    const selected = form.outcome === option.id
+                    return (
+                      <div
+                        key={option.id}
+                        className={`rounded-lg border p-3 ${selected ? "border-teal-600 bg-teal-50/50" : "bg-white"}`}
+                      >
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={selected ? "default" : "outline"}
+                            className="sm:min-w-[180px] justify-start"
+                            onClick={() => {
+                              setForm((c) => ({ ...c, outcome: option.id, outcomeDetail: "" }))
+                              if (option.showsInterest) setShowInterest(true)
+                            }}
+                          >
+                            {option.label}
+                          </Button>
+                          {selected ? (
+                            <Input
+                              className="flex-1"
+                              value={form.outcomeDetail}
+                              onChange={(e) => setForm((c) => ({ ...c, outcomeDetail: e.target.value }))}
+                              placeholder={option.placeholder}
+                            />
+                          ) : null}
+                        </div>
+                        {selected ? (
+                          <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
+                            <div className="space-y-1">
+                              <Label className="text-xs text-muted-foreground">Product of interest (category)</Label>
+                              <select
+                                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                                value={form.interestCategoryId}
+                                onChange={(e) => setForm((c) => ({ ...c, interestCategoryId: e.target.value }))}
+                              >
+                                <option value="">Select a category</option>
+                                {categories.map((category) => (
+                                  <option key={category._id} value={category._id}>
+                                    {category.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs text-muted-foreground">Side note</Label>
+                              <Input
+                                value={form.interestNote}
+                                onChange={(e) => setForm((c) => ({ ...c, interestNote: e.target.value }))}
+                                placeholder="Need, quantity, or comment"
+                              />
+                            </div>
+                            <Button type="button" variant="outline" onClick={addInterestCategory}>
+                              Add
+                            </Button>
+                          </div>
+                        ) : null}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <aside className="space-y-3 rounded-lg border bg-slate-50 p-3">
+                <Button
+                  type="button"
+                  className="w-full"
+                  variant={needsInterest ? "default" : "outline"}
+                  onClick={() => setShowInterest(true)}
+                >
+                  <PackagePlus className="mr-1.5 h-4 w-4" />
+                  Product of interest
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  Use this when the client was interested or you noted a need. Choose a stock category, not a product.
+                </p>
+                {showInterest || interestCategories.length > 0 ? (
+                  <div className="space-y-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Category</Label>
+                      <select
+                        className="h-10 w-full rounded-md border bg-white px-3 text-sm"
+                        value={form.interestCategoryId}
+                        onChange={(e) => setForm((c) => ({ ...c, interestCategoryId: e.target.value }))}
+                      >
+                        <option value="">Select a category</option>
+                        {categories.map((category) => (
+                          <option key={category._id} value={category._id}>
+                            {category.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Side note</Label>
+                      <Input
+                        value={form.interestNote}
+                        onChange={(e) => setForm((c) => ({ ...c, interestNote: e.target.value }))}
+                        placeholder="Need, quantity, or comment"
+                      />
+                    </div>
+                    <Button type="button" size="sm" className="w-full" variant="outline" onClick={addInterestCategory}>
+                      Add category
+                    </Button>
+                    {interestCategories.length > 0 ? (
+                      <div className="space-y-1">
+                        {interestCategories.map((item) => (
+                          <div
+                            key={item.categoryId}
+                            className="flex items-start justify-between gap-2 rounded-md border bg-white px-2 py-1.5 text-xs"
+                          >
+                            <div>
+                              <p className="font-medium">{item.categoryName}</p>
+                              {item.note ? <p className="text-muted-foreground">{item.note}</p> : null}
+                            </div>
+                            <button
+                              type="button"
+                              className="text-muted-foreground hover:text-destructive"
+                              onClick={() =>
+                                setInterestCategories((current) =>
+                                  current.filter((row) => row.categoryId !== item.categoryId),
+                                )
+                              }
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        {categories.length === 0
+                          ? "No stock categories yet. Ask admin to add categories first."
+                          : "No categories added yet."}
+                      </p>
+                    )}
+                  </div>
+                ) : null}
+              </aside>
+            </div>
+
             <div className="flex flex-wrap gap-2">
               {clientSaved ? (
                 <Button variant="outline" onClick={() => void saveFacilityContact()} disabled={saving}>
@@ -688,9 +974,20 @@ export default function SalesReportPage() {
                     {visit.personMet
                       ? `${visit.personMet}${visit.personRole ? ` · ${visit.personRole}` : ""}`
                       : visit.purpose || "—"}
+                    {visit.outcome ? ` · ${visit.outcome}` : ""}
+                    {visit.outcomeDetail ? ` · ${visit.outcomeDetail}` : ""}
                     {visit.personPhone ? ` · ${visit.personPhone}` : ""}
-                    {visit.personEmail ? ` · ${visit.personEmail}` : ""}
                   </p>
+                  {(visit.interestCategories || []).length > 0 ? (
+                    <p className="mt-1 text-xs text-teal-800">
+                      Interest:{" "}
+                      {visit.interestCategories
+                        .map((item: any) =>
+                          item.note ? `${item.categoryName} (${item.note})` : item.categoryName,
+                        )
+                        .join(", ")}
+                    </p>
+                  ) : null}
                 </div>
               ))
             )}

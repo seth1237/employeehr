@@ -1434,6 +1434,7 @@ export const salesApi = {
   endDay: (data?: any) => client.post<any>("/api/sales/report/end", data || {}),
   submitReport: (id: string) => client.post<any>(`/api/sales/report/${id}/submit`, {}),
   createVisit: (data: any) => client.post<any>("/api/sales/visits", data),
+  getCategories: () => client.get<any[]>("/api/sales/categories"),
   searchStock: (q: string, inStockOnly = true) =>
     client.get<any[]>(
       `/api/sales/stock?q=${encodeURIComponent(q)}&inStockOnly=${inStockOnly ? "1" : "0"}`,

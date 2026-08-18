@@ -14,6 +14,7 @@ router.post("/report/start", roleMiddleware("sales_rep"), SalesController.startD
 router.post("/report/end", roleMiddleware("sales_rep"), SalesController.endDay)
 router.post("/report/:id/submit", roleMiddleware("sales_rep"), SalesController.submitReport)
 router.post("/visits", roleMiddleware("sales_rep"), SalesController.createVisit)
+router.get("/categories", roleMiddleware("sales_rep"), SalesController.getCategories)
 router.get("/stock", roleMiddleware("sales_rep"), SalesController.searchStock)
 router.get("/clients/search", roleMiddleware("sales_rep"), SalesController.searchClients)
 router.get("/clients/options", roleMiddleware("sales_rep"), SalesController.getClientOptions)

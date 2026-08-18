@@ -5,8 +5,10 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import API_URL from "@/lib/apiBase";
 import { getToken, getUser } from "@/lib/auth";
+import { stockApi } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -72,7 +74,7 @@ interface Invoice {
     balanceRemaining: number;
     paymentCount?: number;
   };
-  status: "issued" | "paid" | "cancelled";
+  status: "pending_approval" | "issued" | "paid" | "cancelled";
   createdBy: string;
   createdAt: string;
   dispatch?: {
@@ -212,6 +214,7 @@ export default function InvoicesPage() {
   const [assigningInvoiceId, setAssigningInvoiceId] = useState<string | null>(
     null,
   );
+  const [actingInvoiceId, setActingInvoiceId] = useState<string | null>(null);
   const [dispatchSnapshotCollapsed, setDispatchSnapshotCollapsed] =
     useState(true);
 
@@ -333,6 +336,38 @@ export default function InvoicesPage() {
       await loadData({ silent: true });
     } finally {
       setAssigningInvoiceId(null);
+    }
+  };
+
+  const approvePendingInvoice = async (invoiceId: string) => {
+    try {
+      setActingInvoiceId(invoiceId);
+      const result = await stockApi.approveInvoice(invoiceId);
+      if (!result.success) {
+        window.alert(result.message || "Failed to approve invoice");
+        return;
+      }
+      await loadData({ silent: true });
+    } catch (error: any) {
+      window.alert(error?.message || "Failed to approve invoice");
+    } finally {
+      setActingInvoiceId(null);
+    }
+  };
+
+  const rejectPendingInvoice = async (invoiceId: string) => {
+    try {
+      setActingInvoiceId(invoiceId);
+      const result = await stockApi.rejectInvoice(invoiceId);
+      if (!result.success) {
+        window.alert(result.message || "Failed to reject invoice");
+        return;
+      }
+      await loadData({ silent: true });
+    } catch (error: any) {
+      window.alert(error?.message || "Failed to reject invoice");
+    } finally {
+      setActingInvoiceId(null);
     }
   };
 
@@ -617,6 +652,9 @@ export default function InvoicesPage() {
       userNameById.get(invoice.createdBy) || "System User";
 
     return [...filteredInvoices].sort((a, b) => {
+      const aPending = a.status === "pending_approval" ? 1 : 0;
+      const bPending = b.status === "pending_approval" ? 1 : 0;
+      if (aPending !== bPending) return bPending - aPending;
       const aDate = new Date(a.createdAt).getTime();
       const bDate = new Date(b.createdAt).getTime();
       const aClient = a.client.name.toLowerCase();
@@ -667,10 +705,11 @@ export default function InvoicesPage() {
         acc.amount += Number(invoice.subTotal || 0);
         if (invoice.status === "paid") acc.paid += 1;
         if (invoice.status === "issued") acc.issued += 1;
+        if (invoice.status === "pending_approval") acc.pending += 1;
         if (invoice.status === "cancelled") acc.cancelled += 1;
         return acc;
       },
-      { total: 0, amount: 0, paid: 0, issued: 0, cancelled: 0 },
+      { total: 0, amount: 0, paid: 0, issued: 0, pending: 0, cancelled: 0 },
     );
   }, [invoices]);
 
@@ -811,6 +850,14 @@ export default function InvoicesPage() {
   const sellerNameFor = (invoice: Invoice) =>
     userNameById.get(invoice.createdBy) || "System User";
 
+  const currentUser = getUser();
+  const canApprove = ["company_admin", "hr", "admin", "super_admin"].includes(
+    String(currentUser?.role || ""),
+  );
+  const pendingApprovalInvoices = invoices.filter(
+    (invoice) => invoice.status === "pending_approval",
+  );
+
   return (
     <div className="space-y-5">
       <div
@@ -832,8 +879,16 @@ export default function InvoicesPage() {
               Invoices dashboard
             </h1>
             <p className="text-sm text-muted-foreground">
-              Search, sort, download, and dispatch from one screen.
+              Search, sort, download, approve sales invoices, and dispatch from one screen.
             </p>
+            {pendingApprovalInvoices.length > 0 ? (
+              <Badge
+                variant="outline"
+                className="mt-2 rounded-full border-amber-200 bg-amber-50 text-amber-800"
+              >
+                Pending requests {pendingApprovalInvoices.length}
+              </Badge>
+            ) : null}
           </div>
           <div className="flex flex-wrap gap-2">
             <Button
@@ -881,6 +936,16 @@ export default function InvoicesPage() {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="shadow-sm">
+                <CardContent className="p-3">
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Pending approval
+                  </div>
+                  <div className="mt-1 text-xl font-semibold text-amber-700">
+                    {totals.pending}
                   </div>
                 </CardContent>
               </Card>
@@ -1197,7 +1262,7 @@ export default function InvoicesPage() {
                                 </span>
                               )}
                             </div>
-                            {!isDelivered && (
+                            {!isDelivered && invoice.status !== "pending_approval" && (
                               <div className="flex flex-wrap items-center gap-2">
                                 <Select
                                   value={
@@ -1261,6 +1326,27 @@ export default function InvoicesPage() {
                         </td>
                         <td className="px-3 py-2 align-top">
                           <div className="flex flex-col gap-2">
+                            {invoice.status === "pending_approval" && canApprove ? (
+                              <div className="flex gap-1">
+                                <Button
+                                  size="sm"
+                                  className="h-8 flex-1"
+                                  disabled={actingInvoiceId === invoice._id}
+                                  onClick={() => void approvePendingInvoice(invoice._id)}
+                                >
+                                  Approve
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  className="h-8 flex-1"
+                                  disabled={actingInvoiceId === invoice._id}
+                                  onClick={() => void rejectPendingInvoice(invoice._id)}
+                                >
+                                  Reject
+                                </Button>
+                              </div>
+                            ) : null}
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button
@@ -1287,20 +1373,24 @@ export default function InvoicesPage() {
                                 >
                                   Download invoice PDF
                                 </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() =>
-                                    handleDownloadDeliveryNotePdf(invoice)
-                                  }
-                                >
-                                  Download delivery note
-                                </DropdownMenuItem>
-                                <DropdownMenuItem asChild>
-                                  <Link
-                                    href={`/admin/stock/dispatch/${invoice._id}`}
-                                  >
-                                    Open dispatch form
-                                  </Link>
-                                </DropdownMenuItem>
+                                {invoice.status !== "pending_approval" ? (
+                                  <>
+                                    <DropdownMenuItem
+                                      onClick={() =>
+                                        handleDownloadDeliveryNotePdf(invoice)
+                                      }
+                                    >
+                                      Download delivery note
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem asChild>
+                                      <Link
+                                        href={`/admin/stock/dispatch/${invoice._id}`}
+                                      >
+                                        Open dispatch form
+                                      </Link>
+                                    </DropdownMenuItem>
+                                  </>
+                                ) : null}
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </div>
@@ -1354,11 +1444,33 @@ export default function InvoicesPage() {
                           Open
                         </Link>
                       </Button>
-                      <Button asChild size="sm" variant="outline" className="flex-1">
-                        <Link href={`/admin/stock/dispatch/${invoice._id}`}>
-                          Dispatch
-                        </Link>
-                      </Button>
+                      {invoice.status === "pending_approval" && canApprove ? (
+                        <>
+                          <Button
+                            size="sm"
+                            className="flex-1"
+                            disabled={actingInvoiceId === invoice._id}
+                            onClick={() => void approvePendingInvoice(invoice._id)}
+                          >
+                            Approve
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            className="flex-1"
+                            disabled={actingInvoiceId === invoice._id}
+                            onClick={() => void rejectPendingInvoice(invoice._id)}
+                          >
+                            Reject
+                          </Button>
+                        </>
+                      ) : (
+                        <Button asChild size="sm" variant="outline" className="flex-1">
+                          <Link href={`/admin/stock/dispatch/${invoice._id}`}>
+                            Dispatch
+                          </Link>
+                        </Button>
+                      )}
                     </div>
                   </MobileCard>
                 );

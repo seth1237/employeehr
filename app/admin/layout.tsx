@@ -62,6 +62,8 @@ export default function AdminLayout({
         router.push("/manager");
       } else if (user.role === "super_admin") {
         router.push("/owner");
+      } else if (user.role === "sales_rep") {
+        router.push("/sales");
       } else {
         router.push("/employee");
       }

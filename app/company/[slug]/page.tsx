@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Mail, Lock, AlertCircle, ShieldCheck } from "lucide-react"
-import { setToken, setUser } from "@/lib/auth"
+import { setToken, setUser, postLoginPath } from "@/lib/auth"
 import API_URL from "@/lib/apiBase"
 
 interface Company {
@@ -126,15 +126,7 @@ export default function CompanyLoginPage() {
         })
 
         const role = data.data.user.role
-        if (role === "super_admin") {
-          router.push("/owner")
-        } else if (role === "company_admin" || role === "admin" || role === "hr") {
-          router.push("/admin")
-        } else if (role === "manager") {
-          router.push("/manager")
-        } else {
-          router.push("/employee")
-        }
+        router.push(postLoginPath(role))
       } else {
         setLoginError(data?.message || (otpStep ? "OTP verification failed" : "Login failed"))
       }

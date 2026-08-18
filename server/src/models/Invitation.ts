@@ -16,7 +16,7 @@ const invitationSchema = new Schema<IInvitation>(
   {
     org_id: { type: String, required: true },
     email: { type: String, required: true, lowercase: true },
-    role: { type: String, required: true, enum: ["company_admin", "hr", "manager", "admin", "employee"] },
+    role: { type: String, required: true, enum: ["company_admin", "hr", "manager", "admin", "employee", "sales_rep"] },
     invite_token: { type: String, required: true, unique: true },
     invited_by: { type: String, required: true },
     status: {

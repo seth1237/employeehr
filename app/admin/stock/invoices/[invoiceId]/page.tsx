@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { stockApi } from "@/lib/api"
+import { getUser } from "@/lib/auth"
 import {
   ErrorState,
   PageLoadingSkeleton,
@@ -51,6 +52,7 @@ export default function InvoiceDetailPage({
   const [lifecycle, setLifecycle] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState<"approve" | "reject" | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -78,6 +80,25 @@ export default function InvoiceDetailPage({
     load()
   }, [load])
 
+  const approveOrReject = async (action: "approve" | "reject") => {
+    setBusy(action)
+    try {
+      const res =
+        action === "approve"
+          ? await stockApi.approveInvoice(invoiceId)
+          : await stockApi.rejectInvoice(invoiceId)
+      if (!res.success) {
+        window.alert(res.message || `Failed to ${action} invoice`)
+        return
+      }
+      await load()
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : `Failed to ${action} invoice`)
+    } finally {
+      setBusy(null)
+    }
+  }
+
   if (loading) {
     return <PageLoadingSkeleton title="Loading invoice" rows={4} />
   }
@@ -96,6 +117,9 @@ export default function InvoiceDetailPage({
 
   const paymentSummary = lifecycle?.paymentSummary
   const steps = Array.isArray(lifecycle?.steps) ? lifecycle.steps : []
+  const canApprove = ["company_admin", "hr", "admin", "super_admin"].includes(
+    String(getUser()?.role || ""),
+  )
 
   const documentData: StockDocumentData = {
     kind: "invoice",
@@ -152,12 +176,32 @@ export default function InvoiceDetailPage({
             documentId={invoice._id}
             document={documentData}
           />
-          <Button asChild variant="outline" size="sm">
-            <Link href={`/admin/stock/dispatch/${invoice._id}`}>
-              <Truck className="h-4 w-4 mr-1" />
-              Dispatch
-            </Link>
-          </Button>
+          {invoice.status === "pending_approval" && canApprove ? (
+            <>
+              <Button
+                size="sm"
+                onClick={() => void approveOrReject("approve")}
+                disabled={busy !== null}
+              >
+                Approve
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => void approveOrReject("reject")}
+                disabled={busy !== null}
+              >
+                Reject
+              </Button>
+            </>
+          ) : (
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/admin/stock/dispatch/${invoice._id}`}>
+                <Truck className="h-4 w-4 mr-1" />
+                Dispatch
+              </Link>
+            </Button>
+          )}
           {invoice.quotationId && (
             <Button asChild variant="outline" size="sm">
               <Link href={`/admin/stock/quotations/${invoice.quotationId}`}>

@@ -61,7 +61,7 @@ export default function QuotationDetailPage({
   const router = useRouter()
   const { toast } = useToast()
   const user = getUser()
-  const canApprove = ["company_admin", "hr"].includes(String(user?.role || ""))
+  const canApprove = ["company_admin", "hr", "admin", "super_admin"].includes(String(user?.role || ""))
 
   const [quotation, setQuotation] = useState<Quotation | null>(null)
   const [followUps, setFollowUps] = useState<FollowUp[]>([])

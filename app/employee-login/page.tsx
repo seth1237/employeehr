@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import API_URL from "@/lib/apiBase"
-import { setToken, setUser } from "@/lib/auth"
+import { setToken, setUser, postLoginPath } from "@/lib/auth"
 import { ShieldCheck } from "lucide-react"
 
 export default function EmployeeLoginPage() {
@@ -70,7 +70,7 @@ export default function EmployeeLoginPage() {
           org_id: data.data.user.org_id,
         })
         localStorage.setItem("company", JSON.stringify(data.data.company))
-        router.push("/employee")
+        router.push(postLoginPath(data.data.user.role))
       } else {
         setError(data?.message || (otpStep ? "OTP verification failed" : "Login failed"))
       }

@@ -5,7 +5,7 @@ import { StockQuotation } from "../../models/StockQuotation"
 import { QuotationFollowUp } from "../../models/QuotationFollowUp"
 import { Branch } from "../../models/Branch"
 import { User } from "../../models/User"
-import { buildQuotationItems, generateDocumentNumber, isAdminRole, summarizeDocumentTotals } from "./stockShared"
+import { buildQuotationItems, generateDocumentNumber, isAdminRole, isOwnDocumentsRole, summarizeDocumentTotals } from "./stockShared"
 
 function toValidObjectIds(values: Array<string | undefined | null>) {
   return [
@@ -87,7 +87,7 @@ export class QuotationController {
         subTotal,
         taxTotal,
         grandTotal,
-        status: req.user?.role === "employee" ? "pending_approval" : "draft",
+        status: isOwnDocumentsRole(req.user?.role) ? "pending_approval" : "draft",
         createdBy,
         ownerUserId: ownerUserId ? String(ownerUserId).trim() : undefined,
         branchId: branchId ? String(branchId).trim() : undefined,
@@ -110,7 +110,7 @@ export class QuotationController {
       }
 
       const query: Record<string, unknown> = { org_id }
-      if (role === "employee") {
+      if (isOwnDocumentsRole(role)) {
         if (!userId) {
           return res.status(401).json({ success: false, message: "Unauthorized" })
         }
@@ -217,7 +217,7 @@ export class QuotationController {
         return res.status(404).json({ success: false, message: "Quotation not found" })
       }
 
-      if (role === "employee" && String(quotation.createdBy || "") !== String(userId || "")) {
+      if (isOwnDocumentsRole(role) && String(quotation.createdBy || "") !== String(userId || "")) {
         return res.status(403).json({
           success: false,
           message: "You can only view your own quotation",
@@ -272,14 +272,27 @@ export class QuotationController {
         return res.status(404).json({ success: false, message: "Quotation not found" })
       }
 
-      if (!isAdminRole(role)) {
+      if (!isAdminRole(role) && !isOwnDocumentsRole(role)) {
         return res.status(403).json({
           success: false,
-          message: "Only admin/HR can edit quotations",
+          message: "You cannot edit this quotation",
         })
       }
 
-      if (quotation.status !== "draft" && quotation.status !== "pending_approval") {
+      if (isOwnDocumentsRole(role)) {
+        if (String(quotation.createdBy || "") !== String(req.user?.userId || "")) {
+          return res.status(403).json({
+            success: false,
+            message: "You can only edit your own quotation",
+          })
+        }
+        if (quotation.status !== "pending_approval") {
+          return res.status(400).json({
+            success: false,
+            message: "Only pending quotations can be edited before approval",
+          })
+        }
+      } else if (quotation.status !== "draft" && quotation.status !== "pending_approval") {
         return res.status(400).json({
           success: false,
           message: "Only draft or pending quotations can be edited",

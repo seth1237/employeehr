@@ -181,6 +181,12 @@ const adminMenuItems = [
     section: "CLIENTS",
   },
   {
+    label: "Sales Reports",
+    icon: FileText,
+    href: "/admin/sales-reports",
+    section: "CLIENTS",
+  },
+  {
     label: "Telesales",
     icon: PhoneCall,
     href: "/admin/clients/telesales",
@@ -203,6 +209,24 @@ const adminMenuItems = [
     icon: AlertCircle,
     href: "/admin/clients/complaints",
     section: "CLIENTS",
+  },
+  {
+    label: "Planner",
+    icon: Calendar,
+    href: "/admin/field-management/planner",
+    section: "FIELD MANAGEMENT",
+  },
+  {
+    label: "Reports",
+    icon: FileText,
+    href: "/admin/field-management/reports",
+    section: "FIELD MANAGEMENT",
+  },
+  {
+    label: "Performance",
+    icon: BarChart3,
+    href: "/admin/field-management/performance",
+    section: "FIELD MANAGEMENT",
   },
   {
     label: "Fleet Tracker",
@@ -407,6 +431,7 @@ export default function AdminSidebar({
     null,
   );
   const [pendingQuotationCount, setPendingQuotationCount] = useState(0);
+  const [pendingInvoiceCount, setPendingInvoiceCount] = useState(0);
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
     new Set(),
   );
@@ -458,6 +483,7 @@ export default function AdminSidebar({
     const role = currentUser?.role;
     if (!role || !["company_admin", "admin", "hr"].includes(role)) {
       setPendingQuotationCount(0);
+      setPendingInvoiceCount(0);
       return;
     }
 
@@ -466,15 +492,27 @@ export default function AdminSidebar({
       try {
         const token = getToken();
         if (!token) return;
-        const response = await fetch(`${API_URL}/api/stock/quotations`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const parsed = await parseResponse(response);
-        if (!parsed.response.ok) return;
-        const pending = (parsed.data?.data || []).filter(
-          (quotation: any) => quotation.status === "pending_approval",
-        ).length;
-        if (mounted) setPendingQuotationCount(pending);
+        const headers = { Authorization: `Bearer ${token}` };
+        const [quotesResponse, invoicesResponse] = await Promise.all([
+          fetch(`${API_URL}/api/stock/quotations`, { headers }),
+          fetch(`${API_URL}/api/stock/invoices`, { headers }),
+        ]);
+        const quotesParsed = await parseResponse(quotesResponse);
+        const invoicesParsed = await parseResponse(invoicesResponse);
+        const pendingQuotes = quotesParsed.response.ok
+          ? (quotesParsed.data?.data || []).filter(
+              (quotation: any) => quotation.status === "pending_approval",
+            ).length
+          : 0;
+        const pendingInvoices = invoicesParsed.response.ok
+          ? (invoicesParsed.data?.data || []).filter(
+              (invoice: any) => invoice.status === "pending_approval",
+            ).length
+          : 0;
+        if (mounted) {
+          setPendingQuotationCount(pendingQuotes);
+          setPendingInvoiceCount(pendingInvoices);
+        }
       } catch {}
     };
 
@@ -673,6 +711,15 @@ export default function AdminSidebar({
                             {pendingQuotationCount > 99
                               ? "99+"
                               : pendingQuotationCount}
+                          </span>
+                        ) : null}
+                        {item.href === "/admin/stock/invoices" &&
+                        pendingInvoiceCount > 0 &&
+                        isCollapsed ? (
+                          <span className="absolute -right-2 -top-2 min-w-4 rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground text-center">
+                            {pendingInvoiceCount > 99
+                              ? "99+"
+                              : pendingInvoiceCount}
                           </span>
                         ) : null}
                       </div>

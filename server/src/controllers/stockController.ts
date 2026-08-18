@@ -30,6 +30,11 @@ import { User } from "../models/User";
 import emailService from "../services/email.service";
 import { smsService } from "../services/sms.service";
 import { mpesaService } from "../services/mpesa.service";
+import { createOrUpdateStockClient } from "../services/stockClientSave.service";
+import {
+  buildInvoicePdfBuffer,
+  buildQuotationPdfBuffer,
+} from "../services/stockDocumentPdf.service";
 import { StockServiceJob } from "../models/StockServiceJob";
 import { StockManufacturer } from "../models/StockManufacturer";
 import { StockLocation } from "../models/StockLocation";
@@ -42,6 +47,7 @@ import {
   generateDocumentNumber,
   buildQuotationItems,
   summarizeDocumentTotals,
+  isOwnDocumentsRole,
 } from "./stock/stockShared";
 import { QuotationController } from "./stock/quotationController";
 
@@ -200,6 +206,24 @@ function getTenantFromRequest(req: AuthenticatedRequest | any) {
   return undefined;
 }
 
+function resolvePublicApiBaseUrl(req: AuthenticatedRequest | any) {
+  if (process.env.API_URL) return process.env.API_URL;
+  const forwardedProto = String(
+    req?.headers?.["x-forwarded-proto"] || req?.protocol || "http",
+  )
+    .split(",")[0]
+    .trim();
+  const host = String(
+    req?.headers?.["x-forwarded-host"] || req?.headers?.host || "",
+  )
+    .split(",")[0]
+    .trim();
+  if (host) return `${forwardedProto}://${host}`;
+  return process.env.NODE_ENV === "production"
+    ? "https://backend.codewithseth.co.ke"
+    : "http://localhost:5010";
+}
+
 function getFirstAndLastName(fullName?: string) {
   const value = String(fullName || "").trim();
   if (!value) return { firstName: "Client", lastName: "User" };
@@ -234,106 +258,6 @@ async function ensureWebsitePortalUser(orgId: string, payload: any) {
   });
 
   return createdUser;
-}
-
-function buildWebsiteInvoicePdfBuffer(invoice: any) {
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
-  const today = new Date(invoice.createdAt || Date.now()).toLocaleDateString("en-KE");
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(20);
-  doc.text("Invoice", 14, 20);
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(11);
-  doc.text(`Invoice No: ${invoice.invoiceNumber}`, 14, 30);
-  doc.text(`Issued: ${today}`, 14, 38);
-  doc.text(`Client: ${invoice.client?.name || "Client"}`, 14, 46);
-  doc.text(`Phone: ${invoice.client?.number || "-"}`, 14, 54);
-  doc.text(`Location: ${invoice.client?.location || "-"}`, 14, 62);
-
-  doc.setLineWidth(0.4);
-  doc.line(14, 72, 196, 72);
-
-  let y = 82;
-  doc.setFont("helvetica", "bold");
-  doc.text("Item", 14, y);
-  doc.text("Qty", 110, y);
-  doc.text("Unit Price", 135, y);
-  doc.text("Line Total", 170, y);
-
-  y += 6;
-  doc.setFont("helvetica", "normal");
-  (invoice.items || []).forEach((item: any) => {
-    if (y > 270) {
-      doc.addPage();
-      y = 20;
-    }
-    doc.text(String(item.productName || "Item"), 14, y);
-    doc.text(String(item.quantity || 0), 110, y);
-    doc.text(`KSh ${Number(item.unitPrice || 0).toLocaleString("en-KE")}`, 135, y);
-    doc.text(`KSh ${Number(item.lineTotal || 0).toLocaleString("en-KE")}`, 170, y);
-    y += 7;
-  });
-
-  doc.line(14, y + 3, 196, y + 3);
-  doc.setFont("helvetica", "bold");
-  doc.text("Total", 150, y + 14);
-  doc.text(`KSh ${Number(invoice.subTotal || 0).toLocaleString("en-KE")}`, 170, y + 14);
-
-  return Buffer.from(doc.output("arraybuffer"));
-}
-
-function buildWebsiteQuotationPdfBuffer(quotation: any) {
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
-  const issuedDate = new Date(quotation.createdAt || Date.now()).toLocaleDateString("en-KE");
-  const validUntil = quotation.validUntil
-    ? new Date(quotation.validUntil).toLocaleDateString("en-KE")
-    : "N/A";
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(20);
-  doc.text("Quotation", 14, 20);
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(11);
-  doc.text(`Quotation No: ${quotation.quotationNumber}`, 14, 30);
-  doc.text(`Issued: ${issuedDate}`, 14, 38);
-  doc.text(`Valid Until: ${validUntil}`, 14, 46);
-  doc.text(`Client: ${quotation.client?.name || "Client"}`, 14, 54);
-  doc.text(`Phone: ${quotation.client?.number || "-"}`, 14, 62);
-  doc.text(`Location: ${quotation.client?.location || "-"}`, 14, 70);
-
-  doc.setLineWidth(0.4);
-  doc.line(14, 78, 196, 78);
-
-  let y = 88;
-  doc.setFont("helvetica", "bold");
-  doc.text("Item", 14, y);
-  doc.text("Qty", 110, y);
-  doc.text("Unit Price", 135, y);
-  doc.text("Line Total", 170, y);
-
-  y += 6;
-  doc.setFont("helvetica", "normal");
-  (quotation.items || []).forEach((item: any) => {
-    if (y > 270) {
-      doc.addPage();
-      y = 20;
-    }
-    doc.text(String(item.productName || item.name || "Item"), 14, y);
-    doc.text(String(item.quantity || 0), 110, y);
-    doc.text(`KSh ${Number(item.unitPrice || 0).toLocaleString("en-KE")}`, 135, y);
-    doc.text(`KSh ${Number(item.lineTotal || 0).toLocaleString("en-KE")}`, 170, y);
-    y += 7;
-  });
-
-  doc.line(14, y + 3, 196, y + 3);
-  doc.setFont("helvetica", "bold");
-  doc.text("Total", 150, y + 14);
-  doc.text(`KSh ${Number(quotation.subTotal || quotation.totalAmount || 0).toLocaleString("en-KE")}`, 170, y + 14);
-
-  return Buffer.from(doc.output("arraybuffer"));
 }
 
 function upsertBulkSmsClient(
@@ -2611,7 +2535,11 @@ export class StockController {
         });
       }
 
-      const pdfBuffer = buildWebsiteInvoicePdfBuffer(invoice);
+      const pdfBuffer = await buildInvoicePdfBuffer(
+        invoice,
+        org_id,
+        resolvePublicApiBaseUrl(req),
+      );
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader(
         "Content-Disposition",
@@ -2647,7 +2575,11 @@ export class StockController {
         return res.status(403).json({ success: false, message: "Quotation is pending approval and cannot be downloaded yet" });
       }
 
-      const pdfBuffer = buildWebsiteQuotationPdfBuffer(quotation);
+      const pdfBuffer = await buildQuotationPdfBuffer(
+        quotation,
+        org_id,
+        resolvePublicApiBaseUrl(req),
+      );
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader(
         "Content-Disposition",
@@ -2678,7 +2610,18 @@ export class StockController {
         return res.status(404).json({ success: false, message: "Invoice not found" });
       }
 
-      const pdfBuffer = buildWebsiteInvoicePdfBuffer(invoice);
+      if (invoice.status === "pending_approval" || invoice.status === "cancelled") {
+        return res.status(403).json({
+          success: false,
+          message: "Invoice is not approved yet and cannot be downloaded",
+        });
+      }
+
+      const pdfBuffer = await buildInvoicePdfBuffer(
+        invoice,
+        org_id,
+        resolvePublicApiBaseUrl(req),
+      );
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader(
         "Content-Disposition",
@@ -2713,7 +2656,11 @@ export class StockController {
 
       const company = await Company.findById(org_id).lean();
       const companyName = company?.name || "Your company";
-      const pdfBuffer = buildWebsiteInvoicePdfBuffer(invoice);
+      const pdfBuffer = await buildInvoicePdfBuffer(
+        invoice,
+        org_id,
+        resolvePublicApiBaseUrl(req),
+      );
       const sent = await emailService.sendEmail({
         to,
         subject: `Invoice ${invoice.invoiceNumber} from ${companyName}`,
@@ -2771,7 +2718,11 @@ export class StockController {
 
       const company = await Company.findById(org_id).lean();
       const companyName = company?.name || "Your company";
-      const pdfBuffer = buildWebsiteQuotationPdfBuffer(quotation);
+      const pdfBuffer = await buildQuotationPdfBuffer(
+        quotation,
+        org_id,
+        resolvePublicApiBaseUrl(req),
+      );
       const sent = await emailService.sendEmail({
         to,
         subject: `Quotation ${quotation.quotationNumber} from ${companyName}`,
@@ -2879,108 +2830,21 @@ export class StockController {
         });
       }
 
-      const resolvedLegalName = String(legalName || sourceName).trim();
-      const contactName = contactPerson ? String(contactPerson).trim() : "";
-      const contactRole = contactPersonRole
-        ? String(contactPersonRole).trim()
-        : "";
-      const initialContacts =
-        contactName && contactRole
-          ? [
-              {
-                role: contactRole,
-                name: contactName,
-                phone: String(sourceNumber).trim() || undefined,
-                isActive: true,
-              },
-            ]
-          : contactName
-            ? [
-                {
-                  role: "Contact",
-                  name: contactName,
-                  phone: String(sourceNumber).trim() || undefined,
-                  isActive: true,
-                },
-              ]
-            : [];
+      const profile = await createOrUpdateStockClient({
+        org_id,
+        actorId: String(actorId),
+        sourceName,
+        sourceNumber,
+        sourceLocation,
+        legalName,
+        contactPerson,
+        contactPersonRole,
+        kraPin,
+        email,
+        branchId,
+      })
 
-      const profile = await StockClient.findOneAndUpdate(
-        {
-          org_id,
-          sourceName: String(sourceName).trim(),
-          sourceNumber: String(sourceNumber).trim(),
-          sourceLocation: String(sourceLocation).trim(),
-        },
-        {
-          $set: {
-            legalName: resolvedLegalName,
-            contactPerson: contactName || undefined,
-            kraPin: kraPin ? String(kraPin).trim().toUpperCase() : undefined,
-            email: email ? String(email).trim() : undefined,
-            branchId: branchId ? String(branchId).trim() : undefined,
-            hasKraDetails: Boolean(kraPin),
-            updatedBy: String(actorId),
-          },
-          $setOnInsert: {
-            org_id,
-            sourceName: String(sourceName).trim(),
-            sourceNumber: String(sourceNumber).trim(),
-            sourceLocation: String(sourceLocation).trim(),
-            createdBy: String(actorId),
-            contacts: initialContacts,
-          },
-        },
-        { upsert: true, new: true },
-      );
-
-      if (
-        profile &&
-        initialContacts.length > 0 &&
-        (!Array.isArray(profile.contacts) || profile.contacts.length === 0)
-      ) {
-        profile.contacts = initialContacts as any;
-        await profile.save();
-      }
-
-      const countyName = String(sourceLocation).trim();
-      if (countyName && profile) {
-        const memberKey = buildClientMemberKey(
-          String(sourceName).trim(),
-          String(sourceNumber).trim(),
-          countyName,
-        );
-        let countyGroup = await StockClientGroup.findOne({
-          org_id,
-          name: countyName,
-        });
-        if (!countyGroup) {
-          countyGroup = await StockClientGroup.create({
-            org_id,
-            name: countyName,
-            description: "County group",
-            memberKeys: [memberKey],
-            createdBy: String(actorId),
-            updatedBy: String(actorId),
-          });
-        } else {
-          await StockClientGroup.updateOne(
-            { _id: countyGroup._id, org_id },
-            {
-              $addToSet: { memberKeys: memberKey },
-              $set: { updatedBy: String(actorId) },
-            },
-          );
-        }
-        const groupId = String(countyGroup._id);
-        if (!(profile.groupIds || []).map(String).includes(groupId)) {
-          profile.groupIds = [...(profile.groupIds || []), groupId];
-          profile.updatedBy = String(actorId);
-          await profile.save();
-        }
-      }
-
-      return res.status(200).json({ success: true, data: profile });
+      return res.status(200).json({ success: true, data: profile })
     } catch (error: any) {
       return res.status(500).json({
         success: false,
@@ -5080,18 +4944,84 @@ export class StockController {
           .json({ success: false, message: "Quotation not found" });
       }
 
+      if (quotation.status === "pending_approval") {
+        return res.status(400).json({
+          success: false,
+          message: "Quotation must be approved before it can be converted to an invoice",
+        });
+      }
+
+      if (quotation.status === "cancelled") {
+        return res.status(400).json({
+          success: false,
+          message: "Cannot convert a cancelled quotation",
+        });
+      }
+
+      if (quotation.convertedInvoiceId) {
+        const existingInvoice = await StockInvoice.findById(quotation.convertedInvoiceId);
+        if (existingInvoice) {
+          if (isAdminRole(role) && existingInvoice.status === "pending_approval") {
+            req.params.invoiceId = String(existingInvoice._id);
+            return StockController.approveInvoice(req, res);
+          }
+          return res.status(200).json({ success: true, data: existingInvoice });
+        }
+      }
+
+      if (role === "sales_rep") {
+        if (String(quotation.createdBy || "") !== String(actorId)) {
+          return res.status(403).json({
+            success: false,
+            message: "You can only convert your own quotations",
+          });
+        }
+        if (!quotation.approvedAt) {
+          return res.status(400).json({
+            success: false,
+            message: "Wait for admin approval before converting this quotation",
+          });
+        }
+
+        const invoice = await StockInvoice.create({
+          org_id,
+          invoiceNumber: generateDocumentNumber("INV"),
+          deliveryNoteNumber: generateDocumentNumber("DN"),
+          quotationId: String(quotation._id),
+          quotationNumber: quotation.quotationNumber,
+          client: quotation.client,
+          items: quotation.items,
+          subTotal: quotation.subTotal,
+          taxTotal: Number((quotation as any).taxTotal || 0),
+          grandTotal: Number(
+            (quotation as any).grandTotal ||
+              Number(quotation.subTotal || 0) + Number((quotation as any).taxTotal || 0),
+          ),
+          status: "pending_approval",
+          dispatch: {
+            status: "not_assigned",
+            packingItems: [],
+            packingCompleted: true,
+            inquiries: [],
+          },
+          createdBy: String(quotation.createdBy || actorId),
+        });
+
+        quotation.convertedInvoiceId = String(invoice._id);
+        await quotation.save();
+
+        return res.status(201).json({
+          success: true,
+          message: "Invoice submitted for admin approval",
+          data: invoice,
+        });
+      }
+
       if (!isAdminRole(role)) {
         return res.status(403).json({
           success: false,
           message: "Only admin/HR can convert quotations to invoices",
         });
-      }
-
-      if (quotation.status === "converted" && quotation.convertedInvoiceId) {
-        const existingInvoice = await StockInvoice.findById(
-          quotation.convertedInvoiceId,
-        ).lean();
-        return res.status(200).json({ success: true, data: existingInvoice });
       }
 
       const quotationProductIds = [
@@ -5252,6 +5182,211 @@ export class StockController {
       return res.status(500).json({
         success: false,
         message: error.message || "Failed to convert quotation",
+      });
+    }
+  }
+
+  static async approveInvoice(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id;
+      const actorId = req.user?.userId;
+      const role = req.user?.role;
+      if (!org_id || !actorId) {
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+      }
+      if (!isAdminRole(role)) {
+        return res.status(403).json({
+          success: false,
+          message: "Only admin/HR can approve invoices",
+        });
+      }
+
+      const invoice = await StockInvoice.findOne({ _id: req.params.invoiceId, org_id });
+      if (!invoice) {
+        return res.status(404).json({ success: false, message: "Invoice not found" });
+      }
+      if (invoice.status !== "pending_approval") {
+        return res.status(400).json({
+          success: false,
+          message: "Only pending invoices can be approved",
+        });
+      }
+
+      const quotation = invoice.quotationId
+        ? await StockQuotation.findOne({ _id: invoice.quotationId, org_id })
+        : null;
+
+      const sourceItems = quotation?.items || invoice.items;
+      const quotationProductIds = [
+        ...new Set(sourceItems.map((item: any) => item.productId).filter(Boolean)),
+      ];
+      const allProducts = await StockProduct.find({
+        _id: { $in: quotationProductIds },
+        org_id,
+      });
+      const productMap = new Map(allProducts.map((product) => [String(product._id), product]));
+      const stockManagedItems = sourceItems.filter((item: any) => {
+        if (item.isOutsourced) return false;
+        if (item.productType === "service") return false;
+        const product = productMap.get(String(item.productId));
+        return product ? product.productType !== "service" : true;
+      });
+      const stockManagedProductMap = new Map(
+        allProducts
+          .filter((product) => stockManagedItems.some((item) => String(item.productId) === String(product._id)))
+          .map((product) => [String(product._id), product]),
+      );
+
+      for (const item of stockManagedItems) {
+        const product = stockManagedProductMap.get(String(item.productId));
+        if (!product) {
+          return res.status(400).json({
+            success: false,
+            message: `Product not found for invoice item: ${item.productName}`,
+          });
+        }
+        if (product.currentQuantity < item.quantity) {
+          return res.status(400).json({
+            success: false,
+            message: `Insufficient stock for ${item.productName}. Available: ${product.currentQuantity}, requested: ${item.quantity}`,
+          });
+        }
+      }
+
+      const receiptNumber = generateDocumentNumber("RCP");
+      const salesToCreate = stockManagedItems.map((item: any) => {
+        const product = stockManagedProductMap.get(String(item.productId))!;
+        product.currentQuantity -= item.quantity;
+        return {
+          org_id,
+          productId: item.productId,
+          quantitySold: item.quantity,
+          soldPrice: item.unitPrice,
+          soldBy: actorId,
+          buyerName: invoice.client.name,
+          buyerNumber: invoice.client.number,
+          buyerLocation: invoice.client.location,
+          isWalkInClient: false,
+          isSalesCompany: false,
+          quotationId: invoice.quotationId,
+          invoiceId: String(invoice._id),
+          receiptNumber,
+          remainingQuantity: product.currentQuantity,
+        };
+      });
+
+      if (stockManagedProductMap.size > 0) {
+        await Promise.all(Array.from(stockManagedProductMap.values()).map((product) => product.save()));
+        await Promise.all(
+          Array.from(stockManagedProductMap.values()).map((product) => sendLowStockAlert(product, org_id)),
+        );
+      }
+      if (salesToCreate.length > 0) {
+        await StockSale.insertMany(salesToCreate);
+      }
+
+      const machineRecordsToCreate = sourceItems
+        .filter((item: any) => {
+          if (item.isOutsourced) return false;
+          if (item.productType === "service") return false;
+          const product = productMap.get(String(item.productId));
+          return product ? product.productType !== "service" : true;
+        })
+        .map((item: any) => ({
+          org_id,
+          client: {
+            name: invoice.client.name,
+            number: invoice.client.number,
+            location: invoice.client.location,
+            contactPerson: quotation?.client?.contactPerson,
+          },
+          productId: String(item.productId),
+          productName: item.productName,
+          category:
+            productMap.get(String(item.productId))?.category ||
+            item.productType ||
+            "Uncategorized",
+          invoiceId: String(invoice._id),
+          quotationId: invoice.quotationId,
+          status: "installation_pending",
+          isActive: true,
+          createdBy: actorId,
+        }));
+
+      if (machineRecordsToCreate.length > 0) {
+        await InstalledMachine.insertMany(machineRecordsToCreate);
+      }
+
+      invoice.status = "issued";
+      const dispatch = invoice.dispatch || ({} as NonNullable<typeof invoice.dispatch>);
+      dispatch.status = dispatch.status || "not_assigned";
+      dispatch.packingItems = stockManagedItems.map((item: any) => ({
+        productId: item.productId,
+        productName: item.productName,
+        requiredQuantity: item.quantity,
+        packedQuantity: 0,
+      }));
+      dispatch.packingCompleted = stockManagedItems.length === 0;
+      dispatch.inquiries = dispatch.inquiries || [];
+      invoice.dispatch = dispatch;
+      invoice.markModified("dispatch");
+      await invoice.save();
+
+      if (quotation) {
+        quotation.status = "converted";
+        quotation.convertedInvoiceId = String(invoice._id);
+        await quotation.save();
+      }
+
+      return res.status(200).json({ success: true, message: "Invoice approved", data: invoice });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to approve invoice",
+      });
+    }
+  }
+
+  static async rejectInvoice(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id;
+      const role = req.user?.role;
+      if (!org_id) {
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+      }
+      if (!isAdminRole(role)) {
+        return res.status(403).json({
+          success: false,
+          message: "Only admin/HR can reject invoices",
+        });
+      }
+
+      const invoice = await StockInvoice.findOne({ _id: req.params.invoiceId, org_id });
+      if (!invoice) {
+        return res.status(404).json({ success: false, message: "Invoice not found" });
+      }
+      if (invoice.status !== "pending_approval") {
+        return res.status(400).json({
+          success: false,
+          message: "Only pending invoices can be rejected",
+        });
+      }
+
+      invoice.status = "cancelled";
+      await invoice.save();
+
+      if (invoice.quotationId) {
+        await StockQuotation.updateOne(
+          { _id: invoice.quotationId, org_id, convertedInvoiceId: String(invoice._id) },
+          { $unset: { convertedInvoiceId: 1 } },
+        );
+      }
+
+      return res.status(200).json({ success: true, message: "Invoice sent back", data: invoice });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to reject invoice",
       });
     }
   }
@@ -5457,7 +5592,7 @@ export class StockController {
           .json({ success: false, message: "Unauthorized" });
 
       const query: any = { org_id };
-      if (role === "employee") {
+      if (isOwnDocumentsRole(role)) {
         if (!userId)
           return res
             .status(401)
@@ -5646,7 +5781,7 @@ export class StockController {
           .json({ success: false, message: "Invoice not found" });
 
       if (
-        role === "employee" &&
+        isOwnDocumentsRole(role) &&
         String((invoice as any).createdBy || "") !== String(userId || "")
       ) {
         return res.status(403).json({

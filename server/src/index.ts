@@ -58,6 +58,7 @@ import vehicleRoutes from "./routes/vehicle.routes"
 import creditNoteRoutes from "./routes/creditNote.routes"
 import resourcesRoutes from "./routes/resources.routes"
 import crmRoutes from "./routes/crm.routes"
+import salesRoutes from "./routes/sales.routes"
 import etimsRoutes from "./routes/etims.routes"
 import { JobController } from "./controllers/jobController"
 import { ApplicationFormController } from "./controllers/applicationFormController"
@@ -197,6 +198,7 @@ app.use("/api/stock/credit-notes", creditNoteRoutes)
 app.use("/api/stamps", stampRoutes)
 app.use("/api/resources", resourcesRoutes)
 app.use("/api/crm", crmRoutes)
+app.use("/api/sales", salesRoutes)
 app.use("/api/etims", etimsRoutes)
 app.use("/api/complaints", complaintRoutes)
 app.use("/api/vehicles", vehicleRoutes)

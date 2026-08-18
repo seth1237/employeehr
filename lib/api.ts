@@ -851,6 +851,9 @@ export const stockApi = {
           : ""
       }`,
     ),
+  createQuotation: (data: any) => client.post<any>("/api/stock/quotations", data),
+  updateQuotation: (quotationId: string, data: any) =>
+    client.put<any>(`/api/stock/quotations/${quotationId}`, data),
   getQuotationById: (quotationId: string) =>
     client.get<any>(`/api/stock/quotations/${quotationId}`),
 
@@ -953,6 +956,10 @@ export const stockApi = {
 
   convertQuotation: (quotationId: string) =>
     client.post<any>(`/api/stock/quotations/${quotationId}/convert`, {}),
+  approveInvoice: (invoiceId: string) =>
+    client.post<any>(`/api/stock/invoices/${invoiceId}/approve`, {}),
+  rejectInvoice: (invoiceId: string) =>
+    client.post<any>(`/api/stock/invoices/${invoiceId}/reject`, {}),
   addQuotationFollowUp: (
     quotationId: string,
     data: { note: string; callMade?: boolean; outcome?: string },
@@ -1417,6 +1424,54 @@ export const crmApi = {
   },
 };
 
+export const salesApi = {
+  getDashboard: (date?: string) =>
+    client.get<any>(`/api/sales/dashboard${date ? `?date=${encodeURIComponent(date)}` : ""}`),
+  getReport: (date?: string) =>
+    client.get<any>(`/api/sales/report${date ? `?date=${encodeURIComponent(date)}` : ""}`),
+  updateReport: (data: any) => client.patch<any>("/api/sales/report", data),
+  startDay: (data?: any) => client.post<any>("/api/sales/report/start", data || {}),
+  endDay: (data?: any) => client.post<any>("/api/sales/report/end", data || {}),
+  submitReport: (id: string) => client.post<any>(`/api/sales/report/${id}/submit`, {}),
+  createVisit: (data: any) => client.post<any>("/api/sales/visits", data),
+  searchStock: (q: string, inStockOnly = true) =>
+    client.get<any[]>(
+      `/api/sales/stock?q=${encodeURIComponent(q)}&inStockOnly=${inStockOnly ? "1" : "0"}`,
+    ),
+  searchClients: (q: string) =>
+    client.get<any[]>(`/api/sales/clients/search?q=${encodeURIComponent(q)}`),
+  listMyClients: (q?: string) =>
+    client.get<any>(`/api/sales/clients${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+  getClientOptions: () => client.get<any>("/api/sales/clients/options"),
+  createClient: (data: any) => client.post<any>("/api/sales/clients", data),
+  getClientBook: (id: string) => client.get<any>(`/api/sales/clients/${id}`),
+  addClientContact: (id: string, data: any) =>
+    client.post<any>(`/api/sales/clients/${encodeURIComponent(id)}/contacts`, data),
+  logClientActivity: (id: string, data: any) =>
+    client.post<any>(`/api/sales/clients/${encodeURIComponent(id)}/activity`, data),
+  listQuotes: () => client.get<any[]>("/api/sales/quotes"),
+  createQuote: (data: any) => client.post<any>("/api/sales/quotes", data),
+  updateQuote: (id: string, data: any) => client.patch<any>(`/api/sales/quotes/${id}`, data),
+  submitQuote: (id: string) => client.post<any>(`/api/sales/quotes/${id}/submit`, {}),
+  markQuoteDownloaded: (id: string) =>
+    client.post<any>(`/api/sales/quotes/${id}/downloaded`, {}),
+  getHistory: () => client.get<any>("/api/sales/history"),
+  adminList: (status?: string) =>
+    client.get<any>(`/api/sales/admin${status ? `?status=${encodeURIComponent(status)}` : ""}`),
+  adminUpdateReport: (id: string, data: any) =>
+    client.patch<any>(`/api/sales/admin/reports/${id}`, data),
+  adminUpdateQuote: (id: string, data: any) =>
+    client.patch<any>(`/api/sales/admin/quotes/${id}`, data),
+  adminReviewReport: (id: string, data: { action: "approve" | "revision"; note?: string }) =>
+    client.post<any>(`/api/sales/admin/reports/${id}/review`, data),
+  adminReviewQuote: (id: string, data: { action: "approve" | "reject"; note?: string }) =>
+    client.post<any>(`/api/sales/admin/quotes/${id}/review`, data),
+  getPlanners: () => client.get<any>("/api/sales/planner"),
+  createPlanner: (data: any) => client.post<any>("/api/sales/planner", data),
+  adminGetPlanners: (status?: string) => client.get<any>(`/api/sales/admin/planner${status ? `?status=${status}` : ""}`),
+  adminReviewPlanner: (id: string, data: { action: "approve" | "reject"; note?: string }) => client.patch<any>(`/api/sales/admin/planner/${id}/review`, data),
+};
+
 // Export all APIs
 export const api = {
   auth: authApi,
@@ -1443,6 +1498,7 @@ export const api = {
   branches: branchesApi,
   aiAssistant: aiAssistantApi,
   crm: crmApi,
+  sales: salesApi,
   etims: etimsApi,
   dashboard: {
     getStats: () => client.get<any>("/api/dashboard/stats"),

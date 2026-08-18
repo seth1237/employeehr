@@ -1,0 +1,1 @@
+../../../lib/stock-document-pdf.ts

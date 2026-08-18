@@ -4,7 +4,10 @@ import { Company } from "../models/Company";
 import { User } from "../models/User";
 import { Department } from "../models/Department";
 import { Branch } from "../models/Branch";
-import AuditLog from "../models/AuditLog";
+import {
+  buildCompanyBranding,
+  buildInvoiceDocumentSettings,
+} from "../services/companyDocumentSettings.service";
 
 const ADMIN_SECTION_OPTIONS = [
   "CORE",
@@ -235,7 +238,7 @@ export class CompanyController {
       }
 
       const company = await Company.findById(req.org_id).select(
-        "email phone city state country logo invoiceSettings",
+        "name logo primaryColor secondaryColor email phone website city state country invoiceSettings",
       );
       if (!company) {
         return res
@@ -243,58 +246,15 @@ export class CompanyController {
           .json({ success: false, message: "Company not found" });
       }
 
+      const baseUrl = buildBaseUrl(req);
+
       return res.json({
         success: true,
         data: {
-          invoiceEmail: String(
-            company.invoiceSettings?.invoiceEmail || company.email || "",
-          ).trim(),
-          contactPhone: String(
-            company.invoiceSettings?.contactPhone || company.phone || "",
-          ).trim(),
-          officeLocation: String(
-            company.invoiceSettings?.officeLocation ||
-              [company.city, company.state, company.country]
-                .filter(Boolean)
-                .join(", ") ||
-              "",
-          ).trim(),
-          secondLocation: String(
-            company.invoiceSettings?.secondLocation || "",
-          ).trim(),
-          useBothLocations: company.invoiceSettings?.useBothLocations ?? false,
-          contactEmail: String(
-            company.invoiceSettings?.contactEmail ||
-              company.invoiceSettings?.invoiceEmail ||
-              company.email ||
-              "",
-          ).trim(),
-          website: String(
-            company.invoiceSettings?.website || company.website || "",
-          ).trim(),
-          vatNumber: String(company.invoiceSettings?.vatNumber || "").trim(),
-          pinNumber: String(company.invoiceSettings?.pinNumber || "").trim(),
-          termsAndConditions: String(
-            company.invoiceSettings?.termsAndConditions ||
-              DEFAULT_INVOICE_TERMS,
-          ).trim(),
-          includeQuotationReference:
-            company.invoiceSettings?.includeQuotationReference ?? true,
-          includeDeliveryNoteNumber:
-            company.invoiceSettings?.includeDeliveryNoteNumber ?? true,
-          includePreparedBy: company.invoiceSettings?.includePreparedBy ?? true,
-          includeVat: company.invoiceSettings?.includeVat ?? false,
-          includePaymentChannels:
-            company.invoiceSettings?.includePaymentChannels ?? true,
-          paymentChannels: Array.isArray(
-            company.invoiceSettings?.paymentChannels,
-          )
-            ? company.invoiceSettings.paymentChannels.map(
-                normalizePaymentChannel,
-              )
-            : [],
+          ...buildInvoiceDocumentSettings(company),
           logoUrl: company.logo || "",
           defaultTermsAndConditions: DEFAULT_INVOICE_TERMS,
+          branding: buildCompanyBranding(company, baseUrl),
         },
       });
     } catch (error) {

@@ -112,9 +112,10 @@ export const createEmployeeSchema = z.object({
   lastName: z.string().min(1).optional(),
   first_name: z.string().min(1).optional(),
   last_name: z.string().min(1).optional(),
-  role: z.enum(["manager", "employee", "hr", "admin"]).optional(),
+  role: z.enum(["manager", "employee", "hr", "admin", "sales_rep"]).optional(),
   department: z.string().optional(),
   manager_id: z.string().optional(),
+  employee_id: z.string().optional(),
   password: z.string().min(8).optional(),
 }).refine((data) => (data.firstName || data.first_name) && (data.lastName || data.last_name), {
   message: "firstName and lastName are required",

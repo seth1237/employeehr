@@ -270,7 +270,14 @@ export default function AdminUsersPage() {
       const firstName = names.shift() || ''
       const lastName = names.join(' ') || ''
       const selectedDept = departments.find((d) => d._id === newUser.department)
-      const role = newUser.role === 'admin' ? 'admin' : newUser.isManager ? 'manager' : 'employee'
+      const role =
+        newUser.role === 'admin'
+          ? 'admin'
+          : newUser.role === 'sales_rep'
+            ? 'sales_rep'
+            : newUser.isManager || newUser.role === 'manager'
+              ? 'manager'
+              : 'employee'
       const payload = {
         firstName,
         lastName,
@@ -479,6 +486,7 @@ export default function AdminUsersPage() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="secondary" className="bg-white/80 text-slate-700">{users.length} employees</Badge>
+            <Badge variant="secondary" className="bg-white/80 text-slate-700">{users.filter(u => u.role === 'sales_rep').length} sales reps</Badge>
             <Badge variant="secondary" className="bg-white/80 text-slate-700">{departments.length} departments</Badge>
             <Badge variant="secondary" className="bg-white/80 text-slate-700">{users.filter(u => u.role === 'admin').length} admins</Badge>
           </div>
@@ -564,6 +572,7 @@ export default function AdminUsersPage() {
                 <SelectContent>
                   <SelectItem value="all">All Roles</SelectItem>
                   <SelectItem value="employee">Employee</SelectItem>
+                  <SelectItem value="sales_rep">Sales Representative</SelectItem>
                   <SelectItem value="manager">Manager</SelectItem>
                   <SelectItem value="admin">Admin</SelectItem>
                 </SelectContent>
@@ -662,6 +671,13 @@ export default function AdminUsersPage() {
                           </Button>
                           <Button
                             type="button"
+                            variant={newUser.role === 'sales_rep' ? 'default' : 'outline'}
+                            onClick={() => setNewUser({ ...newUser, role: 'sales_rep', isManager: false })}
+                          >
+                            Sales Representative
+                          </Button>
+                          <Button
+                            type="button"
                             variant={newUser.role === 'manager' ? 'default' : 'outline'}
                             onClick={() => setNewUser({ ...newUser, role: 'manager', isManager: true })}
                           >
@@ -675,13 +691,27 @@ export default function AdminUsersPage() {
                             Admin
                           </Button>
                         </div>
-                        <p className="text-xs text-muted-foreground">Admin has full access to all areas and cannot be a manager.</p>
+                        <p className="text-xs text-muted-foreground">
+                          Sales representatives log into the sales reporting tool, not the admin portal.
+                        </p>
                       </div>
                       <div className="flex items-center gap-2 mt-2">
                         <Checkbox
                           checked={newUser.isManager}
-                          disabled={newUser.role === 'admin'}
-                          onCheckedChange={(v: any) => setNewUser({ ...newUser, isManager: !!v, role: v ? 'manager' : newUser.role === 'admin' ? 'admin' : 'employee' })}
+                          disabled={newUser.role === 'admin' || newUser.role === 'sales_rep'}
+                          onCheckedChange={(v: any) =>
+                            setNewUser({
+                              ...newUser,
+                              isManager: !!v,
+                              role: v
+                                ? 'manager'
+                                : newUser.role === 'admin'
+                                  ? 'admin'
+                                  : newUser.role === 'sales_rep'
+                                    ? 'sales_rep'
+                                    : 'employee',
+                            })
+                          }
                         />
                         <Label>Assign as department manager</Label>
                       </div>
@@ -719,9 +749,10 @@ export default function AdminUsersPage() {
                           </h3>
                           <Badge variant={
                             user.role === 'admin' ? 'destructive' :
-                            user.role === 'manager' ? 'default' : 'secondary'
+                            user.role === 'manager' ? 'default' :
+                            user.role === 'sales_rep' ? 'outline' : 'secondary'
                           }>
-                            {user.role}
+                            {user.role === 'sales_rep' ? 'Sales Representative' : user.role}
                           </Badge>
                           {user.status === 'inactive' && (
                             <Badge variant="outline">Inactive</Badge>
@@ -786,6 +817,10 @@ export default function AdminUsersPage() {
                           <DropdownMenuItem onClick={() => handleUpdateRole(user._id, 'manager')}>
                             <TrendingUp className="h-4 w-4 mr-2" />
                             Promote to Manager
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleUpdateRole(user._id, 'sales_rep')}>
+                            <FileText className="h-4 w-4 mr-2" />
+                            Assign as Sales Representative
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleUpdateRole(user._id, 'employee')}>
                             <UserCheck className="h-4 w-4 mr-2" />

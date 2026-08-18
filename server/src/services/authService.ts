@@ -531,6 +531,7 @@ export class AuthService {
         role: data.role || "employee",
         department: data.department,
         manager_id: data.manager_id,
+        employee_id: (data as any).employee_id || undefined,
         status: "active",
       })
 

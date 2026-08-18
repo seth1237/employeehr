@@ -148,8 +148,8 @@ function drawModernHeader(doc: jsPDF, args: HeaderArgs) {
       const lower = args.branding!.logo!.toLowerCase();
       const format =
         lower.includes("jpg") || lower.includes("jpeg") ? "JPEG" : "PNG";
-      const maxLogoWidth = 44;
-      const maxLogoHeight = 20;
+      const maxLogoWidth = 56;
+      const maxLogoHeight = 26;
       let imageWidth = 0;
       let imageHeight = 0;
 
@@ -256,7 +256,7 @@ function drawContactSlotBelowLogo(
   if (!rows.length) return 68;
 
   const boxX = 12;
-  const boxY = 38;
+  const boxY = 42;
   const rowHeight = 3.8;
 
   doc.setFont("helvetica", "normal");
@@ -603,8 +603,12 @@ function drawItemsTable(
         y + 7,
         { align: "right" },
       );
+      const taxLabel =
+        item.taxable === false || (!taxAmount && !taxRate)
+          ? "—"
+          : `${Number(taxRate > 0 ? taxRate : 16)}%`;
       doc.text(
-        formatAmount(taxAmount),
+        taxLabel,
         columnStartX[4] + columns[4].width - 3,
         y + 7,
         { align: "right" },
@@ -940,8 +944,8 @@ function drawLogoBlock(
   branding?: TenantBranding,
   x = 12,
   y = 12,
-  maxWidth = 44,
-  maxHeight = 20,
+  maxWidth = 56,
+  maxHeight = 26,
 ) {
   if (!branding?.logo) return;
   try {

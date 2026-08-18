@@ -52,6 +52,11 @@ export default function ManagerLayout({
       return
     }
 
+    if (user.role === "sales_rep") {
+      router.push("/sales")
+      return
+    }
+
     setLoading(false)
   }, [router])
 

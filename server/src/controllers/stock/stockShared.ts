@@ -7,6 +7,10 @@ export function isAdminRole(role?: string) {
   return !!role && ADMIN_ROLES.includes(role)
 }
 
+export function isOwnDocumentsRole(role?: string) {
+  return role === "employee" || role === "sales_rep"
+}
+
 export function generateDocumentNumber(prefix: string) {
   const ts = Date.now().toString().slice(-8)
   const rand = Math.floor(Math.random() * 9000 + 1000)

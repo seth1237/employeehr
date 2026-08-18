@@ -250,6 +250,7 @@ export default function QuotationsPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
+  const [productsError, setProductsError] = useState("");
   const [categories, setCategories] = useState<StockCategoryOption[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -353,14 +354,100 @@ export default function QuotationsPage() {
     };
   };
 
+  const fetchJsonSafe = async (url: string): Promise<{ data?: any }> => {
+    try {
+      const response = await fetch(url, { headers: getAuthHeaders() });
+      if (!response.ok) return {};
+      return await response.json();
+    } catch {
+      return {};
+    }
+  };
+
+  const loadProducts = async (generation: number) => {
+    setProductsError("");
+    try {
+      const response = await fetch(`${API_URL}/api/stock/products?lite=1`, {
+        headers: getAuthHeaders(),
+      });
+      const json = await response.json().catch(() => null);
+      if (generation !== quotationLoadGeneration.current) return;
+
+      if (!response.ok || !json?.success) {
+        throw new Error(
+          json?.message || `Failed to load products (${response.status})`,
+        );
+      }
+      setProducts((json.data || []) as Product[]);
+    } catch (error: any) {
+      if (generation !== quotationLoadGeneration.current) return;
+      setProducts([]);
+      setProductsError(error?.message || "Failed to load products");
+      toast({
+        title: "Products unavailable",
+        description:
+          error?.message ||
+          "Could not load inventory for this quotation. Use Refresh to retry.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const loadData = async (opts?: { silent?: boolean }) => {
     const silent = startDataLoad(opts, setLoading, setRefreshing);
     const generation = ++quotationLoadGeneration.current;
+
+    // The quotation builder needs inventory even when the quotation list fails.
+    void loadProducts(generation);
+
+    void (async () => {
+      const [
+        categoriesJson,
+        activityClientsRes,
+        savedClientsRes,
+        brandingJson,
+        invoiceSettingsJson,
+        usersJson,
+        branchesJson,
+      ] = await Promise.all([
+        fetchJsonSafe(`${API_URL}/api/stock/categories`),
+        stockApi.getClients().catch(() => ({ data: [] })),
+        stockApi.getSavedClients().catch(() => ({ data: [] })),
+        fetchJsonSafe(`${API_URL}/api/company/branding`),
+        fetchJsonSafe(`${API_URL}/api/company/invoice-settings`),
+        fetchJsonSafe(`${API_URL}/api/users`),
+        fetchJsonSafe(`${API_URL}/api/branches`),
+      ]);
+      if (generation !== quotationLoadGeneration.current) return;
+
+      setCategories(categoriesJson.data || []);
+      const activityClients = (activityClientsRes.data || []) as Client[];
+      const savedClients = (savedClientsRes.data || []) as Client[];
+      const mergedClientsMap = new Map<string, Client>();
+      for (const client of [...activityClients, ...savedClients]) {
+        const key = `${String(client.name || "")
+          .trim()
+          .toLowerCase()}|${String(client.number || "")
+          .trim()
+          .toLowerCase()}|${String(client.location || "")
+          .trim()
+          .toLowerCase()}`;
+        if (!key || mergedClientsMap.has(key)) continue;
+        mergedClientsMap.set(key, { ...client, key });
+      }
+      setClients(Array.from(mergedClientsMap.values()));
+      setUsers(usersJson.data || []);
+      setBranches(branchesJson.data || []);
+      setBranding(brandingJson.data || {});
+      setInvoiceSettings(invoiceSettingsJson.data || {});
+    })().catch(() => {
+      // Supporting form data can be retried with Refresh.
+    });
+
     try {
       const firstPage = await stockApi.getQuotations(1, 20);
       if (generation !== quotationLoadGeneration.current) return;
-      const initialQuotations = (firstPage?.data || []) as Quotation[];
-      setQuotations(initialQuotations);
+      setQuotations((firstPage?.data || []) as Quotation[]);
 
       if (firstPage?.meta?.hasMore) {
         void stockApi
@@ -373,76 +460,6 @@ export default function QuotationsPage() {
             // The first page remains usable if background loading is interrupted.
           });
       }
-
-      void (async () => {
-        const [
-          productsRes,
-          categoriesRes,
-          activityClientsRes,
-          savedClientsRes,
-          brandingRes,
-          invoiceSettingsRes,
-          usersRes,
-          branchesRes,
-        ] = await Promise.all([
-          fetch(`${API_URL}/api/stock/products?lite=1`, {
-            headers: getAuthHeaders(),
-          }),
-          fetch(`${API_URL}/api/stock/categories`, {
-            headers: getAuthHeaders(),
-          }),
-          stockApi.getClients(),
-          stockApi.getSavedClients(),
-          fetch(`${API_URL}/api/company/branding`, {
-            headers: getAuthHeaders(),
-          }),
-          fetch(`${API_URL}/api/company/invoice-settings`, {
-            headers: getAuthHeaders(),
-          }),
-          fetch(`${API_URL}/api/users`, { headers: getAuthHeaders() }),
-          fetch(`${API_URL}/api/branches`, { headers: getAuthHeaders() }),
-        ]);
-        const [
-          productsJson,
-          categoriesJson,
-          brandingJson,
-          invoiceSettingsJson,
-          usersJson,
-          branchesJson,
-        ] = await Promise.all([
-          productsRes.json(),
-          categoriesRes.json(),
-          brandingRes.json(),
-          invoiceSettingsRes.json(),
-          usersRes.json(),
-          branchesRes.json(),
-        ]);
-        if (generation !== quotationLoadGeneration.current) return;
-
-        setProducts(productsJson.data || []);
-        setCategories(categoriesJson.data || []);
-        const activityClients = (activityClientsRes.data || []) as Client[];
-        const savedClients = (savedClientsRes.data || []) as Client[];
-        const mergedClientsMap = new Map<string, Client>();
-        for (const client of [...activityClients, ...savedClients]) {
-          const key = `${String(client.name || "")
-            .trim()
-            .toLowerCase()}|${String(client.number || "")
-            .trim()
-            .toLowerCase()}|${String(client.location || "")
-            .trim()
-            .toLowerCase()}`;
-          if (!key || mergedClientsMap.has(key)) continue;
-          mergedClientsMap.set(key, { ...client, key });
-        }
-        setClients(Array.from(mergedClientsMap.values()));
-        setUsers(usersJson.data || []);
-        setBranches(branchesJson.data || []);
-        setBranding(brandingJson.data || {});
-        setInvoiceSettings(invoiceSettingsJson.data || {});
-      })().catch(() => {
-        // Supporting form data can be retried with Refresh.
-      });
     } catch {
       toast({
         title: "Error",
@@ -1298,9 +1315,13 @@ export default function QuotationsPage() {
       return;
     }
 
+    const invoice = result.data
+    const pending = invoice?.status === "pending_approval"
     toast({
-      title: "Invoice created",
-      description: `Invoice ${result.data.invoiceNumber} created with delivery note ${result.data.deliveryNoteNumber}. Open it to preview, print, or email.`,
+      title: pending ? "Invoice approved" : "Invoice created",
+      description: pending
+        ? `Invoice ${invoice.invoiceNumber} is now issued.`
+        : `Invoice ${invoice?.invoiceNumber} created with delivery note ${invoice?.deliveryNoteNumber}. Open it to preview, print, or email.`,
     });
     if (result.data?._id) {
       window.location.href = `/admin/stock/invoices/${result.data._id}`;
@@ -1468,7 +1489,7 @@ export default function QuotationsPage() {
   if (loading) return <PageLoadingSkeleton title="Loading quotations" rows={8} />;
 
   const currentUser = getUser();
-  const canApprove = ["company_admin", "hr"].includes(
+  const canApprove = ["company_admin", "hr", "admin", "super_admin"].includes(
     String(currentUser?.role || ""),
   );
 
@@ -2031,9 +2052,24 @@ export default function QuotationsPage() {
                         }}
                       />
                     </div>
-                    <p className="mt-1 text-[11px] text-muted-foreground">
-                      Tip: type <span className="font-semibold text-foreground">99</span> to quickly create a new product.
-                    </p>
+                    {productsError ? (
+                      <p className="mt-1 text-[11px] text-destructive">
+                        {productsError} —{" "}
+                        <button
+                          type="button"
+                          className="underline"
+                          onClick={() =>
+                            void loadProducts(quotationLoadGeneration.current)
+                          }
+                        >
+                          retry
+                        </button>
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        Tip: type <span className="font-semibold text-foreground">99</span> to quickly create a new product.
+                      </p>
+                    )}
                   </div>
                   <div>
                     <Label className="text-xs text-muted-foreground">
@@ -2412,10 +2448,9 @@ export default function QuotationsPage() {
                                   </label>
                                 </td>
                                 <td className="py-2.5 px-3 text-right tabular-nums">
-                                  {line.taxAmount.toLocaleString("en-KE", {
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2,
-                                  })}
+                                  {item.taxable
+                                    ? `${line.taxRate || DEFAULT_VAT_RATE}%`
+                                    : "—"}
                                 </td>
                                 <td className="py-2.5 px-3 text-right font-semibold tabular-nums">
                                   {line.total.toLocaleString("en-KE", {
@@ -2825,7 +2860,13 @@ export default function QuotationsPage() {
                             Edit
                           </Button>
                         )}
-                        {quotation.status === "draft" ? (
+                        {quotation.status === "draft" && quotation.convertedInvoiceId ? (
+                          <Button size="sm" variant="outline" asChild>
+                            <Link href={`/admin/stock/invoices/${quotation.convertedInvoiceId}`}>
+                              Review invoice
+                            </Link>
+                          </Button>
+                        ) : quotation.status === "draft" ? (
                           <Button
                             size="sm"
                             onClick={() => convertToInvoice(quotation._id)}
@@ -2894,7 +2935,13 @@ export default function QuotationsPage() {
                       Open
                     </Link>
                   </Button>
-                  {quotation.status === "draft" && (
+                  {quotation.status === "draft" && quotation.convertedInvoiceId ? (
+                    <Button asChild size="sm" variant="outline" className="flex-1">
+                      <Link href={`/admin/stock/invoices/${quotation.convertedInvoiceId}`}>
+                        Review invoice
+                      </Link>
+                    </Button>
+                  ) : quotation.status === "draft" ? (
                     <Button
                       size="sm"
                       variant="outline"
@@ -2904,7 +2951,7 @@ export default function QuotationsPage() {
                     >
                       Convert
                     </Button>
-                  )}
+                  ) : null}
                   {quotation.status === "converted" &&
                     quotation.convertedInvoiceId && (
                       <Button asChild size="sm" variant="outline" className="flex-1">

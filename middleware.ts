@@ -3,6 +3,16 @@ import type { NextRequest } from "next/server"
 
 const TOKEN_COOKIE = "elevate_auth_token"
 const ADMIN_ROLES = new Set(["company_admin", "admin", "hr", "super_admin"])
+const SALES_ROLES = new Set(["sales_rep"])
+
+function homeForRole(role: string): string {
+  if (role === "super_admin") return "/owner"
+  if (ADMIN_ROLES.has(role)) return "/admin"
+  if (role === "manager") return "/manager"
+  if (SALES_ROLES.has(role)) return "/sales"
+  if (role === "employee") return "/employee"
+  return "/auth/login"
+}
 
 function getRoleFromToken(token: string): string | null {
   try {
@@ -39,6 +49,7 @@ export function middleware(request: NextRequest) {
     pathname.startsWith("/admin") ||
     pathname.startsWith("/employee") ||
     pathname.startsWith("/manager") ||
+    pathname.startsWith("/sales") ||
     pathname.startsWith("/owner")
 
   if (!isProtected) {
@@ -56,15 +67,19 @@ export function middleware(request: NextRequest) {
   }
 
   if (pathname.startsWith("/admin") && !ADMIN_ROLES.has(role)) {
-    return NextResponse.redirect(new URL("/auth/login", request.url))
+    return NextResponse.redirect(new URL(homeForRole(role), request.url))
   }
 
   if (pathname.startsWith("/manager") && role !== "manager") {
-    return NextResponse.redirect(new URL("/auth/login", request.url))
+    return NextResponse.redirect(new URL(homeForRole(role), request.url))
   }
 
   if (pathname.startsWith("/employee") && role !== "employee") {
-    return NextResponse.redirect(new URL("/auth/login", request.url))
+    return NextResponse.redirect(new URL(homeForRole(role), request.url))
+  }
+
+  if (pathname.startsWith("/sales") && !SALES_ROLES.has(role)) {
+    return NextResponse.redirect(new URL(homeForRole(role), request.url))
   }
 
   // /owner: authenticated only — page + API enforce platform owner
@@ -76,6 +91,8 @@ export const config = {
     "/admin/:path*",
     "/employee/:path*",
     "/manager/:path*",
+    "/sales/:path*",
+    "/sales",
     "/dashboard/:path*",
     "/owner",
     "/owner/:path*",

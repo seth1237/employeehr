@@ -13,7 +13,8 @@ export interface IUser {
     | "admin"
     | "manager"
     | "employee"
-    | "hr";
+    | "hr"
+    | "sales_rep";
   department?: string;
   position?: string; // Job title
   manager_id?: string;

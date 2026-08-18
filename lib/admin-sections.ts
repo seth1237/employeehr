@@ -4,6 +4,7 @@ export const ADMIN_SECTION_OPTIONS = [
   "RECRUITMENT",
   "EMPLOYEE MANAGEMENT",
   "INVENTORY MANAGER",
+  "FIELD MANAGEMENT",
   "CLIENTS",
   "FLEET",
   "IMPORTATION",
@@ -71,7 +72,8 @@ export const ADMIN_SECTION_PATHS: Array<{
     section: "IMPORTATION",
     match: (path) => path.startsWith("/admin/stock/importation"),
   },
-  { section: "CLIENTS", match: (path) => path.startsWith("/admin/clients") },
+  { section: "CLIENTS", match: (path) => path.startsWith("/admin/clients") || path.startsWith("/admin/sales-reports") },
+  { section: "FIELD MANAGEMENT", match: (path) => path.startsWith("/admin/field-management") },
   { section: "FLEET", match: (path) => path.startsWith("/admin/fleet") },
   { section: "ACCOUNTS", match: (path) => path.startsWith("/admin/accounts") },
   {

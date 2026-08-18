@@ -52,7 +52,7 @@ export function StockDocumentActions({
   const canConvert =
     kind === "quotation" &&
     document.status === "draft" &&
-    ["company_admin", "hr"].includes(String(user?.role || ""))
+    ["company_admin", "hr", "admin", "super_admin"].includes(String(user?.role || ""))
 
   const [branding, setBranding] = useState<TenantBranding>({})
   const [invoiceSettings, setInvoiceSettings] =

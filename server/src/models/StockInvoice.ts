@@ -43,7 +43,7 @@ export interface IStockInvoice {
     postedBy?: string
     responseMessage?: string
   }
-  status: "issued" | "paid" | "cancelled"
+  status: "pending_approval" | "issued" | "paid" | "cancelled"
   dispatch?: {
     status: "not_assigned" | "assigned" | "packing" | "packed" | "dispatched" | "delivered"
     assignedToUserId?: string
@@ -139,7 +139,7 @@ const stockInvoiceSchema = new Schema<IStockInvoice>(
     },
     status: {
       type: String,
-      enum: ["issued", "paid", "cancelled"],
+      enum: ["pending_approval", "issued", "paid", "cancelled"],
       default: "issued",
     },
     dispatch: {
@@ -200,27 +200,30 @@ const stockInvoiceSchema = new Schema<IStockInvoice>(
 stockInvoiceSchema.index({ org_id: 1, invoiceNumber: 1 }, { unique: true })
 stockInvoiceSchema.index({ org_id: 1, deliveryNoteNumber: 1 }, { unique: true })
 
-stockInvoiceSchema.pre("validate", function (next) {
-  const dispatch = (this as any).dispatch
-  if (dispatch) {
-    if (dispatch.courier === undefined) delete dispatch.courier
-    if (dispatch.delivery === undefined) delete dispatch.delivery
-    if (dispatch.transportMeans === undefined) delete dispatch.transportMeans
-    if (dispatch.dispatchedAt === undefined) delete dispatch.dispatchedAt
-    if (dispatch.dispatchedByUserId === undefined) delete dispatch.dispatchedByUserId
+function stripUndefinedDispatchFields(dispatch: Record<string, unknown> | null | undefined) {
+  if (!dispatch || typeof dispatch !== "object") return
+  for (const key of [
+    "courier",
+    "delivery",
+    "transportMeans",
+    "dispatchedAt",
+    "dispatchedByUserId",
+    "packingCompletedAt",
+    "assignedAt",
+    "assignedToUserId",
+    "assignedByUserId",
+  ]) {
+    if (dispatch[key] === undefined) delete dispatch[key]
   }
+}
+
+stockInvoiceSchema.pre("validate", function (next) {
+  stripUndefinedDispatchFields((this as any).dispatch)
   next()
 })
 
 stockInvoiceSchema.pre("save", function (next) {
-  const dispatch = (this as any).dispatch
-  if (dispatch) {
-    if (dispatch.courier === undefined) delete dispatch.courier
-    if (dispatch.delivery === undefined) delete dispatch.delivery
-    if (dispatch.transportMeans === undefined) delete dispatch.transportMeans
-    if (dispatch.dispatchedAt === undefined) delete dispatch.dispatchedAt
-    if (dispatch.dispatchedByUserId === undefined) delete dispatch.dispatchedByUserId
-  }
+  stripUndefinedDispatchFields((this as any).dispatch)
   next()
 })
 

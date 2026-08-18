@@ -201,12 +201,12 @@ export default function EmployeeQuotationsPage() {
           brandingRes,
           invoiceSettingsRes,
         ] = await Promise.all([
-          stockApi.getProducts(),
+          stockApi.getProducts().catch(() => ({ data: [] })),
           fetch(`${API_URL}/api/stock/services`, { headers: getAuthHeaders() })
             .then((r) => r.json())
             .catch(() => ({ data: [] })),
-          stockApi.getClients(),
-          stockApi.getSavedClients(),
+          stockApi.getClients().catch(() => ({ data: [] })),
+          stockApi.getSavedClients().catch(() => ({ data: [] })),
           fetch(`${API_URL}/api/company/branding`, { headers: getAuthHeaders() })
             .then((r) => r.json())
             .catch(() => ({ data: {} })),

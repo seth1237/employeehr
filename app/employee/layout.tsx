@@ -48,6 +48,11 @@ export default function EmployeeLayout({
       return
     }
 
+    if (user.role === "sales_rep") {
+      router.push("/sales")
+      return
+    }
+
     setLoading(false)
   }, [router])
 

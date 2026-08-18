@@ -18,8 +18,19 @@ router.post("/page-access", roleMiddleware("company_admin", "admin"), CompanyCon
 router.get("/branding", CompanyController.getBranding)
 router.post("/branding", roleMiddleware("company_admin", "hr"), uploadLogo.single("logo"), CompanyController.updateBranding)
 
-// Invoice Generation Settings
-router.get("/invoice-settings", roleMiddleware("company_admin", "hr"), CompanyController.getInvoiceSettings)
+// Invoice Generation Settings (read for PDFs by anyone in the org; write restricted to admins)
+router.get(
+  "/invoice-settings",
+  roleMiddleware(
+    "company_admin",
+    "admin",
+    "hr",
+    "manager",
+    "employee",
+    "sales_rep",
+  ),
+  CompanyController.getInvoiceSettings,
+)
 router.post("/invoice-settings", roleMiddleware("company_admin", "hr"), CompanyController.updateInvoiceSettings)
 
 // Dispatch SMS Settings

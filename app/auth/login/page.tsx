@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input"
 import { useState } from "react"
 import { ArrowLeft, Mail, Lock, ShieldCheck } from "lucide-react"
 import { api } from "@/lib/api"
-import { removeToken, removeUser, setToken, setUser, getToken } from "@/lib/auth"
+import { removeToken, removeUser, setToken, setUser, getToken, postLoginPath } from "@/lib/auth"
 import InvitationForm from "@/components/auth/invitation-form"
 
 function LoginContent() {
@@ -68,15 +68,7 @@ function LoginContent() {
     })
 
     const role = authData.user.role
-    if (role === "super_admin") {
-      router.push("/owner")
-    } else if (role === "company_admin" || role === "admin" || role === "hr") {
-      router.push("/admin")
-    } else if (role === "manager") {
-      router.push("/manager")
-    } else {
-      router.push("/employee")
-    }
+    router.push(postLoginPath(role))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {

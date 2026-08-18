@@ -117,6 +117,8 @@ router.get("/global-search", StockController.globalSearch);
 
 router.get("/invoices", StockController.getInvoices);
 router.post("/invoices/create", StockController.createInvoiceFromItems);
+router.post("/invoices/:invoiceId/approve", StockController.approveInvoice);
+router.post("/invoices/:invoiceId/reject", StockController.rejectInvoice);
 router.get(
   "/invoices/:invoiceId/lifecycle",
   StockController.getInvoiceLifecycle,

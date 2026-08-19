@@ -7,6 +7,7 @@ import { getUser } from "@/lib/auth"
 type SalesCompanionProps = {
   color?: string
   started: boolean
+  ended?: boolean
   acting?: "start" | "end" | null
   plannedCount: number
   completedCount: number
@@ -39,6 +40,7 @@ function hello() {
 export function SalesCompanion({
   color,
   started,
+  ended,
   acting,
   plannedCount,
   completedCount,
@@ -55,6 +57,7 @@ export function SalesCompanion({
   const remaining = Math.max(plannedCount - completedCount, 0)
   const emptyPlan = plannedCount === 0
   const awaitingApproval = !emptyPlan && plannerStatus === "pending"
+  const planRejected = !emptyPlan && plannerStatus === "rejected"
   const planApproved = plannerStatus === "approved"
 
   let title = `${hello()}, ${name}`
@@ -66,6 +69,8 @@ export function SalesCompanion({
     body = "You've started the day, but the planner is still empty. Let's get your first visit in."
   } else if (awaitingApproval) {
     body = "Your plan is with admin. You'll be able to complete visits once it's approved."
+  } else if (planRejected) {
+    body = "This plan was sent back. Edit it and send it again. Visit reports open only after approval."
   } else if (!started) {
     body = firstVisitName
       ? `You have ${plannedCount} visit${plannedCount === 1 ? "" : "s"} planned today. First up is ${firstVisitName}. Ready to start the day?`
@@ -110,37 +115,47 @@ export function SalesCompanion({
       {extras.length > 0 ? (
         <p className="mt-1 max-w-2xl text-sm text-slate-500">{extras.join(" ")}</p>
       ) : null}
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
         {emptyPlan ? (
-          <Button asChild className="min-h-10">
+          <Button asChild className="min-h-12 w-full sm:min-h-10 sm:w-auto">
             <Link href="/sales/planner">Plan my day</Link>
           </Button>
+        ) : planRejected ? (
+          <Button asChild className="min-h-12 w-full sm:min-h-10 sm:w-auto">
+            <Link href="/sales/planner">Edit plan</Link>
+          </Button>
         ) : remaining > 0 && planApproved ? (
-          <Button asChild className="min-h-10">
+          <Button asChild className="min-h-12 w-full sm:min-h-10 sm:w-auto">
             <Link href="/sales/report">Record visit</Link>
           </Button>
         ) : null}
         {followUps > 0 ? (
-          <Button asChild variant="outline" className="min-h-10">
+          <Button asChild variant="outline" className="min-h-12 w-full sm:min-h-10 sm:w-auto">
             <Link href="/sales/clients">Show my follow-ups</Link>
           </Button>
         ) : null}
         {!started ? (
           <Button
+            type="button"
             variant={emptyPlan ? "outline" : "default"}
-            className="min-h-10"
+            className="min-h-12 w-full sm:min-h-10 sm:w-auto"
             onClick={onStartDay}
             disabled={acting === "start"}
           >
             {acting === "start" ? "Starting…" : "Start the day"}
           </Button>
         ) : (
-          <Button variant="outline" className="min-h-10" onClick={onEndDay} disabled={acting === "end"}>
-            {acting === "end" ? "Closing…" : "End day"}
+          <Button
+            type="button"
+            className="min-h-12 w-full sm:min-h-10 sm:w-auto"
+            onClick={onEndDay}
+            disabled={acting === "end"}
+          >
+            {acting === "end" ? "Closing…" : ended ? "Update end of day" : "End day"}
           </Button>
         )}
         {quotesNeedingRevision > 0 || quotesAwaitingDownload > 0 ? (
-          <Button asChild variant="outline" className="min-h-10">
+          <Button asChild variant="outline" className="min-h-12 w-full sm:min-h-10 sm:w-auto">
             <Link href="/sales/quotes">Open quotes</Link>
           </Button>
         ) : null}

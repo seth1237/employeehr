@@ -470,6 +470,7 @@ export const companyApi = {
     buttonPadding?: string;
     navigationAnimation?: string;
     themePreset?: string;
+    salesNightOutAmount?: number;
   }) => {
     // If logoFile is provided, use FormData instead of JSON
     if (data.logoFile) {
@@ -523,6 +524,8 @@ export const companyApi = {
       if (data.navigationAnimation)
         formData.append("navigationAnimation", data.navigationAnimation);
       if (data.themePreset) formData.append("themePreset", data.themePreset);
+      if (data.salesNightOutAmount !== undefined)
+        formData.append("salesNightOutAmount", String(data.salesNightOutAmount));
 
       const headers: Record<string, string> = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -584,6 +587,7 @@ export const companyApi = {
       buttonPadding: data.buttonPadding,
       navigationAnimation: data.navigationAnimation,
       themePreset: data.themePreset,
+      salesNightOutAmount: data.salesNightOutAmount,
     });
   },
 

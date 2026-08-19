@@ -200,6 +200,7 @@ export default function SalesReportPage() {
   const [selectedMonth, setSelectedMonth] = useState("")
   const [selectedWeek, setSelectedWeek] = useState<number | null>(null)
   const [pendingPlannerCount, setPendingPlannerCount] = useState(0)
+  const [rejectedPlannerCount, setRejectedPlannerCount] = useState(0)
   const [selectedPlanner, setSelectedPlanner] = useState<Planner | null>(null)
   const [selectedClient, setSelectedClient] = useState<PlannerVisit | null>(null)
   const [matchedClient, setMatchedClient] = useState<any | null>(null)
@@ -224,8 +225,9 @@ export default function SalesReportPage() {
         salesApi.getClientOptions().catch(() => ({ data: { roles: DEFAULT_ROLES, counties: KENYA_COUNTIES } })),
         salesApi.getCategories().catch(() => ({ data: [] })),
       ])
-      const list = (plannerRes.data || []).filter((p: Planner) => p.status !== "rejected")
+      const list = plannerRes.data || []
       setPendingPlannerCount(list.filter((p: Planner) => p.status === "pending").length)
+      setRejectedPlannerCount(list.filter((p: Planner) => p.status === "rejected").length)
       setPlanners(list.filter((p: Planner) => p.status === "approved"))
       setRoles(optionsRes.data?.roles?.length ? optionsRes.data.roles : DEFAULT_ROLES)
       setCounties(optionsRes.data?.counties?.length ? optionsRes.data.counties : KENYA_COUNTIES)
@@ -399,7 +401,7 @@ export default function SalesReportPage() {
     if (selectedPlanner.status !== "approved") {
       toast({
         title: "Planner not approved yet",
-        description: "Complete visits after an admin approves this plan.",
+        description: "Visit reports can only be filled after an admin approves this plan.",
         variant: "destructive",
       })
       return
@@ -528,7 +530,7 @@ export default function SalesReportPage() {
     <SalesPage>
       <SalesHeader
         title="Visit reports"
-        description="Open a planner date, pick the client, then record who you met and the outcome."
+        description="Open an approved planner date, pick the client, then record who you met and the outcome. Reports can only be filled after the plan is approved."
         color={primaryColor}
         actions={
           <Button asChild variant="outline" size="sm">
@@ -546,8 +548,10 @@ export default function SalesReportPage() {
             <Calendar className="h-8 w-8 text-muted-foreground/40" />
             <p>
               {pendingPlannerCount > 0
-                ? "Your plans are waiting for admin approval. Complete appears after a plan is approved."
-                : "No approved visit planners yet."}
+                ? "Your plans are waiting for admin approval. Visit reports can be filled after a plan is approved."
+                : rejectedPlannerCount > 0
+                  ? "A plan was sent back. Edit it in the planner and send it again. Visit reports open only after approval."
+                  : "No approved visit planners yet. Plan a visit and wait for admin approval before filing a report."}
             </p>
             <Button asChild variant="outline" size="sm" className="mt-2">
               <Link href="/sales/planner" style={{ color: primaryColor }}>

@@ -342,7 +342,16 @@ export function AdminSalesVisitReports({ title = "Visit reports" }: { title?: st
                         {visit.checkInAt && (
                           <span>Filed {new Date(visit.checkInAt).toLocaleString("en-KE")}</span>
                         )}
-                        {visit.gps?.lat && <span>GPS captured</span>}
+                        {visit.gps?.lat && visit.gps?.lng ? (
+                          <a
+                            href={`https://maps.google.com/?q=${visit.gps.lat},${visit.gps.lng}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-teal-800 hover:underline"
+                          >
+                            Location {Number(visit.gps.lat).toFixed(5)}, {Number(visit.gps.lng).toFixed(5)}
+                          </a>
+                        ) : null}
                         {visit.clientPhone && <span>{visit.clientPhone}</span>}
                       </div>
                       

@@ -159,7 +159,19 @@ export default function AdminSalesReportsPage() {
                             {visit.purpose ? ` · ${visit.purpose}` : ""}
                             {visit.outcome ? ` · ${visit.outcome}` : ""}
                             {visit.outcomeDetail ? ` · ${visit.outcomeDetail}` : ""}
-                            {visit.gps?.lat ? " · GPS captured" : ""}
+                            {visit.gps?.lat && visit.gps?.lng ? (
+                              <>
+                                {" · "}
+                                <a
+                                  href={`https://maps.google.com/?q=${visit.gps.lat},${visit.gps.lng}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-teal-800 hover:underline"
+                                >
+                                  Location {Number(visit.gps.lat).toFixed(5)}, {Number(visit.gps.lng).toFixed(5)}
+                                </a>
+                              </>
+                            ) : null}
                             {(visit.interestCategories || []).length > 0 ? (
                               <p className="mt-0.5 text-teal-800">
                                 Interest:{" "}

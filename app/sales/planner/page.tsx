@@ -51,8 +51,6 @@ const emptyVisit = () => ({
   location: "",
   notes: "",
   interestCategories: [] as string[],
-  nightOut: false,
-  expenses: { transport: "" },
 })
 
 function todayKey() {
@@ -87,17 +85,22 @@ export default function SalesPlannerPage() {
   const [formOpen, setFormOpen] = useState(false)
   const [date, setDate] = useState(todayKey())
   const [visits, setVisits] = useState([emptyVisit()])
+  const [transport, setTransport] = useState("")
+  const [nightOut, setNightOut] = useState(false)
+  const [nightOutRate, setNightOutRate] = useState(3000)
   const [calendarMonth, setCalendarMonth] = useState(monthKey(todayKey()))
 
   const loadData = useCallback(async () => {
     setFetching(true)
     try {
-      const [plannerRes, historyRes, catRes] = await Promise.all([
+      const [plannerRes, historyRes, catRes, brandingRes] = await Promise.all([
         api.sales.getPlanners(),
         salesApi.getHistory().catch(() => ({ data: { visits: [] } })),
         salesApi.getCategories().catch(() => ({ data: [] })),
+        api.company.getBranding().catch(() => ({ data: {} })),
       ])
       if (plannerRes.success) setPlanners(plannerRes.data || [])
+      setNightOutRate(Number(brandingRes.data?.salesNightOutAmount ?? 3000) || 3000)
       setLoggedVisits(historyRes.data?.visits || [])
       setCategories(catRes.data || [])
     } catch (error: any) {
@@ -147,7 +150,9 @@ export default function SalesPlannerPage() {
     setVisits((current) => current.map((row, i) => (i === index ? { ...row, ...patch } : row)))
   }
 
-  const expenseTotal = visits.reduce((sum, visit) => sum + Number(visit.expenses.transport || 0), 0)
+  const transportAmount = Math.max(0, Number(transport || 0))
+  const nightOutAmount = nightOut ? nightOutRate : 0
+  const expenseTotal = transportAmount + nightOutAmount
 
   const handleSubmit = async () => {
     if (!date) return toast({ title: "Date is required", variant: "destructive" })
@@ -156,20 +161,25 @@ export default function SalesPlannerPage() {
     }
     setLoading(true)
     try {
+      const existing = planners.find((plan) => plan.date === date)
       await api.sales.createPlanner({
         date,
         projectedExpenses: expenseTotal,
+        budget: {
+          transport: transportAmount,
+          nightOut,
+        },
         visits: visits.map((visit) => ({
           ...visit,
-          nightOut: Boolean(visit.nightOut),
-          expenses: {
-            transport: Number(visit.expenses.transport || 0),
-            nightOut: Boolean(visit.nightOut),
-          },
         })),
       })
-      toast({ title: "Plan submitted", description: "Admin will review it. You can keep adding visits if you need to." })
+      toast({
+        title: existing?.status === "rejected" ? "Plan sent again" : "Plan submitted",
+        description: "Admin will review it. Visit reports open after the plan is approved.",
+      })
       setVisits([emptyVisit()])
+      setTransport("")
+      setNightOut(false)
       setFormOpen(false)
       void loadData()
     } catch (error: any) {
@@ -185,25 +195,41 @@ export default function SalesPlannerPage() {
     setCalendarMonth(`${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}`)
   }
 
+  const existingForDate = planners.find((plan) => plan.date === date)
+
+  const openPlan = (plan: any) => {
+    setDate(plan.date)
+    setVisits(
+      (plan.visits || []).map((item: any) => ({
+        ...emptyVisit(),
+        ...item,
+        interestCategories: item.interestCategories || [],
+      })),
+    )
+    setTransport(String(plan.budget?.transport || plan.projectedExpenses || ""))
+    setNightOut(Boolean(plan.budget?.nightOut))
+    setFormOpen(true)
+  }
+
   const VisitCard = ({ plan, visit }: { plan: any; visit: any }) => {
     const done = isDone(plan.date, visit.clientName)
     const overdue = plan.date < todayKey() && !done
     const approved = plan.status === "approved"
     const status = done
       ? "completed"
-      : overdue
-        ? "overdue"
-        : plan.status === "rejected"
-          ? "cancelled"
+      : plan.status === "rejected"
+        ? "cancelled"
+        : overdue
+          ? "overdue"
           : plan.status === "pending"
             ? "pending"
             : "planned"
     const statusLabel = done
       ? "Done"
-      : overdue
-        ? "Overdue"
-        : plan.status === "rejected"
-          ? "Rejected"
+      : plan.status === "rejected"
+        ? "Rejected"
+        : overdue
+          ? "Overdue"
           : plan.status === "pending"
             ? "Awaiting approval"
             : "Approved"
@@ -225,15 +251,14 @@ export default function SalesPlannerPage() {
           {visit.interestCategories?.length ? (
             <p className="text-xs text-slate-500">Focus: {visit.interestCategories.join(", ")}</p>
           ) : null}
-          {Number(visit.expenses?.transport) > 0 || visit.expenses?.nightOut || visit.nightOut ? (
+          {Number(plan.projectedExpenses || plan.budget?.transport || 0) > 0 || plan.budget?.nightOut ? (
             <p className="text-xs text-slate-500">
-              {Number(visit.expenses?.transport) > 0
-                ? `Transport KES ${Number(visit.expenses.transport).toLocaleString("en-KE")}`
-                : ""}
-              {visit.expenses?.nightOut || visit.nightOut
-                ? `${Number(visit.expenses?.transport) > 0 ? " · " : ""}Night out`
-                : ""}
+              Day budget KES {Number(plan.projectedExpenses || 0).toLocaleString("en-KE")}
+              {plan.budget?.nightOut ? " · Night out" : ""}
             </p>
+          ) : null}
+          {plan.status === "rejected" && plan.adminNotes ? (
+            <p className="text-xs text-red-700">Sent back: {plan.adminNotes}</p>
           ) : null}
           <div className="flex flex-wrap gap-2">
             {done ? (
@@ -246,29 +271,17 @@ export default function SalesPlannerPage() {
               </Button>
             ) : plan.status === "pending" ? (
               <p className="text-xs text-amber-700">Complete appears after admin approval.</p>
+            ) : plan.status === "rejected" ? (
+              <p className="text-xs text-red-700">Edit this plan and send it again. Reports open after approval.</p>
             ) : null}
-            {plan.status === "pending" ? (
+            {plan.status === "pending" || plan.status === "rejected" ? (
               <Button
                 size="sm"
                 variant="outline"
                 className="min-h-10"
-                onClick={() => {
-                  setDate(plan.date)
-                  setVisits(
-                    (plan.visits || []).map((item: any) => ({
-                      ...emptyVisit(),
-                      ...item,
-                      expenses: {
-                        transport: String(item.expenses?.transport || ""),
-                      },
-                      nightOut: Boolean(item.nightOut ?? item.expenses?.nightOut),
-                      interestCategories: item.interestCategories || [],
-                    })),
-                  )
-                  setFormOpen(true)
-                }}
+                onClick={() => openPlan(plan)}
               >
-                {overdue ? "Reschedule" : "Edit"}
+                {plan.status === "rejected" ? "Edit and send again" : overdue ? "Reschedule" : "Edit"}
               </Button>
             ) : null}
           </div>
@@ -282,7 +295,7 @@ export default function SalesPlannerPage() {
       <SalesHeader
         color={branding.primaryColor}
         title="Planner"
-        description="Who are we seeing, why, and what will it cost to get there? Complete a visit after admin approves the plan."
+        description="Who are we seeing, why, and what will it cost to get there? Visit reports open after admin approval. If a plan is sent back, edit it and send it again."
         actions={
           <>
             <div className="flex rounded-md border border-slate-200 p-0.5">
@@ -467,9 +480,16 @@ export default function SalesPlannerPage() {
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Let’s plan the day</DialogTitle>
+            <DialogTitle>
+              {existingForDate?.status === "rejected" ? "Edit and send this plan again" : "Let’s plan the day"}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            {existingForDate?.status === "rejected" && existingForDate.adminNotes ? (
+              <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+                Admin note: {existingForDate.adminNotes}
+              </p>
+            ) : null}
             <div className="space-y-1">
               <Label>Which day?</Label>
               <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-11" />
@@ -559,30 +579,6 @@ export default function SalesPlannerPage() {
                     </div>
                   ) : null}
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <Label>Transportation (KES)</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      className="h-11"
-                      value={visit.expenses.transport}
-                      onChange={(e) => updateVisit(index, { expenses: { transport: e.target.value } })}
-                      placeholder="How much to get there?"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Night out</Label>
-                    <Button
-                      type="button"
-                      variant={visit.nightOut ? "default" : "outline"}
-                      className="h-11 w-full"
-                      onClick={() => updateVisit(index, { nightOut: !visit.nightOut })}
-                    >
-                      {visit.nightOut ? "Yes — staying overnight" : "No overnight stay"}
-                    </Button>
-                  </div>
-                </div>
                 <div className="space-y-1">
                   <Label>Anything else?</Label>
                   <Textarea value={visit.notes} onChange={(e) => updateVisit(index, { notes: e.target.value })} />
@@ -592,10 +588,48 @@ export default function SalesPlannerPage() {
             <Button type="button" variant="outline" onClick={() => setVisits((current) => [...current, emptyVisit()])}>
               <Plus className="mr-1 h-4 w-4" /> Add another client
             </Button>
-            <p className="text-sm text-slate-600">Transportation total: KES {expenseTotal.toLocaleString("en-KE")}</p>
+            <div className="space-y-3 rounded-md border border-slate-200 p-3">
+              <p className="text-sm font-medium">Day budget</p>
+              <p className="text-xs text-slate-500">Enter the total for this date after all clients — not per visit.</p>
+              <div className="space-y-1">
+                <Label>Transport (KES)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  className="h-11"
+                  value={transport}
+                  onChange={(e) => setTransport(e.target.value)}
+                  placeholder="Total transport for this day"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Night out</Label>
+                <Button
+                  type="button"
+                  variant={nightOut ? "default" : "outline"}
+                  className="h-11 w-full"
+                  onClick={() => setNightOut((current) => !current)}
+                >
+                  {nightOut
+                    ? `Yes — KES ${nightOutRate.toLocaleString("en-KE")} will be added`
+                    : "No overnight stay"}
+                </Button>
+                <p className="text-xs text-slate-500">
+                  Night out value is set in company settings (currently KES {nightOutRate.toLocaleString("en-KE")}).
+                </p>
+              </div>
+              <p className="text-sm font-medium text-slate-800">
+                Day total: KES {expenseTotal.toLocaleString("en-KE")}
+                {nightOut ? ` · transport ${transportAmount.toLocaleString("en-KE")} + night out ${nightOutAmount.toLocaleString("en-KE")}` : ""}
+              </p>
+            </div>
             <Button className="min-h-11 w-full" onClick={() => void handleSubmit()} disabled={loading}>
               <Send className="mr-1.5 h-4 w-4" />
-              {loading ? "Submitting…" : "Save this plan"}
+              {loading
+                ? "Submitting…"
+                : existingForDate?.status === "rejected"
+                  ? "Send again for approval"
+                  : "Save this plan"}
             </Button>
           </div>
         </DialogContent>

@@ -85,6 +85,7 @@ export interface ICompany {
   buttonPadding?: string;
   navigationAnimation?: string;
   themePreset?: string;
+  salesNightOutAmount?: number;
   subscription: "starter" | "professional" | "enterprise";
   emailConfig?: {
     enabled: boolean; // Tenant wants to use their own email

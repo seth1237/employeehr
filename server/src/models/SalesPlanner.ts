@@ -22,6 +22,11 @@ const SalesPlannerSchema = new mongoose.Schema(
       },
     ],
     projectedExpenses: { type: Number, default: 0 },
+    budget: {
+      transport: { type: Number, default: 0 },
+      nightOut: { type: Boolean, default: false },
+      nightOutAmount: { type: Number, default: 0 },
+    },
     status: {
       type: String,
       enum: ["pending", "approved", "rejected"],

@@ -17,6 +17,8 @@ import {
   Eye,
   Edit2,
   Trash2,
+  Building2,
+  Banknote,
 } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import {
@@ -31,7 +33,6 @@ import {
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { LocationSelector } from "@/components/ui/location-selector";
-import { Building2 } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -92,6 +93,7 @@ export default function CompanySettingsPage() {
   const [state, setState] = useState("");
   const [city, setCity] = useState("");
   const [countryCode, setCountryCode] = useState("");
+  const [salesNightOutAmount, setSalesNightOutAmount] = useState("3000");
   const [syncingHolidays, setSyncingHolidays] = useState(false);
   
   const [departments, setDepartments] = useState<any[]>([]);
@@ -175,6 +177,7 @@ export default function CompanySettingsPage() {
         setState(res.data.state || "");
         setCity(res.data.city || "");
         setCountryCode(res.data.countryCode || "");
+        setSalesNightOutAmount(String(res.data.salesNightOutAmount ?? 3000));
 
         // Apply colors immediately after loading
         setTimeout(() => {
@@ -369,6 +372,7 @@ export default function CompanySettingsPage() {
         buttonPadding,
         navigationAnimation,
         themePreset,
+        salesNightOutAmount: Number(salesNightOutAmount || 3000),
       });
       if (res?.success && res.data) {
         // Confirm data persisted to database
@@ -406,6 +410,7 @@ export default function CompanySettingsPage() {
           res.data.navigationAnimation || navigationAnimation,
         );
         setThemePreset(res.data.themePreset || themePreset);
+        setSalesNightOutAmount(String(res.data.salesNightOutAmount ?? salesNightOutAmount));
         // Update logo display with the server response
         setLogo(res.data.logo);
         setLogoFile(null); // Clear file input
@@ -948,6 +953,36 @@ export default function CompanySettingsPage() {
             </CollapsibleContent>
           </Card>
         </Collapsible>
+
+        {/* Sales field expenses */}
+        <Card className="md:col-span-2 border-2">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Banknote className="w-4 h-4" />
+              Sales field expenses
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Night out is a yes/no on the daily planner. This is the amount added to that day’s budget when they select it.
+            </p>
+            <div className="max-w-xs space-y-1.5">
+              <Label htmlFor="sales-night-out">Night out value (KES)</Label>
+              <Input
+                id="sales-night-out"
+                type="number"
+                min={0}
+                value={salesNightOutAmount}
+                onChange={(event) => setSalesNightOutAmount(event.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">Default is 3,000. You can change it here.</p>
+            </div>
+            <Button onClick={() => void saveBranding()} disabled={saving}>
+              {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Save night out value
+            </Button>
+          </CardContent>
+        </Card>
 
         {/* Location & Holidays */}
         <Card className="md:col-span-2 border-2">

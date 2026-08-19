@@ -41,21 +41,26 @@ function todayKey() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
 }
 
-async function readGps() {
+async function readGps(timeoutMs = 2500) {
   try {
     if (typeof navigator === "undefined" || !navigator.geolocation) return undefined
-    return await new Promise<{ lat: number; lng: number; accuracy?: number } | undefined>((resolve) => {
-      navigator.geolocation.getCurrentPosition(
-        (pos) =>
-          resolve({
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude,
-            accuracy: pos.coords.accuracy,
-          }),
-        () => resolve(undefined),
-        { enableHighAccuracy: true, timeout: 8000 },
-      )
-    })
+    return await Promise.race([
+      new Promise<{ lat: number; lng: number; accuracy?: number } | undefined>((resolve) => {
+        navigator.geolocation.getCurrentPosition(
+          (pos) =>
+            resolve({
+              lat: pos.coords.latitude,
+              lng: pos.coords.longitude,
+              accuracy: pos.coords.accuracy,
+            }),
+          () => resolve(undefined),
+          { enableHighAccuracy: false, timeout: timeoutMs, maximumAge: 60_000 },
+        )
+      }),
+      new Promise<undefined>((resolve) => {
+        window.setTimeout(() => resolve(undefined), timeoutMs)
+      }),
+    ])
   } catch {
     return undefined
   }
@@ -98,6 +103,7 @@ export default function SalesDashboardPage() {
   )
 
   const startDay = async () => {
+    if (acting) return
     setActing("start")
     try {
       let gps
@@ -117,6 +123,7 @@ export default function SalesDashboardPage() {
   }
 
   const endDay = async () => {
+    if (acting) return
     setActing("end")
     try {
       let gps
@@ -175,6 +182,7 @@ export default function SalesDashboardPage() {
       <SalesCompanion
         color={branding.primaryColor}
         started={Boolean(report?.dayStartAt)}
+        ended={Boolean(report?.dayEndAt)}
         acting={acting}
         plannedCount={plannedCount}
         completedCount={completedCount}
@@ -272,11 +280,18 @@ export default function SalesDashboardPage() {
                         <Button asChild size="sm" className="min-h-10 flex-1">
                           <Link href="/sales/report">Record visit</Link>
                         </Button>
+                      ) : todayPlanner?.status === "rejected" ? (
+                        <div className="space-y-2">
+                          <p className="text-xs text-red-700">
+                            This plan was sent back. Edit it and send again — visit reports open after approval.
+                          </p>
+                          <Button asChild size="sm" variant="outline" className="min-h-10">
+                            <Link href="/sales/planner">Edit plan</Link>
+                          </Button>
+                        </div>
                       ) : (
                         <p className="text-xs text-amber-700">
-                          {todayPlanner?.status === "rejected"
-                            ? "This plan was rejected."
-                            : "Waiting for admin approval before you can complete visits."}
+                          Waiting for admin approval before you can complete visits.
                         </p>
                       )}
                     </div>

@@ -298,6 +298,11 @@ const companySchema = new Schema<ICompany>(
       type: String,
       default: null,
     },
+    salesNightOutAmount: {
+      type: Number,
+      default: 3000,
+      min: 0,
+    },
   },
   { timestamps: true },
 );

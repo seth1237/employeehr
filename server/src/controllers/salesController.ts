@@ -13,6 +13,7 @@ import { SalesClientActivity } from "../models/SalesClientActivity"
 import { User } from "../models/User"
 import { createOrUpdateStockClient } from "../services/stockClientSave.service"
 import { SalesPlanner } from "../models/SalesPlanner"
+import { Company } from "../models/Company"
 import { StockInvoice } from "../models/StockInvoice"
 import { SalesRepTarget } from "../models/SalesRepTarget"
 import {
@@ -51,30 +52,75 @@ function summarizeSales(
   }
 }
 
-function summarizeExpenses(planners: any[], window: PeriodWindow) {
-  const lines: Array<{ date: string; clientName: string; transport: number; nightOut: boolean }> = []
+function plannerDayBudget(plan: any) {
+  const visits = Array.isArray(plan?.visits) ? plan.visits : []
+  if (plan?.budget && (plan.budget.transport != null || plan.budget.nightOut != null || plan.budget.nightOutAmount != null)) {
+    const transport = Number(plan.budget.transport || 0)
+    const nightOut = Boolean(plan.budget.nightOut)
+    const nightOutAmount = nightOut ? Number(plan.budget.nightOutAmount || 0) : 0
+    return {
+      transport,
+      nightOut,
+      nightOutAmount,
+      total: transport + nightOutAmount,
+      visitCount: visits.length,
+    }
+  }
   let transport = 0
   let nightOuts = 0
+  for (const visit of visits) {
+    transport += Number(visit?.expenses?.transport || 0)
+    if (visit?.expenses?.nightOut || visit?.nightOut) nightOuts += 1
+  }
+  return {
+    transport,
+    nightOut: nightOuts > 0,
+    nightOutAmount: 0,
+    total: transport,
+    visitCount: visits.length,
+  }
+}
+
+function summarizeExpenses(planners: any[], window: PeriodWindow) {
+  const lines: Array<{
+    date: string
+    clientName: string
+    transport: number
+    nightOut: boolean
+    nightOutAmount: number
+    total: number
+  }> = []
+  let transport = 0
+  let nightOuts = 0
+  let nightOutAmount = 0
   let visitCount = 0
   for (const plan of planners) {
     if (!inPeriod(plan.date, window)) continue
-    for (const visit of plan.visits || []) {
-      visitCount += 1
-      const amount = Number(visit?.expenses?.transport || 0)
-      const nightOut = Boolean(visit?.expenses?.nightOut || visit?.nightOut)
-      transport += amount
-      if (nightOut) nightOuts += 1
-      if (amount > 0 || nightOut) {
-        lines.push({
-          date: String(plan.date || ""),
-          clientName: String(visit.clientName || "Visit"),
-          transport: amount,
-          nightOut,
-        })
-      }
+    const day = plannerDayBudget(plan)
+    transport += day.transport
+    nightOutAmount += day.nightOutAmount
+    visitCount += day.visitCount
+    if (day.nightOut) nightOuts += 1
+    if (day.total > 0 || day.nightOut) {
+      lines.push({
+        date: String(plan.date || ""),
+        clientName: `${day.visitCount} visit${day.visitCount === 1 ? "" : "s"}`,
+        transport: day.transport,
+        nightOut: day.nightOut,
+        nightOutAmount: day.nightOutAmount,
+        total: day.total,
+      })
     }
   }
-  return { label: window.label, transport, nightOuts, visitCount, lines }
+  return {
+    label: window.label,
+    transport,
+    nightOuts,
+    nightOutAmount,
+    total: transport + nightOutAmount,
+    visitCount,
+    lines,
+  }
 }
 
 function performanceForUser(
@@ -171,6 +217,81 @@ function toDateKey(value: Date | string | undefined) {
   const m = String(date.getMonth() + 1).padStart(2, "0")
   const d = String(date.getDate()).padStart(2, "0")
   return `${y}-${m}-${d}`
+}
+
+function mapGps(gps: any) {
+  const lat = Number(gps?.lat)
+  const lng = Number(gps?.lng)
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
+  const accuracy = Number(gps?.accuracy)
+  return {
+    lat,
+    lng,
+    ...(Number.isFinite(accuracy) ? { accuracy } : {}),
+  }
+}
+
+function hoursBetween(start?: Date | string | null, end?: Date | string | null) {
+  if (!start || !end) return 0
+  const ms = new Date(end).getTime() - new Date(start).getTime()
+  return ms > 0 ? Number((ms / 3_600_000).toFixed(2)) : 0
+}
+
+function expectedWorkdays(window: PeriodWindow, todayKey: string) {
+  const days: string[] = []
+  const cursor = new Date(window.from)
+  while (cursor < window.to) {
+    const key = toDateKey(cursor)
+    const weekday = cursor.getDay()
+    if (weekday !== 0 && weekday !== 6 && key <= todayKey) days.push(key)
+    cursor.setDate(cursor.getDate() + 1)
+  }
+  return days
+}
+
+function serializePeriod(window: PeriodWindow, todayKey: string) {
+  return {
+    label: window.label,
+    from: toDateKey(window.from),
+    to: toDateKey(window.to),
+    workdays: expectedWorkdays(window, todayKey),
+  }
+}
+
+function summarizeAttendance(
+  days: Array<{ date: string; startAt?: string | null; endAt?: string | null; hours: number; visitCount: number; startGps?: unknown; endGps?: unknown }>,
+  workdays: string[],
+) {
+  const byDate = new Map(days.map((day) => [day.date, day]))
+  let present = 0
+  let closed = 0
+  let incomplete = 0
+  let withLocation = 0
+  let hours = 0
+  let visits = 0
+  for (const key of workdays) {
+    const day = byDate.get(key)
+    if (day?.startAt) {
+      present += 1
+      hours += Number(day.hours || 0)
+      if (day.endAt) closed += 1
+      else incomplete += 1
+    }
+    if (day?.startGps || day?.endGps) withLocation += 1
+    visits += Number(day?.visitCount || 0)
+  }
+  const expected = workdays.length
+  return {
+    expected,
+    present,
+    closed,
+    incomplete,
+    absent: Math.max(expected - present, 0),
+    withLocation,
+    hours: Number(hours.toFixed(2)),
+    visits,
+    rate: expected > 0 ? Math.round((present / expected) * 100) : null,
+  }
 }
 
 async function ensureTodayReport(org_id: string, userId: string, date: string) {
@@ -521,13 +642,21 @@ export class SalesController {
       if (plannerId && !planner) {
         return res.status(400).json({ success: false, message: "Planner not found" })
       }
-      if (planner && planner.status !== "approved") {
+      if (!planner) {
+        return res.status(400).json({
+          success: false,
+          message: "Plan this day first. Visit reports can only be filled after the planner is approved.",
+        })
+      }
+      if (planner.status !== "approved") {
         return res.status(400).json({
           success: false,
           message:
             planner.status === "pending"
               ? "This planner is waiting for admin approval. You can complete visits after it is approved."
-              : "This planner is not approved, so visits cannot be completed.",
+              : planner.status === "rejected"
+                ? "This planner was sent back. Edit it and send it again. Visit reports open after approval."
+                : "This planner is not approved, so visits cannot be completed.",
         })
       }
       const report = await ensureTodayReport(org_id, userId, date)
@@ -1562,21 +1691,21 @@ export class SalesController {
       if (!org_id || !userId) {
         return res.status(401).json({ success: false, message: "Unauthorized" })
       }
-      const { date, visits, projectedExpenses } = req.body
+      const { date, visits, projectedExpenses, budget } = req.body
       if (!date) return res.status(400).json({ success: false, message: "Date is required" })
 
       let planner = await SalesPlanner.findOne({ org_id, userId, date })
-      if (planner && planner.status !== "pending") {
-        return res.status(400).json({ success: false, message: "Cannot modify a processed planner" })
+      if (planner && planner.status === "approved") {
+        return res.status(400).json({
+          success: false,
+          message: "This planner is approved and cannot be changed.",
+        })
       }
       
       if (!planner) {
         planner = new SalesPlanner({ org_id, userId, date })
       }
       planner.visits = (Array.isArray(visits) ? visits : []).map((visit: any) => {
-        const expenses = visit.expenses || {}
-        const transport = Number(expenses.transport || 0)
-        const nightOut = Boolean(visit.nightOut ?? expenses.nightOut)
         return {
           clientName: String(visit.clientName || "").trim(),
           clientId: String(visit.clientId || "").trim() || undefined,
@@ -1588,14 +1717,18 @@ export class SalesController {
           interestCategories: Array.isArray(visit.interestCategories)
             ? visit.interestCategories.map((item: any) => String(item).trim()).filter(Boolean)
             : [],
-          expenses: { transport, nightOut },
+          expenses: { transport: 0, nightOut: false },
         }
       })
-      const visitExpenseTotal = planner.visits.reduce((sum: number, visit: any) => {
-        return sum + Number(visit?.expenses?.transport || 0)
-      }, 0)
-      planner.projectedExpenses = visitExpenseTotal || Number(projectedExpenses || 0)
+      const company = await Company.findById(org_id).select("salesNightOutAmount")
+      const nightOutRate = Number(company?.salesNightOutAmount ?? 3000)
+      const transport = Math.max(0, Number(budget?.transport ?? projectedExpenses ?? 0))
+      const nightOut = Boolean(budget?.nightOut)
+      const nightOutAmount = nightOut ? Math.max(0, nightOutRate) : 0
+      planner.budget = { transport, nightOut, nightOutAmount }
+      planner.projectedExpenses = transport + nightOutAmount
       planner.status = "pending"
+      planner.set("adminNotes", undefined)
       await planner.save()
 
       return res.status(201).json({ success: true, data: planner })
@@ -1662,12 +1795,19 @@ export class SalesController {
         return res.status(403).json({ success: false, message: "Admins only" })
       }
       const periods = currentPeriods()
+      const todayKey = toDateKey(new Date())
+      const periodMeta = {
+        weekly: serializePeriod(periods.weekly, todayKey),
+        monthly: serializePeriod(periods.monthly, todayKey),
+        quarterly: serializePeriod(periods.quarterly, todayKey),
+      }
       const reps = await User.find({ org_id, role: "sales_rep" })
         .select("firstName lastName email status")
         .sort({ firstName: 1, lastName: 1 })
         .lean()
       const userIds = reps.map((rep) => String(rep._id))
-      const [targets, invoices, planners] = await Promise.all([
+      const quarterFromKey = toDateKey(periods.quarterly.from)
+      const [targets, invoices, planners, reports, visits] = await Promise.all([
         SalesRepTarget.find({ org_id, userId: { $in: userIds } }).lean(),
         userIds.length
           ? StockInvoice.find({
@@ -1682,8 +1822,30 @@ export class SalesController {
               org_id,
               userId: { $in: userIds },
               status: "approved",
-              date: { $gte: toDateKey(periods.quarterly.from) },
+              date: { $gte: quarterFromKey },
             }).lean()
+          : Promise.resolve([]),
+        userIds.length
+          ? SalesDailyReport.find({
+              org_id,
+              userId: { $in: userIds },
+              date: { $gte: quarterFromKey },
+            })
+              .select("userId date dayStartAt dayEndAt dayStartGps dayEndGps")
+              .lean()
+          : Promise.resolve([]),
+        userIds.length
+          ? SalesVisit.find({
+              org_id,
+              userId: { $in: userIds },
+              $or: [
+                { visitDate: { $gte: quarterFromKey } },
+                { checkInAt: { $gte: periods.quarterly.from } },
+              ],
+            })
+              .select("userId clientName visitDate checkInAt gps")
+              .sort({ checkInAt: 1 })
+              .lean()
           : Promise.resolve([]),
       ])
       const targetByUser = new Map(targets.map((row) => [String(row.userId), row]))
@@ -1701,15 +1863,48 @@ export class SalesController {
         list.push(plan)
         plannersByUser.set(key, list)
       }
+      const daysByUser = new Map<string, Map<string, any>>()
+      const ensureDay = (userId: string, date: string) => {
+        if (!daysByUser.has(userId)) daysByUser.set(userId, new Map())
+        const byDate = daysByUser.get(userId)!
+        if (!byDate.has(date)) {
+          byDate.set(date, {
+            date,
+            startAt: null,
+            endAt: null,
+            hours: 0,
+            startGps: null,
+            endGps: null,
+            visitCount: 0,
+            visits: [] as Array<{ clientName: string; at?: Date; gps: ReturnType<typeof mapGps> }>,
+          })
+        }
+        return byDate.get(date)
+      }
+      for (const report of reports) {
+        const day = ensureDay(String(report.userId), String(report.date))
+        day.startAt = report.dayStartAt || null
+        day.endAt = report.dayEndAt || null
+        day.startGps = mapGps(report.dayStartGps)
+        day.endGps = mapGps(report.dayEndGps)
+        day.hours = hoursBetween(report.dayStartAt, report.dayEndAt)
+      }
+      for (const visit of visits) {
+        const date = String(visit.visitDate || toDateKey(visit.checkInAt) || "")
+        if (!date) continue
+        const day = ensureDay(String(visit.userId), date)
+        day.visitCount += 1
+        day.visits.push({
+          clientName: String(visit.clientName || "Visit"),
+          at: visit.checkInAt,
+          gps: mapGps(visit.gps),
+        })
+      }
 
       return res.status(200).json({
         success: true,
         data: {
-          periods: {
-            weekly: periods.weekly.label,
-            monthly: periods.monthly.label,
-            quarterly: periods.quarterly.label,
-          },
+          periods: periodMeta,
           reps: reps.map((rep) => {
             const userId = String(rep._id)
             const target = targetByUser.get(userId) || null
@@ -1719,6 +1914,35 @@ export class SalesController {
               target,
               periods,
             )
+            const days = Array.from(daysByUser.get(userId)?.values() || []).sort((a, b) =>
+              String(b.date).localeCompare(String(a.date)),
+            )
+            const locations = days.flatMap((day) => {
+              const points: Array<{
+                date: string
+                kind: "start" | "end" | "visit"
+                label: string
+                at?: Date | string | null
+                gps: { lat: number; lng: number }
+              }> = []
+              if (day.startGps) {
+                points.push({ date: day.date, kind: "start", label: "Start day", at: day.startAt, gps: day.startGps })
+              }
+              for (const visit of day.visits) {
+                if (!visit.gps) continue
+                points.push({
+                  date: day.date,
+                  kind: "visit",
+                  label: visit.clientName,
+                  at: visit.at,
+                  gps: visit.gps,
+                })
+              }
+              if (day.endGps) {
+                points.push({ date: day.date, kind: "end", label: "End day", at: day.endAt, gps: day.endGps })
+              }
+              return points
+            })
             return {
               userId,
               name: `${rep.firstName || ""} ${rep.lastName || ""}`.trim() || rep.email || "Rep",
@@ -1729,6 +1953,13 @@ export class SalesController {
               quarterlyAmount: Number(target?.quarterlyAmount || 0),
               sales: performance.sales,
               expenses: performance.expenses,
+              attendance: {
+                weekly: summarizeAttendance(days, periodMeta.weekly.workdays),
+                monthly: summarizeAttendance(days, periodMeta.monthly.workdays),
+                quarterly: summarizeAttendance(days, periodMeta.quarterly.workdays),
+              },
+              days,
+              locations,
             }
           }),
         },

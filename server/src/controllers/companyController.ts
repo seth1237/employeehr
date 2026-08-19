@@ -879,7 +879,7 @@ export class CompanyController {
           .json({ success: false, message: "Organization context required" });
       }
       const company = await Company.findById(req.org_id).select(
-        "logo primaryColor secondaryColor accentColor backgroundColor textColor borderRadius fontFamily buttonStyle glassEnabled glassOpacity glassBlur glassTint buttonShadow hoverAnimation buttonGradient glowEffect transparency rippleEffect animationSpeed cardStyle sidebarStyle borderStyle cornerStyle pageBackground iconStyle buttonSize buttonPadding navigationAnimation themePreset name slug email phone website city state country",
+        "logo primaryColor secondaryColor accentColor backgroundColor textColor borderRadius fontFamily buttonStyle glassEnabled glassOpacity glassBlur glassTint buttonShadow hoverAnimation buttonGradient glowEffect transparency rippleEffect animationSpeed cardStyle sidebarStyle borderStyle cornerStyle pageBackground iconStyle buttonSize buttonPadding navigationAnimation themePreset name slug email phone website city state country salesNightOutAmount",
       );
       if (!company)
         return res
@@ -895,7 +895,11 @@ export class CompanyController {
 
       return res.json({
         success: true,
-        data: { ...company.toObject(), logo: logoUrl },
+        data: {
+          ...company.toObject(),
+          logo: logoUrl,
+          salesNightOutAmount: Number((company as any).salesNightOutAmount ?? 3000),
+        },
       });
     } catch (error) {
       console.error("Error fetching branding:", error);
@@ -945,6 +949,7 @@ export class CompanyController {
         buttonPadding,
         navigationAnimation,
         themePreset,
+        salesNightOutAmount,
       } = req.body;
       const updateFields: any = {};
 
@@ -991,6 +996,10 @@ export class CompanyController {
       if (navigationAnimation !== undefined)
         updateFields.navigationAnimation = navigationAnimation;
       if (themePreset !== undefined) updateFields.themePreset = themePreset;
+      if (salesNightOutAmount !== undefined) {
+        const amount = Number(salesNightOutAmount)
+        updateFields.salesNightOutAmount = Number.isFinite(amount) ? Math.max(0, amount) : 3000
+      }
 
       // Handle logo upload or URL (accept both logoUrl and logo fields)
       if (req.file) {
@@ -1006,7 +1015,7 @@ export class CompanyController {
         { $set: updateFields },
         { new: true, runValidators: true },
       ).select(
-        "logo primaryColor secondaryColor accentColor backgroundColor textColor borderRadius fontFamily buttonStyle glassEnabled glassOpacity glassBlur glassTint buttonShadow hoverAnimation buttonGradient glowEffect transparency rippleEffect animationSpeed cardStyle sidebarStyle borderStyle cornerStyle pageBackground iconStyle buttonSize buttonPadding navigationAnimation themePreset name slug email phone website city state country",
+        "logo primaryColor secondaryColor accentColor backgroundColor textColor borderRadius fontFamily buttonStyle glassEnabled glassOpacity glassBlur glassTint buttonShadow hoverAnimation buttonGradient glowEffect transparency rippleEffect animationSpeed cardStyle sidebarStyle borderStyle cornerStyle pageBackground iconStyle buttonSize buttonPadding navigationAnimation themePreset name slug email phone website city state country salesNightOutAmount",
       );
 
       if (!company) {
@@ -1022,7 +1031,11 @@ export class CompanyController {
           ? `${baseUrl}/uploads/logos/${company.logo}`
           : company.logo;
 
-      const responseData = { ...company.toObject(), logo: logoResponseUrl };
+      const responseData = {
+        ...company.toObject(),
+        logo: logoResponseUrl,
+        salesNightOutAmount: Number((company as any).salesNightOutAmount ?? 3000),
+      };
       return res.json({ success: true, data: responseData });
     } catch (error) {
       console.error("Error updating branding:", error);

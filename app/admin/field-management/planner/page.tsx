@@ -288,8 +288,6 @@ export default function AdminPlannerPage() {
                             <div className="font-medium text-foreground truncate">{v.clientName}</div>
                             <div className="text-xs text-muted-foreground truncate">
                               {v.reason === 'Other' ? v.customReason : v.reason}
-                              {Number(v.expenses?.transport) > 0 ? ` · Transport KES ${Number(v.expenses.transport).toLocaleString()}` : ""}
-                              {v.expenses?.nightOut || v.nightOut ? " · Night out" : ""}
                             </div>
                           </div>
                         )) : (
@@ -298,10 +296,18 @@ export default function AdminPlannerPage() {
                       </div>
                     </div>
                     
-                    {p.projectedExpenses > 0 && (
-                      <div className="pt-3 border-t text-sm flex items-center justify-between">
-                        <span className="text-muted-foreground text-xs uppercase tracking-wide font-medium">Projected Expenses</span> 
-                        <span className="font-semibold text-foreground">KES {p.projectedExpenses.toLocaleString()}</span>
+                    {(p.projectedExpenses > 0 || p.budget?.nightOut) && (
+                      <div className="pt-3 border-t text-sm space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground text-xs uppercase tracking-wide font-medium">Day budget</span>
+                          <span className="font-semibold text-foreground">KES {Number(p.projectedExpenses || 0).toLocaleString()}</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Transport KES {Number(p.budget?.transport || p.projectedExpenses || 0).toLocaleString()}
+                          {p.budget?.nightOut
+                            ? ` · Night out KES ${Number(p.budget?.nightOutAmount || 0).toLocaleString()}`
+                            : ""}
+                        </p>
                       </div>
                     )}
                   </CardContent>

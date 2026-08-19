@@ -126,6 +126,8 @@ export default function SalesHistoryPage() {
   const bar = Math.min(percent || 0, 100)
   const transport = Number(expenses?.transport || 0)
   const nightOuts = Number(expenses?.nightOuts || 0)
+  const nightOutAmount = Number(expenses?.nightOutAmount || 0)
+  const expenseTotal = Number(expenses?.total || transport + nightOutAmount)
   const lines = expenses?.lines || []
 
   const tabs: Array<{ id: HistoryTab; label: string; count?: number }> = [
@@ -180,7 +182,7 @@ export default function SalesHistoryPage() {
         >
           <SalesKpi
             label="My expenses"
-            value={kes(transport)}
+            value={kes(expenseTotal)}
             hint={`${nightOuts} night out${nightOuts === 1 ? "" : "s"}`}
             icon={Wallet}
             color={branding.secondaryColor}
@@ -320,13 +322,14 @@ export default function SalesHistoryPage() {
                 <p className="mt-1 text-xl font-semibold tabular-nums text-slate-900 sm:text-2xl">{kes(transport)}</p>
               </div>
               <div className="rounded-xl bg-slate-50 p-3 sm:bg-transparent sm:p-0">
-                <p className="text-xs text-slate-500">Night outs</p>
-                <p className="mt-1 text-xl font-semibold tabular-nums text-slate-900 sm:text-2xl">{nightOuts}</p>
+                <p className="text-xs text-slate-500">Night out</p>
+                <p className="mt-1 text-xl font-semibold tabular-nums text-slate-900 sm:text-2xl">{kes(nightOutAmount)}</p>
+                <p className="text-xs text-slate-500">{nightOuts} day{nightOuts === 1 ? "" : "s"}</p>
               </div>
               <div className="col-span-2 rounded-xl bg-slate-50 p-3 sm:col-span-1 sm:bg-transparent sm:p-0">
-                <p className="text-xs text-slate-500">Planned visits</p>
+                <p className="text-xs text-slate-500">Day totals</p>
                 <p className="mt-1 text-xl font-semibold tabular-nums text-slate-900 sm:text-2xl">
-                  {Number(expenses?.visitCount || 0)}
+                  {kes(expenseTotal)}
                 </p>
               </div>
             </div>
@@ -349,7 +352,7 @@ export default function SalesHistoryPage() {
                         {line.nightOut ? " · Night out" : ""}
                       </p>
                     </div>
-                    <span className="shrink-0 text-sm font-semibold tabular-nums">{kes(line.transport)}</span>
+                      <span className="shrink-0 text-sm font-semibold tabular-nums">{kes(line.total ?? line.transport)}</span>
                   </div>
                 ))}
               </div>

@@ -24,6 +24,20 @@ function escapeRegex(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
 
+function parseGps(value: unknown) {
+  if (!value || typeof value !== "object") return undefined
+  const raw = value as { lat?: unknown; lng?: unknown; accuracy?: unknown }
+  const lat = Number(raw.lat)
+  const lng = Number(raw.lng)
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return undefined
+  const accuracy = Number(raw.accuracy)
+  return {
+    lat,
+    lng,
+    ...(Number.isFinite(accuracy) ? { accuracy } : {}),
+  }
+}
+
 function parseInterestCategories(value: unknown) {
   if (!Array.isArray(value)) return []
   return value
@@ -358,7 +372,8 @@ export class SalesController {
       const report = await ensureTodayReport(org_id, userId, date)
       if (!report.dayStartAt) {
         report.dayStartAt = new Date()
-        report.dayStartGps = parseGps(req.body?.gps)
+        const gps = parseGps(req.body?.gps)
+        if (gps) report.dayStartGps = gps
         await report.save()
       }
       return res.status(200).json({ success: true, data: report })
@@ -378,7 +393,8 @@ export class SalesController {
       const date = String(req.body?.date || "").trim() || new Date().toISOString().slice(0, 10)
       const report = await ensureTodayReport(org_id, userId, date)
       report.dayEndAt = new Date()
-      report.dayEndGps = parseGps(req.body?.gps)
+      const gps = parseGps(req.body?.gps)
+      if (gps) report.dayEndGps = gps
       await report.save()
       return res.status(200).json({ success: true, data: report })
     } catch (error: unknown) {
@@ -1428,31 +1444,23 @@ export class SalesController {
       planner.visits = (Array.isArray(visits) ? visits : []).map((visit: any) => {
         const expenses = visit.expenses || {}
         const transport = Number(expenses.transport || 0)
-        const accommodation = Number(expenses.accommodation || 0)
-        const meals = Number(expenses.meals || 0)
-        const other = Number(expenses.other || 0)
+        const nightOut = Boolean(visit.nightOut ?? expenses.nightOut)
         return {
           clientName: String(visit.clientName || "").trim(),
           clientId: String(visit.clientId || "").trim() || undefined,
           reason: String(visit.reason || "").trim(),
           customReason: String(visit.customReason || "").trim() || undefined,
           expectedOutcome: String(visit.expectedOutcome || "").trim() || undefined,
-          plannedTime: String(visit.plannedTime || "").trim() || undefined,
-          priority: ["low", "medium", "high", "critical"].includes(String(visit.priority))
-            ? visit.priority
-            : "medium",
           location: String(visit.location || "").trim() || undefined,
           notes: String(visit.notes || "").trim() || undefined,
-          followUpDate: String(visit.followUpDate || "").trim() || undefined,
           interestCategories: Array.isArray(visit.interestCategories)
             ? visit.interestCategories.map((item: any) => String(item).trim()).filter(Boolean)
             : [],
-          expenses: { transport, accommodation, meals, other },
+          expenses: { transport, nightOut },
         }
       })
       const visitExpenseTotal = planner.visits.reduce((sum: number, visit: any) => {
-        const e = visit.expenses || {}
-        return sum + Number(e.transport || 0) + Number(e.accommodation || 0) + Number(e.meals || 0) + Number(e.other || 0)
+        return sum + Number(visit?.expenses?.transport || 0)
       }, 0)
       planner.projectedExpenses = visitExpenseTotal || Number(projectedExpenses || 0)
       planner.status = "pending"

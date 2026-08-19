@@ -288,6 +288,8 @@ export default function AdminPlannerPage() {
                             <div className="font-medium text-foreground truncate">{v.clientName}</div>
                             <div className="text-xs text-muted-foreground truncate">
                               {v.reason === 'Other' ? v.customReason : v.reason}
+                              {Number(v.expenses?.transport) > 0 ? ` · Transport KES ${Number(v.expenses.transport).toLocaleString()}` : ""}
+                              {v.expenses?.nightOut || v.nightOut ? " · Night out" : ""}
                             </div>
                           </div>
                         )) : (

@@ -14,10 +14,8 @@ import {
   Hourglass,
   MapPin,
   PhoneCall,
-  Play,
   Plus,
   RefreshCw,
-  Square,
   Users,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -29,13 +27,13 @@ import { PageLoadingSkeleton } from "@/components/admin/ui/page-states"
 import { useSalesBranding } from "@/hooks/use-sales-branding"
 import {
   SalesEmpty,
-  SalesHeader,
   SalesKpi,
   SalesPage,
   SalesQuickAction,
   SalesStatusBadge,
   telHref,
 } from "@/components/sales/sales-ui"
+import { SalesCompanion } from "@/components/sales/companion"
 import { dateLabel } from "@/lib/sales-calendar"
 
 function todayKey() {
@@ -44,19 +42,23 @@ function todayKey() {
 }
 
 async function readGps() {
-  if (!navigator.geolocation) return undefined
-  return new Promise<{ lat: number; lng: number; accuracy?: number } | undefined>((resolve) => {
-    navigator.geolocation.getCurrentPosition(
-      (pos) =>
-        resolve({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          accuracy: pos.coords.accuracy,
-        }),
-      () => resolve(undefined),
-      { enableHighAccuracy: true, timeout: 8000 },
-    )
-  })
+  try {
+    if (typeof navigator === "undefined" || !navigator.geolocation) return undefined
+    return await new Promise<{ lat: number; lng: number; accuracy?: number } | undefined>((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        (pos) =>
+          resolve({
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            accuracy: pos.coords.accuracy,
+          }),
+        () => resolve(undefined),
+        { enableHighAccuracy: true, timeout: 8000 },
+      )
+    })
+  } catch {
+    return undefined
+  }
 }
 
 export default function SalesDashboardPage() {
@@ -98,12 +100,17 @@ export default function SalesDashboardPage() {
   const startDay = async () => {
     setActing("start")
     try {
-      const gps = await readGps()
-      await salesApi.startDay({ date: todayKey(), gps })
-      toast({ title: "Day started" })
+      let gps
+      try {
+        gps = await readGps()
+      } catch {
+        gps = undefined
+      }
+      await salesApi.startDay({ date: todayKey(), ...(gps ? { gps } : {}) })
+      toast({ title: "You're on", description: "Have a good day in the field." })
       void load()
     } catch (err: any) {
-      toast({ title: "Could not start day", description: err?.message, variant: "destructive" })
+      toast({ title: "Couldn't start the day", description: "Try again in a moment.", variant: "destructive" })
     } finally {
       setActing(null)
     }
@@ -112,12 +119,17 @@ export default function SalesDashboardPage() {
   const endDay = async () => {
     setActing("end")
     try {
-      const gps = await readGps()
-      await salesApi.endDay({ date: todayKey(), gps })
-      toast({ title: "Day ended" })
+      let gps
+      try {
+        gps = await readGps()
+      } catch {
+        gps = undefined
+      }
+      await salesApi.endDay({ date: todayKey(), ...(gps ? { gps } : {}) })
+      toast({ title: "Day closed", description: "See you tomorrow." })
       void load()
     } catch (err: any) {
-      toast({ title: "Could not end day", description: err?.message, variant: "destructive" })
+      toast({ title: "Couldn't close the day", description: "Try again in a moment.", variant: "destructive" })
     } finally {
       setActing(null)
     }
@@ -144,9 +156,6 @@ export default function SalesDashboardPage() {
     )
   }
 
-  const startedAt = report?.dayStartAt
-    ? new Date(report.dayStartAt).toLocaleTimeString("en-KE", { hour: "2-digit", minute: "2-digit" })
-    : null
   const plannedCount = Number(kpis?.plannedVisits || todayPlanner?.visits?.length || 0)
   const completedCount = Number(kpis?.visitsToday || 0)
   const quoteValue = Number(kpis?.quoteValueThisWeek || 0)
@@ -155,37 +164,27 @@ export default function SalesDashboardPage() {
     (reminders?.quotesNeedingRevision || []).length +
     (reminders?.quotesAwaitingDownload || []).length
 
+  const firstOpenVisit = (todayPlanner?.visits || []).find(
+    (visit: any) => !loggedNames.has(String(visit.clientName || "").toLowerCase()),
+  )
+  const firstVisitName = todayPlanner?.visits?.[0]?.clientName
+  const nextVisitName = firstOpenVisit?.clientName
+
   return (
     <SalesPage>
-      <SalesHeader
+      <SalesCompanion
         color={branding.primaryColor}
-        title="Today"
-        description={`${new Date().toLocaleDateString("en-KE", {
-          weekday: "long",
-          day: "numeric",
-          month: "long",
-        })} · ${startedAt ? `Started ${startedAt}` : "Day not started"}`}
-        actions={
-          <>
-            <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
-              <RefreshCw className={`mr-1.5 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
-            <Button size="sm" onClick={() => void startDay()} disabled={Boolean(report?.dayStartAt) || acting === "start"}>
-              <Play className="mr-1.5 h-4 w-4" />
-              {report?.dayStartAt ? "Started" : acting === "start" ? "Starting…" : "Start day"}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void endDay()}
-              disabled={!report?.dayStartAt || acting === "end"}
-            >
-              <Square className="mr-1.5 h-4 w-4" />
-              End day
-            </Button>
-          </>
-        }
+        started={Boolean(report?.dayStartAt)}
+        acting={acting}
+        plannedCount={plannedCount}
+        completedCount={completedCount}
+        followUps={Number(kpis?.followUpsDue || 0)}
+        firstVisitName={firstVisitName}
+        nextVisitName={nextVisitName}
+        quotesNeedingRevision={(reminders?.quotesNeedingRevision || []).length}
+        quotesAwaitingDownload={(reminders?.quotesAwaitingDownload || []).length}
+        onStartDay={() => void startDay()}
+        onEndDay={() => void endDay()}
       />
 
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
@@ -233,11 +232,11 @@ export default function SalesDashboardPage() {
         {!todayPlanner?.visits?.length ? (
           <Card>
             <SalesEmpty
-              title="No visits planned today"
-              description="Add a plan so you know who to see in the field."
+              title="The planner is empty"
+              description="Who should we see first?"
               action={
                 <Button asChild>
-                  <Link href="/sales/planner">Plan a visit</Link>
+                  <Link href="/sales/planner">Plan my day</Link>
                 </Button>
               }
             />
@@ -253,11 +252,10 @@ export default function SalesDashboardPage() {
                       <div className="min-w-0">
                         <p className="truncate font-medium text-slate-900">{visit.clientName}</p>
                         <p className="text-xs text-slate-500">
-                          {visit.plannedTime ? `${visit.plannedTime} · ` : ""}
                           {visit.reason === "Other" ? visit.customReason : visit.reason}
                         </p>
                       </div>
-                      <SalesStatusBadge status={done ? "completed" : visit.priority || "planned"} label={done ? "Completed" : visit.priority || "Planned"} />
+                      <SalesStatusBadge status={done ? "completed" : "planned"} label={done ? "Done" : "Planned"} />
                     </div>
                     {visit.location ? (
                       <p className="flex items-center gap-1 text-xs text-slate-500">

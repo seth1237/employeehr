@@ -19,7 +19,7 @@ export function SalesTopNav({ onMenuClick }: { onMenuClick?: () => void }) {
         </Button>
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-slate-900">{name}</p>
-          <p className="hidden text-xs text-slate-500 sm:block">Your visits, clients, and quotes</p>
+          <p className="hidden text-xs text-slate-500 sm:block">Let’s get today’s visits in</p>
         </div>
       </div>
       <Button asChild size="icon" className="h-10 w-10 sm:hidden" aria-label="Plan visit">

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { CalendarDays, ChevronLeft, ChevronRight, List, Plus, Send, Trash2 } from "lucide-react"
+import { CalendarDays, ChevronLeft, ChevronRight, List, Plus, Send, Trash2, X } from "lucide-react"
 import { PageLoadingSkeleton } from "@/components/admin/ui/page-states"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -48,13 +48,11 @@ const emptyVisit = () => ({
   reason: "",
   customReason: "",
   expectedOutcome: "",
-  plannedTime: "",
-  priority: "medium",
   location: "",
   notes: "",
-  followUpDate: "",
   interestCategories: [] as string[],
-  expenses: { transport: "", accommodation: "", meals: "", other: "" },
+  nightOut: false,
+  expenses: { transport: "" },
 })
 
 function todayKey() {
@@ -149,10 +147,7 @@ export default function SalesPlannerPage() {
     setVisits((current) => current.map((row, i) => (i === index ? { ...row, ...patch } : row)))
   }
 
-  const expenseTotal = visits.reduce((sum, visit) => {
-    const e = visit.expenses
-    return sum + Number(e.transport || 0) + Number(e.accommodation || 0) + Number(e.meals || 0) + Number(e.other || 0)
-  }, 0)
+  const expenseTotal = visits.reduce((sum, visit) => sum + Number(visit.expenses.transport || 0), 0)
 
   const handleSubmit = async () => {
     if (!date) return toast({ title: "Date is required", variant: "destructive" })
@@ -166,15 +161,14 @@ export default function SalesPlannerPage() {
         projectedExpenses: expenseTotal,
         visits: visits.map((visit) => ({
           ...visit,
+          nightOut: Boolean(visit.nightOut),
           expenses: {
             transport: Number(visit.expenses.transport || 0),
-            accommodation: Number(visit.expenses.accommodation || 0),
-            meals: Number(visit.expenses.meals || 0),
-            other: Number(visit.expenses.other || 0),
+            nightOut: Boolean(visit.nightOut),
           },
         })),
       })
-      toast({ title: "Visit plan submitted for approval" })
+      toast({ title: "Plan submitted", description: "Admin will review it. You can keep adding visits if you need to." })
       setVisits([emptyVisit()])
       setFormOpen(false)
       void loadData()
@@ -203,16 +197,25 @@ export default function SalesPlannerPage() {
               <p className="font-medium text-slate-900">{visit.clientName}</p>
               <p className="text-xs text-slate-500">
                 {plan.date === todayKey() ? "Today" : dateLabel(plan.date)}
-                {visit.plannedTime ? ` · ${visit.plannedTime}` : ""}
               </p>
             </div>
             <SalesStatusBadge status={status} />
           </div>
           <p className="text-sm text-slate-700">{visit.reason === "Other" ? visit.customReason : visit.reason}</p>
           {visit.location ? <p className="text-xs text-slate-500">{visit.location}</p> : null}
-          {visit.expectedOutcome ? <p className="text-xs text-slate-600">Expect: {visit.expectedOutcome}</p> : null}
-          {visit.priority ? (
-            <p className="text-xs capitalize text-slate-500">Priority: {visit.priority}</p>
+          {visit.expectedOutcome ? <p className="text-xs text-slate-600">Hoping to: {visit.expectedOutcome}</p> : null}
+          {visit.interestCategories?.length ? (
+            <p className="text-xs text-slate-500">Focus: {visit.interestCategories.join(", ")}</p>
+          ) : null}
+          {Number(visit.expenses?.transport) > 0 || visit.expenses?.nightOut || visit.nightOut ? (
+            <p className="text-xs text-slate-500">
+              {Number(visit.expenses?.transport) > 0
+                ? `Transport KES ${Number(visit.expenses.transport).toLocaleString("en-KE")}`
+                : ""}
+              {visit.expenses?.nightOut || visit.nightOut
+                ? `${Number(visit.expenses?.transport) > 0 ? " · " : ""}Night out`
+                : ""}
+            </p>
           ) : null}
           <div className="flex flex-wrap gap-2">
             <Button asChild size="sm" className="min-h-10">
@@ -231,10 +234,8 @@ export default function SalesPlannerPage() {
                       ...item,
                       expenses: {
                         transport: String(item.expenses?.transport || ""),
-                        accommodation: String(item.expenses?.accommodation || ""),
-                        meals: String(item.expenses?.meals || ""),
-                        other: String(item.expenses?.other || ""),
                       },
+                      nightOut: Boolean(item.nightOut ?? item.expenses?.nightOut),
                       interestCategories: item.interestCategories || [],
                     })),
                   )
@@ -255,7 +256,7 @@ export default function SalesPlannerPage() {
       <SalesHeader
         color={branding.primaryColor}
         title="Planner"
-        description="Plan who to visit, why, and what it should cost. Submit for admin approval."
+        description="Who are we seeing, why, and what will it cost to get there?"
         actions={
           <>
             <div className="flex rounded-md border border-slate-200 p-0.5">
@@ -388,7 +389,8 @@ export default function SalesPlannerPage() {
             <h2 className="text-sm font-semibold">Today</h2>
             {todayPlans.length === 0 ? (
               <SalesEmpty
-                title="No visits planned today"
+                title="Nothing planned today yet"
+                description="Let’s get your first visit in."
                 action={
                   <Button onClick={() => { setDate(todayKey()); setFormOpen(true) }}>
                     Plan a visit
@@ -439,11 +441,11 @@ export default function SalesPlannerPage() {
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Plan visits</DialogTitle>
+            <DialogTitle>Let’s plan the day</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-1">
-              <Label>Date *</Label>
+              <Label>Which day?</Label>
               <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-11" />
             </div>
             {visits.map((visit, index) => (
@@ -457,6 +459,7 @@ export default function SalesPlannerPage() {
                   ) : null}
                 </div>
                 <SalesClientPicker
+                  label="Who are you visiting?"
                   value={visit.clientName}
                   clientId={visit.clientId}
                   required
@@ -468,57 +471,33 @@ export default function SalesPlannerPage() {
                     })
                   }
                 />
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Visit details</p>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <Label>Reason *</Label>
-                    <Select value={visit.reason} onValueChange={(val) => updateVisit(index, { reason: val })}>
-                      <SelectTrigger className="h-11"><SelectValue placeholder="Select reason" /></SelectTrigger>
-                      <SelectContent>
-                        {REASONS.map((reason) => (
-                          <SelectItem key={reason} value={reason}>{reason}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Priority</Label>
-                    <Select value={visit.priority} onValueChange={(val) => updateVisit(index, { priority: val })}>
-                      <SelectTrigger className="h-11"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {["low", "medium", "high", "critical"].map((item) => (
-                          <SelectItem key={item} value={item} className="capitalize">{item}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div className="space-y-1">
+                  <Label>Why this visit?</Label>
+                  <Select value={visit.reason} onValueChange={(val) => updateVisit(index, { reason: val })}>
+                    <SelectTrigger className="h-11"><SelectValue placeholder="Select a reason" /></SelectTrigger>
+                    <SelectContent>
+                      {REASONS.map((reason) => (
+                        <SelectItem key={reason} value={reason}>{reason}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 {visit.reason === "Other" ? (
                   <div className="space-y-1">
-                    <Label>Custom reason *</Label>
+                    <Label>Tell us the reason *</Label>
                     <Input value={visit.customReason} onChange={(e) => updateVisit(index, { customReason: e.target.value })} className="h-11" />
                   </div>
                 ) : null}
                 <div className="space-y-1">
-                  <Label>Location</Label>
+                  <Label>Where?</Label>
                   <Input value={visit.location} onChange={(e) => updateVisit(index, { location: e.target.value })} placeholder="Facility / area" className="h-11" />
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <Label>Planned time</Label>
-                    <Input type="time" value={visit.plannedTime} onChange={(e) => updateVisit(index, { plannedTime: e.target.value })} className="h-11" />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Follow-up date</Label>
-                    <Input type="date" value={visit.followUpDate} onChange={(e) => updateVisit(index, { followUpDate: e.target.value })} className="h-11" />
-                  </div>
+                <div className="space-y-1">
+                  <Label>What are you hoping to achieve?</Label>
+                  <Input value={visit.expectedOutcome} onChange={(e) => updateVisit(index, { expectedOutcome: e.target.value })} placeholder="Feedback, order, next meeting…" className="h-11" />
                 </div>
                 <div className="space-y-1">
-                  <Label>Expected outcome</Label>
-                  <Input value={visit.expectedOutcome} onChange={(e) => updateVisit(index, { expectedOutcome: e.target.value })} placeholder="What should this visit achieve?" className="h-11" />
-                </div>
-                <div className="space-y-1">
-                  <Label>Product category of interest</Label>
+                  <Label>Any products you’re focusing on?</Label>
                   <select
                     className="h-11 w-full rounded-md border bg-background px-3 text-sm"
                     value=""
@@ -534,36 +513,63 @@ export default function SalesPlannerPage() {
                     ))}
                   </select>
                   {visit.interestCategories.length > 0 ? (
-                    <p className="text-xs text-slate-600">{visit.interestCategories.join(", ")}</p>
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {visit.interestCategories.map((name) => (
+                        <button
+                          key={name}
+                          type="button"
+                          className="inline-flex min-h-9 items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2.5 text-sm text-slate-700"
+                          onClick={() =>
+                            updateVisit(index, {
+                              interestCategories: visit.interestCategories.filter((item) => item !== name),
+                            })
+                          }
+                        >
+                          {name}
+                          <X className="h-3.5 w-3.5" aria-hidden />
+                          <span className="sr-only">Remove {name}</span>
+                        </button>
+                      ))}
+                    </div>
                   ) : null}
                 </div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Projected expenses</p>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  {(["transport", "accommodation", "meals", "other"] as const).map((key) => (
-                    <div key={key} className="space-y-1">
-                      <Label className="capitalize">{key} (KES)</Label>
-                      <Input
-                        type="number"
-                        className="h-11"
-                        value={visit.expenses[key]}
-                        onChange={(e) => updateVisit(index, { expenses: { ...visit.expenses, [key]: e.target.value } })}
-                      />
-                    </div>
-                  ))}
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label>Transportation (KES)</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      className="h-11"
+                      value={visit.expenses.transport}
+                      onChange={(e) => updateVisit(index, { expenses: { transport: e.target.value } })}
+                      placeholder="How much to get there?"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Night out</Label>
+                    <Button
+                      type="button"
+                      variant={visit.nightOut ? "default" : "outline"}
+                      className="h-11 w-full"
+                      onClick={() => updateVisit(index, { nightOut: !visit.nightOut })}
+                    >
+                      {visit.nightOut ? "Yes — staying overnight" : "No overnight stay"}
+                    </Button>
+                  </div>
                 </div>
                 <div className="space-y-1">
-                  <Label>Notes</Label>
+                  <Label>Anything else?</Label>
                   <Textarea value={visit.notes} onChange={(e) => updateVisit(index, { notes: e.target.value })} />
                 </div>
               </div>
             ))}
             <Button type="button" variant="outline" onClick={() => setVisits((current) => [...current, emptyVisit()])}>
-              <Plus className="mr-1 h-4 w-4" /> Add another visit
+              <Plus className="mr-1 h-4 w-4" /> Add another client
             </Button>
-            <p className="text-sm text-slate-600">Projected expenses: KES {expenseTotal.toLocaleString("en-KE")}</p>
+            <p className="text-sm text-slate-600">Transportation total: KES {expenseTotal.toLocaleString("en-KE")}</p>
             <Button className="min-h-11 w-full" onClick={() => void handleSubmit()} disabled={loading}>
               <Send className="mr-1.5 h-4 w-4" />
-              {loading ? "Submitting…" : "Submit plan"}
+              {loading ? "Submitting…" : "Save this plan"}
             </Button>
           </div>
         </DialogContent>

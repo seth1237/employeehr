@@ -24,15 +24,45 @@ function escapeRegex(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
 
-function parseGps(value: any) {
-  const lat = Number(value?.lat)
-  const lng = Number(value?.lng)
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return undefined
-  return {
-    lat,
-    lng,
-    accuracy: Number.isFinite(Number(value?.accuracy)) ? Number(value.accuracy) : undefined,
-  }
+function parseInterestCategories(value: unknown) {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((item: any) => ({
+      categoryId: String(item.categoryId || "").trim(),
+      categoryName: String(item.categoryName || "").trim(),
+      note: String(item.note || "").trim() || undefined,
+    }))
+    .filter((item: { categoryId: string; categoryName: string }) => item.categoryId && item.categoryName)
+}
+
+function isVisitLocked(visit: { status?: string } | null | undefined) {
+  return visit?.status !== "unlocked"
+}
+
+function applyVisitFields(visit: any, body: any, extras: Record<string, unknown> = {}) {
+  visit.clientPhone = String(body?.clientPhone || "").trim() || undefined
+  visit.customer_id = String(body?.customer_id || "").trim() || undefined
+  visit.plannerId = String(body?.plannerId || "").trim() || undefined
+  visit.personMet = String(body?.personMet || "").trim() || undefined
+  visit.personRole = String(body?.personRole || "").trim() || undefined
+  visit.personPhone = String(body?.personPhone || "").trim() || undefined
+  visit.personEmail = String(body?.personEmail || "").trim() || undefined
+  visit.visitType = body?.visitType || visit.visitType || "scheduled"
+  visit.purpose = String(body?.purpose || "").trim() || undefined
+  visit.outcome = String(body?.outcome || "").trim() || undefined
+  visit.outcomeDetail = String(body?.outcomeDetail || "").trim() || undefined
+  visit.interestCategories = parseInterestCategories(body?.interestCategories)
+  visit.gps = parseGps(body?.gps) || visit.gps
+  visit.nextAction = String(body?.nextAction || "").trim() || undefined
+  visit.followUpDate = body?.followUpDate ? new Date(body.followUpDate) : visit.followUpDate
+  visit.notes = String(body?.notes || "").trim() || undefined
+  visit.quote_id = String(body?.quote_id || "").trim() || undefined
+  Object.assign(visit, extras)
+  return visit
+}
+
+function visitCarriedOutDate(visit: any, reportDate?: string) {
+  return String(visit?.visitDate || reportDate || toDateKey(visit?.checkInAt) || "").slice(0, 10)
 }
 
 function endOfLocalDay(dateKey: string) {
@@ -136,9 +166,9 @@ export class SalesController {
       const report = await ensureTodayReport(org_id, userId, date)
       const dayStart = startOfLocalDay(date)
       const dayEnd = endOfLocalDay(date)
-      const [visits, quotes, followUps, revisionQuotes, staleQuotes, myClients, callsToday, recentActivities] =
+      const [visits, quotes, followUps, revisionQuotes, staleQuotes, myClients, callsToday, recentActivities, todayPlanner, upcomingPlanners] =
         await Promise.all([
-          SalesVisit.find({ org_id, userId, report_id: String(report._id) }).sort({ checkInAt: -1 }).lean(),
+          SalesVisit.find({ org_id, userId, $or: [{ visitDate: date }, { report_id: String(report._id) }] }).sort({ checkInAt: -1 }).lean(),
           StockQuotation.find({ org_id, createdBy: userId }).sort({ createdAt: -1 }).limit(40).lean(),
           SalesVisit.find({
             org_id,
@@ -168,6 +198,16 @@ export class SalesController {
             createdAt: { $gte: dayStart, $lte: dayEnd },
           }),
           SalesClientActivity.find({ org_id, userId }).sort({ createdAt: -1 }).limit(8).lean(),
+          SalesPlanner.findOne({ org_id, userId, date }).lean(),
+          SalesPlanner.find({
+            org_id,
+            userId,
+            date: { $gt: date },
+            status: { $in: ["pending", "approved"] },
+          })
+            .sort({ date: 1 })
+            .limit(5)
+            .lean(),
         ])
 
       const activityFollowUps = await SalesClientActivity.find({
@@ -222,7 +262,7 @@ export class SalesController {
           },
           kpis: {
             visitsToday: visits.length,
-            plannedVisits: Number(report.plannedVisits || 0),
+            plannedVisits: Number(todayPlanner?.visits?.length || report.plannedVisits || 0),
             quotesThisWeek: weekQuotes.length,
             quotesSubmitted: quotes.filter((q) => q.status !== "cancelled").length,
             quotesApproved: quotes.filter((q) => Boolean(q.approvedAt) || q.status === "converted").length,
@@ -235,6 +275,8 @@ export class SalesController {
           pipeline,
           myClients: myClients.map((c) => mapSalesClient(c, { mine: true })),
           recentActivities,
+          todayPlanner,
+          upcomingPlanners,
         },
       })
     } catch (error: unknown) {
@@ -252,10 +294,16 @@ export class SalesController {
       }
       const date = String(req.query.date || "").trim() || new Date().toISOString().slice(0, 10)
       const report = await ensureTodayReport(org_id, userId, date)
-      const visits = await SalesVisit.find({ org_id, userId, report_id: String(report._id) })
+      const visits = await SalesVisit.find({
+        org_id,
+        userId,
+        $or: [{ visitDate: date }, { report_id: String(report._id) }],
+      })
         .sort({ checkInAt: -1 })
         .lean()
-      return res.status(200).json({ success: true, data: { report, visits } })
+      const unique = new Map<string, (typeof visits)[number]>()
+      for (const visit of visits) unique.set(String(visit._id), visit)
+      return res.status(200).json({ success: true, data: { report, visits: Array.from(unique.values()) } })
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Failed to load report"
       return res.status(500).json({ success: false, message })
@@ -370,9 +418,38 @@ export class SalesController {
         return res.status(400).json({ success: false, message: "Client name is required" })
       }
       const date = String(req.body?.date || "").trim() || new Date().toISOString().slice(0, 10)
+      const plannerId = String(req.body?.plannerId || "").trim()
       const report = await ensureTodayReport(org_id, userId, date)
-      if (report.status === "submitted" || report.status === "approved") {
-        return res.status(400).json({ success: false, message: "Today's report is locked" })
+
+      const existing = await SalesVisit.findOne({
+        org_id,
+        userId,
+        clientName: new RegExp(`^${escapeRegex(clientName)}$`, "i"),
+        $or: [
+          ...(plannerId ? [{ plannerId }] : []),
+          { visitDate: date },
+          { report_id: String(report._id) },
+        ],
+      })
+      if (existing && isVisitLocked(existing)) {
+        return res.status(400).json({
+          success: false,
+          message: "This visit report is locked. Ask an admin to revoke it before you can edit.",
+        })
+      }
+
+      if (existing) {
+        applyVisitFields(existing, req.body, {
+          clientName,
+          visitDate: date,
+          report_id: String(report._id),
+          status: "locked",
+          revokedAt: undefined,
+          revokedBy: undefined,
+          revokeNote: undefined,
+        })
+        await existing.save()
+        return res.status(200).json({ success: true, data: existing })
       }
 
       const visit = await SalesVisit.create({
@@ -380,33 +457,12 @@ export class SalesController {
         report_id: String(report._id),
         userId,
         clientName,
-        clientPhone: String(req.body?.clientPhone || "").trim() || undefined,
-        customer_id: String(req.body?.customer_id || "").trim() || undefined,
-        plannerId: String(req.body?.plannerId || "").trim() || undefined,
-        personMet: String(req.body?.personMet || "").trim() || undefined,
-        personRole: String(req.body?.personRole || "").trim() || undefined,
-        personPhone: String(req.body?.personPhone || "").trim() || undefined,
-        personEmail: String(req.body?.personEmail || "").trim() || undefined,
-        visitType: req.body?.visitType || "scheduled",
-        purpose: String(req.body?.purpose || "").trim() || undefined,
-        outcome: String(req.body?.outcome || "").trim() || undefined,
-        outcomeDetail: String(req.body?.outcomeDetail || "").trim() || undefined,
-        interestCategories: Array.isArray(req.body?.interestCategories)
-          ? req.body.interestCategories
-              .map((item: any) => ({
-                categoryId: String(item.categoryId || "").trim(),
-                categoryName: String(item.categoryName || "").trim(),
-                note: String(item.note || "").trim() || undefined,
-              }))
-              .filter((item: any) => item.categoryId && item.categoryName)
-          : [],
+        visitDate: date,
+        status: "locked",
         checkInAt: new Date(),
-        gps: parseGps(req.body?.gps),
-        nextAction: String(req.body?.nextAction || "").trim() || undefined,
-        followUpDate: req.body?.followUpDate ? new Date(req.body.followUpDate) : undefined,
-        notes: String(req.body?.notes || "").trim() || undefined,
-        quote_id: String(req.body?.quote_id || "").trim() || undefined,
       })
+      applyVisitFields(visit, req.body, { clientName, visitDate: date, status: "locked" })
+      await visit.save()
 
       return res.status(201).json({ success: true, data: visit })
     } catch (error: unknown) {
@@ -1115,6 +1171,118 @@ export class SalesController {
     }
   }
 
+  static async adminListVisits(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.org_id
+      if (!org_id || !isAdminRole(req.user?.role)) {
+        return res.status(403).json({ success: false, message: "Admins only" })
+      }
+      const from = String(req.query.from || "").trim()
+      const to = String(req.query.to || "").trim()
+      const q = String(req.query.q || "").trim().toLowerCase()
+      const reportFilter: Record<string, unknown> = { org_id }
+      if (from || to) {
+        const dateFilter: Record<string, string> = {}
+        if (from) dateFilter.$gte = from
+        if (to) dateFilter.$lte = to
+        reportFilter.date = dateFilter
+      }
+
+      const reports = from || to
+        ? await SalesDailyReport.find(reportFilter).sort({ date: -1 }).limit(200).lean()
+        : []
+      const visits = from || to
+        ? reports.length
+          ? await SalesVisit.find({
+              org_id,
+              report_id: { $in: reports.map((report) => String(report._id)) },
+            })
+              .sort({ checkInAt: -1 })
+              .lean()
+          : []
+        : await SalesVisit.find({ org_id }).sort({ checkInAt: -1 }).limit(400).lean()
+      const reportIdsForLookup = [
+        ...new Set([
+          ...reports.map((report) => String(report._id)),
+          ...visits.map((visit) => String(visit.report_id || "")).filter(Boolean),
+        ]),
+      ].filter((id) => Types.ObjectId.isValid(id))
+      const reportDocs = reportIdsForLookup.length
+        ? await SalesDailyReport.find({ org_id, _id: { $in: reportIdsForLookup } })
+            .select("date status")
+            .lean()
+        : reports
+      const reportMap = new Map(reportDocs.map((report) => [String(report._id), report]))
+
+      const userIds = [...new Set(visits.map((visit) => String(visit.userId)).filter(Boolean))]
+      const validUserIds = userIds.filter((id) => Types.ObjectId.isValid(id))
+      const users = validUserIds.length
+        ? await User.find({ _id: { $in: validUserIds }, org_id }).select("firstName lastName email").lean()
+        : []
+      const userMap = new Map(
+        users.map((user) => [
+          String(user._id),
+          `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email || "Rep",
+        ]),
+      )
+
+      const data = visits
+        .map((visit) => {
+          const report = reportMap.get(String(visit.report_id))
+          return {
+            ...visit,
+            repName: userMap.get(String(visit.userId)) || "Rep",
+            visitDate: visitCarriedOutDate(visit, report?.date),
+            reportDate: visitCarriedOutDate(visit, report?.date),
+            reportStatus: report?.status || "open",
+            status: visit.status === "unlocked" ? "unlocked" : "locked",
+          }
+        })
+        .filter((visit) => {
+          if (!q) return true
+          const haystack = [
+            visit.repName,
+            visit.clientName,
+            visit.purpose,
+            visit.outcome,
+            visit.outcomeDetail,
+            visit.personMet,
+            visit.notes,
+            ...(visit.interestCategories || []).map((item: any) => `${item.categoryName} ${item.note || ""}`),
+          ]
+            .join(" ")
+            .toLowerCase()
+          return haystack.includes(q)
+        })
+
+      return res.status(200).json({ success: true, data })
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to load visit reports"
+      return res.status(500).json({ success: false, message })
+    }
+  }
+
+  static async adminRevokeVisit(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.org_id
+      const userId = req.user?.userId
+      if (!org_id || !userId || !isAdminRole(req.user?.role)) {
+        return res.status(403).json({ success: false, message: "Admins only" })
+      }
+      const visit = await SalesVisit.findOne({ _id: req.params.id, org_id })
+      if (!visit) return res.status(404).json({ success: false, message: "Visit report not found" })
+      visit.status = "unlocked"
+      visit.revokedAt = new Date()
+      visit.revokedBy = userId
+      visit.revokeNote = String(req.body?.note || "").trim() || undefined
+      await visit.save()
+      return res.status(200).json({ success: true, data: visit })
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to revoke visit report"
+      return res.status(500).json({ success: false, message })
+    }
+  }
+
   static async adminUpdateReport(req: AuthenticatedRequest, res: Response) {
     try {
       const org_id = req.org_id
@@ -1257,8 +1425,36 @@ export class SalesController {
       if (!planner) {
         planner = new SalesPlanner({ org_id, userId, date })
       }
-      planner.visits = visits || []
-      planner.projectedExpenses = Number(projectedExpenses || 0)
+      planner.visits = (Array.isArray(visits) ? visits : []).map((visit: any) => {
+        const expenses = visit.expenses || {}
+        const transport = Number(expenses.transport || 0)
+        const accommodation = Number(expenses.accommodation || 0)
+        const meals = Number(expenses.meals || 0)
+        const other = Number(expenses.other || 0)
+        return {
+          clientName: String(visit.clientName || "").trim(),
+          clientId: String(visit.clientId || "").trim() || undefined,
+          reason: String(visit.reason || "").trim(),
+          customReason: String(visit.customReason || "").trim() || undefined,
+          expectedOutcome: String(visit.expectedOutcome || "").trim() || undefined,
+          plannedTime: String(visit.plannedTime || "").trim() || undefined,
+          priority: ["low", "medium", "high", "critical"].includes(String(visit.priority))
+            ? visit.priority
+            : "medium",
+          location: String(visit.location || "").trim() || undefined,
+          notes: String(visit.notes || "").trim() || undefined,
+          followUpDate: String(visit.followUpDate || "").trim() || undefined,
+          interestCategories: Array.isArray(visit.interestCategories)
+            ? visit.interestCategories.map((item: any) => String(item).trim()).filter(Boolean)
+            : [],
+          expenses: { transport, accommodation, meals, other },
+        }
+      })
+      const visitExpenseTotal = planner.visits.reduce((sum: number, visit: any) => {
+        const e = visit.expenses || {}
+        return sum + Number(e.transport || 0) + Number(e.accommodation || 0) + Number(e.meals || 0) + Number(e.other || 0)
+      }, 0)
+      planner.projectedExpenses = visitExpenseTotal || Number(projectedExpenses || 0)
       planner.status = "pending"
       await planner.save()
 

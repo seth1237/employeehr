@@ -36,6 +36,11 @@ export interface ISalesVisit extends Document {
   followUpDate?: Date
   notes?: string
   quote_id?: string
+  visitDate?: string
+  status?: "locked" | "unlocked"
+  revokedAt?: Date
+  revokedBy?: string
+  revokeNote?: string
   createdAt: Date
   updatedAt: Date
 }
@@ -79,11 +84,21 @@ const salesVisitSchema = new Schema<ISalesVisit>(
     followUpDate: { type: Date },
     notes: { type: String },
     quote_id: { type: String },
+    visitDate: { type: String, index: true },
+    status: {
+      type: String,
+      enum: ["locked", "unlocked"],
+      default: "locked",
+    },
+    revokedAt: { type: Date },
+    revokedBy: { type: String },
+    revokeNote: { type: String },
   },
   { timestamps: true },
 )
 
 salesVisitSchema.index({ org_id: 1, userId: 1, checkInAt: -1 })
+salesVisitSchema.index({ org_id: 1, userId: 1, visitDate: 1 })
 salesVisitSchema.index({ org_id: 1, followUpDate: 1 })
 
 export const SalesVisit = mongoose.model<ISalesVisit>("SalesVisit", salesVisitSchema)

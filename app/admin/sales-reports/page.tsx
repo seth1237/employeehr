@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/hooks/use-toast"
 import { salesApi } from "@/lib/api"
 import { downloadSalesQuotePdf } from "@/lib/sales-quote-pdf"
+import { AdminSalesVisitReports } from "@/components/admin/sales-visit-reports"
 
 export default function AdminSalesReportsPage() {
   const { toast } = useToast()
@@ -100,7 +101,7 @@ export default function AdminSalesReportsPage() {
         <div>
           <h1 className="text-2xl font-semibold">Sales reports</h1>
           <p className="text-sm text-muted-foreground">
-            Approve daily reports and quotes from sales representatives. Reps do not see this screen.
+            Review visit reports from sales representatives — client response, cheque/quote details, and product of interest.
           </p>
         </div>
         <label className="flex items-center gap-2 text-sm">
@@ -113,11 +114,15 @@ export default function AdminSalesReportsPage() {
         </label>
       </div>
 
-      <Tabs defaultValue="reports">
+      <Tabs defaultValue="visits">
         <TabsList>
+          <TabsTrigger value="visits">Visit reports</TabsTrigger>
           <TabsTrigger value="reports">Daily reports ({reports.length})</TabsTrigger>
           <TabsTrigger value="quotes">Quotes ({quotes.length})</TabsTrigger>
         </TabsList>
+        <TabsContent value="visits" className="pt-2">
+          <AdminSalesVisitReports />
+        </TabsContent>
         <TabsContent value="reports" className="space-y-3">
           {reports.length === 0 ? (
             <p className="text-sm text-muted-foreground">No reports in this filter.</p>

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { ChevronLeft, PackagePlus, UserPlus, X } from "lucide-react"
+import { ChevronLeft, PackagePlus, UserPlus, X, Calendar, Users, FileText, MapPin, Lock, Unlock, Plus, Clock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -11,6 +11,12 @@ import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
 import { salesApi } from "@/lib/api"
+import { dateLabel, monthKey, monthLabel, weekOfMonth } from "@/lib/sales-calendar"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import API_URL from "@/lib/apiBase"
+import { getToken } from "@/lib/auth"
+import { SalesHeader, SalesPage } from "@/components/sales/sales-ui"
+import { PageLoadingSkeleton } from "@/components/admin/ui/page-states"
 
 const DEFAULT_ROLES = [
   "Doctor",
@@ -25,81 +31,14 @@ const DEFAULT_ROLES = [
 ]
 
 const KENYA_COUNTIES = [
-  "Baringo",
-  "Bomet",
-  "Bungoma",
-  "Busia",
-  "Elgeyo-Marakwet",
-  "Embu",
-  "Garissa",
-  "Homa Bay",
-  "Isiolo",
-  "Kajiado",
-  "Kakamega",
-  "Kericho",
-  "Kiambu",
-  "Kilifi",
-  "Kirinyaga",
-  "Kisii",
-  "Kisumu",
-  "Kitui",
-  "Kwale",
-  "Laikipia",
-  "Lamu",
-  "Machakos",
-  "Makueni",
-  "Mandera",
-  "Marsabit",
-  "Meru",
-  "Migori",
-  "Mombasa",
-  "Murang'a",
-  "Nairobi",
-  "Nakuru",
-  "Nandi",
-  "Narok",
-  "Nyamira",
-  "Nyandarua",
-  "Nyeri",
-  "Samburu",
-  "Siaya",
-  "Taita-Taveta",
-  "Tana River",
-  "Tharaka-Nithi",
-  "Trans Nzoia",
-  "Turkana",
-  "Uasin Gishu",
-  "Vihiga",
-  "Wajir",
-  "West Pokot",
+  "Baringo", "Bomet", "Bungoma", "Busia", "Elgeyo-Marakwet", "Embu", "Garissa",
+  "Homa Bay", "Isiolo", "Kajiado", "Kakamega", "Kericho", "Kiambu", "Kilifi",
+  "Kirinyaga", "Kisii", "Kisumu", "Kitui", "Kwale", "Laikipia", "Lamu",
+  "Machakos", "Makueni", "Mandera", "Marsabit", "Meru", "Migori", "Mombasa",
+  "Murang'a", "Nairobi", "Nakuru", "Nandi", "Narok", "Nyamira", "Nyandarua",
+  "Nyeri", "Samburu", "Siaya", "Taita-Taveta", "Tana River", "Tharaka-Nithi",
+  "Trans Nzoia", "Turkana", "Uasin Gishu", "Vihiga", "Wajir", "West Pokot",
 ]
-
-function weekOfMonth(dateStr: string) {
-  const date = new Date(`${dateStr}T00:00:00`)
-  const first = new Date(date.getFullYear(), date.getMonth(), 1)
-  return Math.ceil((date.getDate() + first.getDay()) / 7)
-}
-
-function monthKey(dateStr: string) {
-  return String(dateStr || "").slice(0, 7)
-}
-
-function monthLabel(dateStr: string) {
-  const date = new Date(`${dateStr}T00:00:00`)
-  if (Number.isNaN(date.getTime())) return dateStr
-  return date.toLocaleString("en-KE", { month: "long", year: "numeric" })
-}
-
-function dateLabel(dateStr: string) {
-  const date = new Date(`${dateStr}T00:00:00`)
-  if (Number.isNaN(date.getTime())) return dateStr
-  return date.toLocaleDateString("en-KE", {
-    weekday: "long",
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  })
-}
 
 async function readGps() {
   if (!navigator.geolocation) return undefined
@@ -157,6 +96,21 @@ type OutcomeOption = {
   label: string
   placeholder: string
   showsInterest?: boolean
+}
+
+function hexToRgb(hex: string) {
+  const normalized = hex.replace("#", "")
+  if (normalized.length !== 6) return { r: 15, g: 118, b: 110 }
+  return {
+    r: Number.parseInt(normalized.slice(0, 2), 16),
+    g: Number.parseInt(normalized.slice(2, 4), 16),
+    b: Number.parseInt(normalized.slice(4, 6), 16),
+  }
+}
+
+function hexToRgba(hex: string, alpha: number) {
+  const { r, g, b } = hexToRgb(hex)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }
 
 function purposeResponses(reason?: string): OutcomeOption[] {
@@ -230,6 +184,11 @@ function purposeResponses(reason?: string): OutcomeOption[] {
   ]
 }
 
+interface TenantBranding {
+  primaryColor?: string
+  secondaryColor?: string
+}
+
 export default function SalesReportPage() {
   const { toast } = useToast()
   const [loading, setLoading] = useState(true)
@@ -248,6 +207,13 @@ export default function SalesReportPage() {
   const [categories, setCategories] = useState<Array<{ _id: string; name: string }>>([])
   const [interestCategories, setInterestCategories] = useState<InterestCategory[]>([])
   const [showInterest, setShowInterest] = useState(false)
+  const [branding, setBranding] = useState<TenantBranding>({})
+
+  const primaryColor = branding.primaryColor || "#0f766e"
+  const secondaryColor = branding.secondaryColor || "#0ea5e9"
+  const primarySoftColor = hexToRgba(primaryColor, 0.08)
+  const secondarySoftColor = hexToRgba(secondaryColor, 0.08)
+  const primaryBorderColor = hexToRgba(primaryColor, 0.18)
 
   const loadPlanners = useCallback(async () => {
     setLoading(true)
@@ -271,6 +237,22 @@ export default function SalesReportPage() {
 
   useEffect(() => {
     void loadPlanners()
+    
+    const fetchBranding = async () => {
+      try {
+        const token = getToken()
+        const res = await fetch(`${API_URL}/api/company/branding`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        })
+        if (res.ok) {
+          const json = await res.json()
+          setBranding(json.data || {})
+        }
+      } catch (e) {
+        console.error("Failed to load branding", e)
+      }
+    }
+    fetchBranding()
   }, [loadPlanners])
 
   const loadVisits = useCallback(async (date: string) => {
@@ -350,9 +332,32 @@ export default function SalesReportPage() {
 
   const pickClient = (planned: PlannerVisit) => {
     setSelectedClient(planned)
-    setForm(emptyForm)
-    setInterestCategories([])
-    setShowInterest(false)
+    const existing = visits.find(
+      (item) =>
+        String(item.clientName || "").trim().toLowerCase() ===
+        String(planned.clientName || "").trim().toLowerCase(),
+    )
+    if (existing) {
+      const roleKnown = roles.includes(existing.personRole)
+      setForm({
+        ...emptyForm,
+        personMet: existing.personMet || "",
+        personRole: roleKnown ? existing.personRole : existing.personRole ? "Other" : "Doctor",
+        customRole: roleKnown ? "" : existing.personRole || "",
+        personPhone: existing.personPhone || "",
+        personEmail: existing.personEmail || "",
+        outcome: existing.outcome || "",
+        outcomeDetail: existing.outcomeDetail || "",
+        notes: existing.notes || "",
+        facilityPhone: existing.clientPhone || "",
+      })
+      setInterestCategories(existing.interestCategories || [])
+      setShowInterest((existing.interestCategories || []).length > 0)
+    } else {
+      setForm(emptyForm)
+      setInterestCategories([])
+      setShowInterest(false)
+    }
     void matchClient(planned)
   }
 
@@ -362,6 +367,12 @@ export default function SalesReportPage() {
   const outcomeOptions = purposeResponses(purpose)
   const selectedOutcome = outcomeOptions.find((option) => option.id === form.outcome)
   const needsInterest = Boolean(selectedOutcome?.showsInterest) || showInterest
+  const existingVisit = visits.find(
+    (item) =>
+      String(item.clientName || "").trim().toLowerCase() ===
+      String(selectedClient?.clientName || "").trim().toLowerCase(),
+  )
+  const reportLocked = Boolean(existingVisit) && existingVisit.status !== "unlocked"
 
   const addInterestCategory = () => {
     const category = categories.find((item) => item._id === form.interestCategoryId)
@@ -383,6 +394,14 @@ export default function SalesReportPage() {
 
   const logVisit = async () => {
     if (!selectedPlanner || !selectedClient) return
+    if (reportLocked) {
+      toast({
+        title: "This report is locked",
+        description: "Ask an admin to revoke it before you can edit.",
+        variant: "destructive",
+      })
+      return
+    }
     if (!form.personMet.trim()) {
       toast({ title: "Person met is required", variant: "destructive" })
       return
@@ -393,14 +412,6 @@ export default function SalesReportPage() {
     }
     if (!form.outcome) {
       toast({ title: "Select the client response / visit outcome", variant: "destructive" })
-      return
-    }
-    if (needsInterest && interestCategories.length === 0) {
-      toast({
-        title: "Add a product of interest",
-        description: "Select a category for the need or interest you noted.",
-        variant: "destructive",
-      })
       return
     }
     if (!clientSaved) {
@@ -463,7 +474,7 @@ export default function SalesReportPage() {
         notes: form.notes.trim() || undefined,
         gps,
       })
-      toast({ title: "Visit report saved" })
+      toast({ title: existingVisit ? "Visit report updated and locked" : "Visit report saved and locked" })
       setForm(emptyForm)
       setInterestCategories([])
       setShowInterest(false)
@@ -500,43 +511,58 @@ export default function SalesReportPage() {
   }
 
   if (loading) {
-    return <div className="p-6 text-sm text-muted-foreground">Loading reports…</div>
+    return <PageLoadingSkeleton title="Loading visit reports" rows={8} />
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4 p-4 lg:p-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Reports</h1>
-        <p className="text-sm text-muted-foreground">
-          Open a visit planner, pick the client, then record who you met.
-        </p>
-      </div>
+    <SalesPage>
+      <SalesHeader
+        title="Visit reports"
+        description="Open a planner date, pick the client, then record who you met and the outcome."
+        color={primaryColor}
+        actions={
+          <Button asChild variant="outline" size="sm">
+            <Link href="/sales/planner">
+              <ChevronLeft className="mr-1 h-4 w-4" />
+              Planner
+            </Link>
+          </Button>
+        }
+      />
 
       {planners.length === 0 ? (
-        <Card>
-          <CardContent className="p-6 text-sm text-muted-foreground">
-            No visit planners yet.{" "}
-            <Link href="/sales/planner" className="text-teal-700 underline">
-              Create a planner
-            </Link>{" "}
-            first, then come back here to report the visit.
+        <Card className="shadow-sm border-dashed">
+          <CardContent className="p-6 text-sm text-muted-foreground flex flex-col items-center justify-center text-center gap-2">
+            <Calendar className="h-8 w-8 text-muted-foreground/40" />
+            <p>No visit planners yet.</p>
+            <Button asChild variant="outline" size="sm" className="mt-2">
+              <Link href="/sales/planner" style={{ color: primaryColor }}>
+                Create a planner
+              </Link>
+            </Button>
           </CardContent>
         </Card>
       ) : null}
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">1. Choose the planner</CardTitle>
+      {/* Step 1: Choose Planner */}
+      <Card className="shadow-sm overflow-hidden">
+        <CardHeader className="border-b bg-muted/30 pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Calendar className="h-4 w-4" style={{ color: primaryColor }} />
+            1. Choose the planner
+          </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <Label className="text-xs uppercase tracking-wide text-muted-foreground">Month</Label>
-            <div className="mt-2 flex flex-wrap gap-2">
+        <CardContent className="p-4 space-y-4">
+          <div className="space-y-2">
+            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Month</Label>
+            <div className="flex flex-wrap gap-2">
               {months.map((month) => (
                 <Button
                   key={month.key}
                   size="sm"
                   variant={selectedMonth === month.key ? "default" : "outline"}
+                  className="h-8"
+                  style={selectedMonth === month.key ? { backgroundColor: primaryColor, color: 'white' } : undefined}
                   onClick={() => {
                     setSelectedMonth(month.key)
                     setSelectedWeek(null)
@@ -546,21 +572,23 @@ export default function SalesReportPage() {
                   }}
                 >
                   {month.label}
-                  <span className="ml-2 text-xs opacity-80">{month.count}</span>
+                  <span className="ml-1.5 text-xs opacity-80">({month.count})</span>
                 </Button>
               ))}
             </div>
           </div>
 
           {selectedMonth ? (
-            <div>
-              <Label className="text-xs uppercase tracking-wide text-muted-foreground">Week</Label>
-              <div className="mt-2 flex flex-wrap gap-2">
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Week</Label>
+              <div className="flex flex-wrap gap-2">
                 {weeks.map((item) => (
                   <Button
                     key={item.week}
                     size="sm"
                     variant={selectedWeek === item.week ? "default" : "outline"}
+                    className="h-8"
+                    style={selectedWeek === item.week ? { backgroundColor: primaryColor, color: 'white' } : undefined}
                     onClick={() => {
                       setSelectedWeek(item.week)
                       setSelectedPlanner(null)
@@ -576,14 +604,16 @@ export default function SalesReportPage() {
           ) : null}
 
           {selectedWeek ? (
-            <div>
-              <Label className="text-xs uppercase tracking-wide text-muted-foreground">Date</Label>
-              <div className="mt-2 flex flex-wrap gap-2">
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Date</Label>
+              <div className="flex flex-wrap gap-2">
                 {datedPlanners.map((planner) => (
                   <Button
                     key={planner._id}
                     size="sm"
                     variant={selectedPlanner?._id === planner._id ? "default" : "outline"}
+                    className="h-8"
+                    style={selectedPlanner?._id === planner._id ? { backgroundColor: primaryColor, color: 'white' } : undefined}
                     onClick={() => {
                       setSelectedPlanner(planner)
                       setSelectedClient(null)
@@ -591,7 +621,7 @@ export default function SalesReportPage() {
                     }}
                   >
                     {dateLabel(planner.date)}
-                    <Badge variant="secondary" className="ml-2 capitalize">
+                    <Badge variant="secondary" className="ml-2 capitalize text-[10px] h-4 px-1.5">
                       {planner.status}
                     </Badge>
                   </Button>
@@ -602,27 +632,33 @@ export default function SalesReportPage() {
         </CardContent>
       </Card>
 
+      {/* Step 2: Select Client */}
       {selectedPlanner ? (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">2. Select the client from this planner</CardTitle>
+        <Card className="shadow-sm overflow-hidden">
+          <CardHeader className="border-b bg-muted/30 pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Users className="h-4 w-4" style={{ color: primaryColor }} />
+              2. Select the client from this planner
+            </CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-wrap gap-2">
+          <CardContent className="p-4 flex flex-wrap gap-2">
             {(selectedPlanner.visits || []).map((visit, index) => {
-              const logged = visits.some(
+              const existing = visits.find(
                 (item) =>
                   String(item.clientName || "").toLowerCase() === String(visit.clientName).toLowerCase(),
               )
+              const locked = Boolean(existing) && existing.status !== "unlocked"
               return (
                 <Button
                   key={`${visit.clientName}-${index}`}
                   size="sm"
                   variant={selectedClient?.clientName === visit.clientName ? "default" : "outline"}
-                  className={logged ? "border-emerald-300" : ""}
+                  className={`min-h-11 ${existing ? (locked ? "border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100" : "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100") : ""}`}
+                  style={selectedClient?.clientName === visit.clientName ? { backgroundColor: primaryColor, color: 'white', borderColor: primaryColor } : undefined}
                   onClick={() => pickClient(visit)}
                 >
                   {visit.clientName}
-                  {logged ? " ✓" : ""}
+                  {existing ? (locked ? <Lock className="ml-1.5 h-3 w-3" /> : <Unlock className="ml-1.5 h-3 w-3" />) : null}
                 </Button>
               )
             })}
@@ -633,29 +669,55 @@ export default function SalesReportPage() {
         </Card>
       ) : null}
 
+      {/* Step 3: Visit Report Form */}
       {selectedClient ? (
-        <Card>
-          <CardHeader className="pb-3">
+        <Card className="shadow-sm overflow-hidden">
+          <CardHeader className="border-b bg-muted/30 pb-3">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
-                <CardTitle className="text-base">3. Visit report — {selectedClient.clientName}</CardTitle>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <FileText className="h-4 w-4" style={{ color: primaryColor }} />
+                  3. Visit report — {selectedClient.clientName}
+                </CardTitle>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {selectedClient.reason === "Other" ? selectedClient.customReason : selectedClient.reason}
                   {matching ? " · Checking if this facility is saved…" : ""}
                 </p>
               </div>
-              {clientSaved ? (
-                <Badge className="bg-emerald-600 hover:bg-emerald-700">Saved client</Badge>
-              ) : (
-                <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-800">
-                  Not in system
-                </Badge>
-              )}
+              <div className="flex flex-wrap items-center gap-2">
+                {clientSaved ? (
+                  <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white border-transparent">Saved client</Badge>
+                ) : (
+                  <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-800">
+                    Not in system
+                  </Badge>
+                )}
+                {existingVisit ? (
+                  <Badge variant={reportLocked ? "outline" : "secondary"} className="flex items-center gap-1">
+                    {reportLocked ? <Lock className="h-3 w-3" /> : <Unlock className="h-3 w-3" />}
+                    {reportLocked ? "Locked" : "Unlocked for edit"}
+                  </Badge>
+                ) : null}
+              </div>
             </div>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="p-4 space-y-4">
+            {reportLocked ? (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-800 flex items-start gap-2">
+                <Lock className="h-4 w-4 mt-0.5 text-slate-500" />
+                <span>This visit report is locked. Ask an admin to revoke it if you need to make changes.</span>
+              </div>
+            ) : existingVisit ? (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 flex items-start gap-2">
+                <Unlock className="h-4 w-4 mt-0.5 text-amber-600" />
+                <span>Admin unlocked this report. Save your changes and it will lock again.</span>
+              </div>
+            ) : null}
+
+            <fieldset disabled={reportLocked} className="space-y-4 disabled:opacity-90">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Client information</p>
             {!clientSaved && !matching ? (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
                 This planner client is not saved. Add the facility number, county, and the person you met
                 before you can file the report.
               </div>
@@ -663,50 +725,56 @@ export default function SalesReportPage() {
 
             {!clientSaved ? (
               <div className="grid gap-3 md:grid-cols-2">
-                <div className="space-y-1">
-                  <Label>Facility number</Label>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium">Facility number</Label>
                   <Input
-                    value={form.facilityPhone}
+                  className="h-11"
+                  value={form.facilityPhone}
                     onChange={(e) => setForm((c) => ({ ...c, facilityPhone: e.target.value }))}
                     placeholder="Main facility phone"
                   />
                 </div>
-                <div className="space-y-1">
-                  <Label>County</Label>
-                  <select
-                    className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                    value={form.county}
-                    onChange={(e) => setForm((c) => ({ ...c, county: e.target.value }))}
-                  >
-                    <option value="">Select county</option>
-                    {counties.map((county) => (
-                      <option key={county} value={county}>
-                        {county}
-                      </option>
-                    ))}
-                  </select>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium">County</Label>
+                  <Select value={form.county} onValueChange={(v) => setForm((c) => ({ ...c, county: v }))}>
+                    <SelectTrigger className="h-9 text-sm">
+                      <SelectValue placeholder="Select county" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {counties.map((county) => (
+                        <SelectItem key={county} value={county}>
+                          {county}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             ) : (
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-slate-50 p-3 text-sm">
-                <div>
-                  <p className="font-medium">{matchedClient.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {matchedClient.phone} {matchedClient.location ? `· ${matchedClient.location}` : ""}
-                  </p>
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-muted/30 p-3 text-sm">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="h-9 w-9 rounded-full bg-background border flex items-center justify-center flex-shrink-0">
+                    <MapPin className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-medium truncate">{matchedClient.name}</p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {matchedClient.phone} {matchedClient.location ? `· ${matchedClient.location}` : ""}
+                    </p>
+                  </div>
                 </div>
               </div>
             )}
 
             {clientSaved && (matchedClient.contacts || []).length > 0 ? (
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Facility contacts</Label>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Facility contacts</Label>
                 <div className="flex flex-wrap gap-2">
                   {(matchedClient.contacts || []).map((contact: any, index: number) => (
                     <button
                       key={`${contact.name}-${index}`}
                       type="button"
-                      className="rounded-full border bg-white px-3 py-1 text-left text-xs hover:bg-slate-50"
+                      className="rounded-full border bg-white px-3 py-1.5 text-left text-xs hover:bg-muted/50 transition-colors shadow-sm"
                       onClick={() =>
                         setForm((c) => ({
                           ...c,
@@ -718,7 +786,7 @@ export default function SalesReportPage() {
                         }))
                       }
                     >
-                      {contact.name}
+                      <span className="font-medium">{contact.name}</span>
                       <span className="text-muted-foreground"> · {contact.role}</span>
                     </button>
                   ))}
@@ -726,58 +794,65 @@ export default function SalesReportPage() {
               </div>
             ) : null}
 
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Visit details</p>
             <div className="grid gap-3 md:grid-cols-2">
-              <div className="space-y-1">
-                <Label>Person met</Label>
+              <div className="space-y-1.5">
+                <Label>Person met <span className="text-red-600">*</span></Label>
                 <Input
+                  className="h-11"
                   value={form.personMet}
                   onChange={(e) => setForm((c) => ({ ...c, personMet: e.target.value }))}
                   placeholder="Name of the person you met"
                 />
               </div>
-              <div className="space-y-1">
-                <Label>Role</Label>
-                <select
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                  value={form.personRole}
-                  onChange={(e) => setForm((c) => ({ ...c, personRole: e.target.value }))}
-                >
-                  {roles.map((role) => (
-                    <option key={role} value={role}>
-                      {role}
-                    </option>
-                  ))}
-                </select>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Role</Label>
+                <Select value={form.personRole} onValueChange={(v) => setForm((c) => ({ ...c, personRole: v }))}>
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue placeholder="Select role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {roles.map((role) => (
+                      <SelectItem key={role} value={role}>
+                        {role}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               {form.personRole === "Other" ? (
-                <div className="space-y-1 md:col-span-2">
-                  <Label>Custom role</Label>
+                <div className="space-y-1.5 md:col-span-2">
+                  <Label className="text-xs font-medium">Custom role</Label>
                   <Input
+                    className="h-9 text-sm"
                     value={form.customRole}
                     onChange={(e) => setForm((c) => ({ ...c, customRole: e.target.value }))}
                   />
                 </div>
               ) : null}
-              <div className="space-y-1">
-                <Label>Number</Label>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Number</Label>
                 <Input
+                  className="h-11"
                   value={form.personPhone}
                   onChange={(e) => setForm((c) => ({ ...c, personPhone: e.target.value }))}
                   placeholder="Phone of the person met"
                 />
               </div>
-              <div className="space-y-1">
-                <Label>Email</Label>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Email</Label>
                 <Input
                   type="email"
+                  className="h-11"
                   value={form.personEmail}
                   onChange={(e) => setForm((c) => ({ ...c, personEmail: e.target.value }))}
                   placeholder="Email"
                 />
               </div>
-              <div className="space-y-1 md:col-span-2">
-                <Label>Notes</Label>
+              <div className="space-y-1.5 md:col-span-2">
+                <Label className="text-xs font-medium">Notes</Label>
                 <Textarea
+                  className="text-sm min-h-[60px] resize-none"
                   value={form.notes}
                   onChange={(e) => setForm((c) => ({ ...c, notes: e.target.value }))}
                 />
@@ -785,10 +860,10 @@ export default function SalesReportPage() {
             </div>
 
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <div>
-                  <Label>Client response</Label>
-                  <p className="text-xs text-muted-foreground">
+                  <Label className="text-sm font-medium">Client response</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
                     Report for {purpose || "this visit"}. Pick the outcome, then fill the box beside it.
                   </p>
                 </div>
@@ -798,14 +873,16 @@ export default function SalesReportPage() {
                     return (
                       <div
                         key={option.id}
-                        className={`rounded-lg border p-3 ${selected ? "border-teal-600 bg-teal-50/50" : "bg-white"}`}
+                        className={`rounded-xl border p-3 transition-colors ${selected ? "border-primary bg-primary/5 shadow-sm" : "bg-white hover:bg-muted/20"}`}
+                        style={selected ? { borderColor: primaryColor } : undefined}
                       >
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                           <Button
                             type="button"
                             size="sm"
                             variant={selected ? "default" : "outline"}
-                            className="sm:min-w-[180px] justify-start"
+                            className="min-h-11 justify-start text-sm sm:min-w-[180px]"
+                            style={selected ? { backgroundColor: primaryColor, color: 'white' } : undefined}
                             onClick={() => {
                               setForm((c) => ({ ...c, outcome: option.id, outcomeDetail: "" }))
                               if (option.showsInterest) setShowInterest(true)
@@ -815,7 +892,7 @@ export default function SalesReportPage() {
                           </Button>
                           {selected ? (
                             <Input
-                              className="flex-1"
+                              className="flex-1 h-8 text-xs"
                               value={form.outcomeDetail}
                               onChange={(e) => setForm((c) => ({ ...c, outcomeDetail: e.target.value }))}
                               placeholder={option.placeholder}
@@ -825,29 +902,30 @@ export default function SalesReportPage() {
                         {selected ? (
                           <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
                             <div className="space-y-1">
-                              <Label className="text-xs text-muted-foreground">Product of interest (category)</Label>
-                              <select
-                                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                                value={form.interestCategoryId}
-                                onChange={(e) => setForm((c) => ({ ...c, interestCategoryId: e.target.value }))}
-                              >
-                                <option value="">Select a category</option>
-                                {categories.map((category) => (
-                                  <option key={category._id} value={category._id}>
-                                    {category.name}
-                                  </option>
-                                ))}
-                              </select>
+                              <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">Product of interest (optional)</Label>
+                              <Select value={form.interestCategoryId} onValueChange={(v) => setForm((c) => ({ ...c, interestCategoryId: v }))}>
+                                <SelectTrigger className="h-8 text-xs">
+                                  <SelectValue placeholder="Select a category" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {categories.map((category) => (
+                                    <SelectItem key={category._id} value={category._id}>
+                                      {category.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
                             </div>
                             <div className="space-y-1">
-                              <Label className="text-xs text-muted-foreground">Side note</Label>
+                              <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">Need / side note (optional)</Label>
                               <Input
+                                className="h-8 text-xs"
                                 value={form.interestNote}
                                 onChange={(e) => setForm((c) => ({ ...c, interestNote: e.target.value }))}
-                                placeholder="Need, quantity, or comment"
+                                placeholder="Need, quantity, or comment — can be left blank"
                               />
                             </div>
-                            <Button type="button" variant="outline" onClick={addInterestCategory}>
+                            <Button type="button" variant="outline" size="sm" className="h-8" onClick={addInterestCategory}>
                               Add
                             </Button>
                           </div>
@@ -858,61 +936,63 @@ export default function SalesReportPage() {
                 </div>
               </div>
 
-              <aside className="space-y-3 rounded-lg border bg-slate-50 p-3">
+              <aside className="space-y-3 rounded-xl border bg-muted/20 p-3 h-fit">
                 <Button
                   type="button"
-                  className="w-full"
+                  className="w-full h-8 text-xs"
                   variant={needsInterest ? "default" : "outline"}
+                  style={needsInterest ? { backgroundColor: primaryColor, color: 'white' } : undefined}
                   onClick={() => setShowInterest(true)}
                 >
-                  <PackagePlus className="mr-1.5 h-4 w-4" />
+                  <PackagePlus className="mr-1.5 h-3.5 w-3.5" />
                   Product of interest
                 </Button>
-                <p className="text-xs text-muted-foreground">
-                  Use this when the client was interested or you noted a need. Choose a stock category, not a product.
+                <p className="text-[10px] text-muted-foreground leading-relaxed">
+                  Optional. Fill this if the client was interested or you noted a need. Choose a category, not a product.
                 </p>
                 {showInterest || interestCategories.length > 0 ? (
                   <div className="space-y-2">
                     <div className="space-y-1">
-                      <Label className="text-xs">Category</Label>
-                      <select
-                        className="h-10 w-full rounded-md border bg-white px-3 text-sm"
-                        value={form.interestCategoryId}
-                        onChange={(e) => setForm((c) => ({ ...c, interestCategoryId: e.target.value }))}
-                      >
-                        <option value="">Select a category</option>
-                        {categories.map((category) => (
-                          <option key={category._id} value={category._id}>
-                            {category.name}
-                          </option>
-                        ))}
-                      </select>
+                      <Label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Category (optional)</Label>
+                      <Select value={form.interestCategoryId} onValueChange={(v) => setForm((c) => ({ ...c, interestCategoryId: v }))}>
+                        <SelectTrigger className="h-8 text-xs bg-white">
+                          <SelectValue placeholder="Select a category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {categories.map((category) => (
+                            <SelectItem key={category._id} value={category._id}>
+                              {category.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">Side note</Label>
+                      <Label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Need / side note (optional)</Label>
                       <Input
+                        className="h-8 text-xs bg-white"
                         value={form.interestNote}
                         onChange={(e) => setForm((c) => ({ ...c, interestNote: e.target.value }))}
-                        placeholder="Need, quantity, or comment"
+                        placeholder="Need, quantity, or comment — can be left blank"
                       />
                     </div>
-                    <Button type="button" size="sm" className="w-full" variant="outline" onClick={addInterestCategory}>
+                    <Button type="button" size="sm" className="w-full h-8 text-xs" variant="outline" onClick={addInterestCategory}>
                       Add category
                     </Button>
                     {interestCategories.length > 0 ? (
-                      <div className="space-y-1">
+                      <div className="space-y-1.5 pt-1">
                         {interestCategories.map((item) => (
                           <div
                             key={item.categoryId}
-                            className="flex items-start justify-between gap-2 rounded-md border bg-white px-2 py-1.5 text-xs"
+                            className="flex items-start justify-between gap-2 rounded-lg border bg-white px-2.5 py-2 text-xs shadow-sm"
                           >
-                            <div>
-                              <p className="font-medium">{item.categoryName}</p>
-                              {item.note ? <p className="text-muted-foreground">{item.note}</p> : null}
+                            <div className="min-w-0">
+                              <p className="font-medium truncate">{item.categoryName}</p>
+                              {item.note ? <p className="text-muted-foreground truncate mt-0.5">{item.note}</p> : null}
                             </div>
                             <button
                               type="button"
-                              className="text-muted-foreground hover:text-destructive"
+                              className="text-muted-foreground hover:text-destructive flex-shrink-0"
                               onClick={() =>
                                 setInterestCategories((current) =>
                                   current.filter((row) => row.categoryId !== item.categoryId),
@@ -925,7 +1005,7 @@ export default function SalesReportPage() {
                         ))}
                       </div>
                     ) : (
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-[10px] text-muted-foreground">
                         {categories.length === 0
                           ? "No stock categories yet. Ask admin to add categories first."
                           : "No categories added yet."}
@@ -936,71 +1016,84 @@ export default function SalesReportPage() {
               </aside>
             </div>
 
-            <div className="flex flex-wrap gap-2">
+            </fieldset>
+
+            <div className="flex flex-wrap gap-2 pt-2 border-t">
               {clientSaved ? (
-                <Button variant="outline" onClick={() => void saveFacilityContact()} disabled={saving}>
-                  <UserPlus className="mr-1.5 h-4 w-4" />
+                <Button variant="outline" size="sm" className="h-9 text-xs" onClick={() => void saveFacilityContact()} disabled={saving || reportLocked}>
+                  <UserPlus className="mr-1.5 h-3.5 w-3.5" />
                   Add contact people
                 </Button>
               ) : null}
-              <Button onClick={() => void logVisit()} disabled={saving || matching}>
-                Save visit report
+              <Button 
+                size="sm" 
+                className="min-h-11 text-white hover:opacity-90" 
+                style={{ backgroundColor: primaryColor }}
+                onClick={() => void logVisit()} 
+                disabled={saving || matching || reportLocked}
+              >
+                {saving ? <Clock className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Plus className="mr-1.5 h-3.5 w-3.5" />}
+                {existingVisit ? "Update visit report" : "Save visit report"}
               </Button>
             </div>
           </CardContent>
         </Card>
       ) : null}
 
+      {/* Step 4: Visits List */}
       {selectedPlanner ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">
+        <Card className="shadow-sm overflow-hidden">
+          <CardHeader className="border-b bg-muted/30 pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <FileText className="h-4 w-4" style={{ color: primaryColor }} />
               Visits on {dateLabel(selectedPlanner.date)} ({visits.length})
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2">
+          <CardContent className="p-0 divide-y">
             {visits.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No visit reports for this date yet.</p>
+              <div className="p-6 text-center text-sm text-muted-foreground">No visit reports for this date yet.</div>
             ) : (
               visits.map((visit) => (
-                <div key={visit._id} className="rounded-lg border p-3 text-sm">
-                  <div className="flex justify-between gap-2">
-                    <span className="font-medium">{visit.clientName}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {visit.checkInAt ? new Date(visit.checkInAt).toLocaleTimeString() : ""}
-                    </span>
+                <div key={visit._id} className="p-3 hover:bg-muted/20 transition-colors">
+                  <div className="flex justify-between gap-2 items-start">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-sm truncate">{visit.clientName}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                        {visit.personMet
+                          ? `${visit.personMet}${visit.personRole ? ` · ${visit.personRole}` : ""}`
+                          : visit.purpose || "—"}
+                        {visit.outcome ? ` · ${visit.outcome}` : ""}
+                        {visit.outcomeDetail ? ` · ${visit.outcomeDetail}` : ""}
+                        {visit.personPhone ? ` · ${visit.personPhone}` : ""}
+                      </p>
+                      {(visit.interestCategories || []).length > 0 ? (
+                        <p className="mt-1.5 text-[11px] font-medium" style={{ color: primaryColor }}>
+                          Interest:{" "}
+                          {visit.interestCategories
+                            .map((item: any) =>
+                              item.note ? `${item.categoryName} (${item.note})` : item.categoryName,
+                            )
+                            .join(", ")}
+                        </p>
+                      ) : null}
+                    </div>
+                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                      <Badge variant="outline" className={`text-[10px] h-4 px-1.5 ${visit.status === "unlocked" ? "border-amber-300 bg-amber-50 text-amber-700" : "border-emerald-300 bg-emerald-50 text-emerald-700"}`}>
+                        {visit.status === "unlocked" ? "Unlocked" : "Locked"}
+                      </Badge>
+                      {visit.checkInAt ? (
+                        <span className="text-[10px] text-muted-foreground">
+                          {new Date(visit.checkInAt).toLocaleTimeString()}
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    {visit.personMet
-                      ? `${visit.personMet}${visit.personRole ? ` · ${visit.personRole}` : ""}`
-                      : visit.purpose || "—"}
-                    {visit.outcome ? ` · ${visit.outcome}` : ""}
-                    {visit.outcomeDetail ? ` · ${visit.outcomeDetail}` : ""}
-                    {visit.personPhone ? ` · ${visit.personPhone}` : ""}
-                  </p>
-                  {(visit.interestCategories || []).length > 0 ? (
-                    <p className="mt-1 text-xs text-teal-800">
-                      Interest:{" "}
-                      {visit.interestCategories
-                        .map((item: any) =>
-                          item.note ? `${item.categoryName} (${item.note})` : item.categoryName,
-                        )
-                        .join(", ")}
-                    </p>
-                  ) : null}
                 </div>
               ))
             )}
           </CardContent>
         </Card>
       ) : null}
-
-      <Button asChild variant="ghost" size="sm">
-        <Link href="/sales/planner">
-          <ChevronLeft className="mr-1 h-4 w-4" />
-          Back to planner
-        </Link>
-      </Button>
-    </div>
+    </SalesPage>
   )
 }

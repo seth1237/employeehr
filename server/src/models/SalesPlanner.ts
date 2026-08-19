@@ -8,10 +8,23 @@ const SalesPlannerSchema = new mongoose.Schema(
     visits: [
       {
         clientName: { type: String, required: true },
-        clientId: { type: String }, // Optional, can be derived from existing stock clients
+        clientId: { type: String },
         reason: { type: String, required: true },
         customReason: { type: String },
-      }
+        expectedOutcome: { type: String },
+        plannedTime: { type: String },
+        priority: { type: String, enum: ["low", "medium", "high", "critical"], default: "medium" },
+        location: { type: String },
+        notes: { type: String },
+        followUpDate: { type: String },
+        interestCategories: [{ type: String }],
+        expenses: {
+          transport: { type: Number, default: 0 },
+          accommodation: { type: Number, default: 0 },
+          meals: { type: Number, default: 0 },
+          other: { type: Number, default: 0 },
+        },
+      },
     ],
     projectedExpenses: { type: Number, default: 0 },
     status: {

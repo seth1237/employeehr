@@ -1459,6 +1459,16 @@ export const salesApi = {
   getHistory: () => client.get<any>("/api/sales/history"),
   adminList: (status?: string) =>
     client.get<any>(`/api/sales/admin${status ? `?status=${encodeURIComponent(status)}` : ""}`),
+  adminListVisits: (params?: { from?: string; to?: string; q?: string }) => {
+    const search = new URLSearchParams()
+    if (params?.from) search.set("from", params.from)
+    if (params?.to) search.set("to", params.to)
+    if (params?.q) search.set("q", params.q)
+    const qs = search.toString()
+    return client.get<any>(`/api/sales/admin/visits${qs ? `?${qs}` : ""}`)
+  },
+  adminRevokeVisit: (id: string, data?: { note?: string }) =>
+    client.post<any>(`/api/sales/admin/visits/${id}/revoke`, data || {}),
   adminUpdateReport: (id: string, data: any) =>
     client.patch<any>(`/api/sales/admin/reports/${id}`, data),
   adminUpdateQuote: (id: string, data: any) =>

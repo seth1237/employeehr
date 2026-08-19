@@ -35,6 +35,12 @@ router.get("/planner", roleMiddleware("sales_rep"), SalesController.getPlanners)
 router.post("/planner", roleMiddleware("sales_rep"), SalesController.createPlanner)
 
 router.get("/admin", roleMiddleware("company_admin", "admin", "hr"), SalesController.adminList)
+router.get("/admin/visits", roleMiddleware("company_admin", "admin", "hr"), SalesController.adminListVisits)
+router.post(
+  "/admin/visits/:id/revoke",
+  roleMiddleware("company_admin", "admin", "hr"),
+  SalesController.adminRevokeVisit,
+)
 router.patch(
   "/admin/reports/:id",
   roleMiddleware("company_admin", "admin", "hr"),

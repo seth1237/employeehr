@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
 import { salesApi, stockApi } from "@/lib/api"
 import {
@@ -13,6 +12,27 @@ import {
   downloadSalesInvoicePdf,
   downloadSalesQuotePdf,
 } from "@/lib/sales-quote-pdf"
+import { SalesClientPicker } from "@/components/sales/client-picker"
+import { SalesEmpty, SalesHeader, SalesPage, SalesStatusBadge } from "@/components/sales/sales-ui"
+import { useSalesBranding } from "@/hooks/use-sales-branding"
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
+import {
+  FileText,
+  Package,
+  Trash2,
+  Download,
+  ArrowRightLeft,
+  Copy,
+  Pencil,
+  ExternalLink,
+  Filter,
+  Clock,
+} from "lucide-react"
 
 type DraftItem = {
   productId: string
@@ -84,12 +104,11 @@ function quoteStatusLabel(quote: StockQuote, invoice?: StockInvoice) {
 
 export default function SalesQuotesPage() {
   const { toast } = useToast()
+  const branding = useSalesBranding()
   const [quotes, setQuotes] = useState<StockQuote[]>([])
   const [invoices, setInvoices] = useState<StockInvoice[]>([])
   const [productQuery, setProductQuery] = useState("")
   const [products, setProducts] = useState<any[]>([])
-  const [clientQuery, setClientQuery] = useState("")
-  const [clientOptions, setClientOptions] = useState<any[]>([])
   const [clientName, setClientName] = useState("")
   const [clientPhone, setClientPhone] = useState("")
   const [clientLocation, setClientLocation] = useState("")
@@ -99,6 +118,10 @@ export default function SalesQuotesPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [convertingId, setConvertingId] = useState<string | null>(null)
+  const [statusFilter, setStatusFilter] = useState("all")
+  const [filtersOpen, setFiltersOpen] = useState(false)
+
+  const primaryColor = branding.primaryColor
 
   const invoiceByQuoteId = useMemo(() => {
     const map = new Map<string, StockInvoice>()
@@ -149,17 +172,6 @@ export default function SalesQuotesPage() {
     return () => clearTimeout(handle)
   }, [productQuery])
 
-  useEffect(() => {
-    if (clientQuery.trim().length < 2) {
-      setClientOptions([])
-      return
-    }
-    const handle = setTimeout(() => {
-      void salesApi.searchClients(clientQuery).then((res) => setClientOptions(res.data || []))
-    }, 250)
-    return () => clearTimeout(handle)
-  }, [clientQuery])
-
   const totals = useMemo(() => {
     return items.reduce(
       (acc, item) => {
@@ -207,7 +219,6 @@ export default function SalesQuotesPage() {
     setClientLocation("")
     setClientContactPerson("")
     setCustomerId("")
-    setClientQuery("")
     setEditingId(null)
   }
 
@@ -308,117 +319,195 @@ export default function SalesQuotesPage() {
     window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
-  return (
-    <div className="mx-auto max-w-5xl space-y-4 p-4 lg:p-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Quotes from live stock</h1>
-        <p className="text-sm text-muted-foreground">
-          Requests go to admin stock quotations for approval. After approval you can download the PDF
-          and convert it to an invoice for a second admin check. Approved invoices are downloadable by the client.
-        </p>
-      </div>
+  const filteredQuotes = useMemo(() => {
+    if (statusFilter === "all") return quotes
+    return quotes.filter((quote) => {
+      const invoice = invoiceByQuoteId.get(quote._id)
+      if (statusFilter === "pending") return quote.status === "pending_approval"
+      if (statusFilter === "approved") return quoteIsApproved(quote) && quote.status !== "converted"
+      if (statusFilter === "rejected") return quote.status === "cancelled"
+      if (statusFilter === "converted") return quote.status === "converted" || Boolean(invoice)
+      return true
+    })
+  }, [quotes, statusFilter, invoiceByQuoteId])
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">
+  const filterCount = statusFilter === "all" ? 0 : 1
+
+  const statusButtons = (
+    <div className="flex flex-wrap gap-2">
+      {[
+        ["all", "All"],
+        ["pending", "Pending"],
+        ["approved", "Approved"],
+        ["converted", "Invoiced"],
+        ["rejected", "Rejected"],
+      ].map(([value, label]) => (
+        <Button
+          key={value}
+          size="sm"
+          variant={statusFilter === value ? "secondary" : "outline"}
+          className="min-h-10"
+          onClick={() => {
+            setStatusFilter(value)
+            setFiltersOpen(false)
+          }}
+        >
+          {label}
+        </Button>
+      ))}
+    </div>
+  )
+
+  return (
+    <SalesPage>
+      <SalesHeader
+        title="Quotes"
+        description="Request a quote from live stock. Admin approves it before you can download or convert to an invoice."
+        color={primaryColor}
+      />
+
+      {/* Quote Form */}
+      <Card className="shadow-sm overflow-hidden">
+        <CardHeader className="border-b bg-muted/30 pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <FileText className="h-4 w-4" style={{ color: primaryColor }} />
             {editingId ? "Update quote request" : "New quote request"}
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="space-y-1">
-              <Label>Client</Label>
-              <Input
-                value={clientName}
-                onChange={(e) => {
-                  setClientName(e.target.value)
-                  setCustomerId("")
-                  setClientQuery(e.target.value)
-                }}
-                placeholder="Search existing client or type a name"
+        <CardContent className="p-4 space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <SalesClientPicker
+              value={clientName}
+              clientId={customerId}
+              required
+              onChange={(next) => {
+                setClientName(next.name)
+                setCustomerId(next.clientId || "")
+                if (next.phone) setClientPhone(next.phone)
+                if (next.location) setClientLocation(next.location)
+                if (next.contactPerson) setClientContactPerson(next.contactPerson)
+              }}
+            />
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Phone</Label>
+              <Input 
+                className="h-11" 
+                value={clientPhone} 
+                onChange={(e) => setClientPhone(e.target.value)} 
+                placeholder="Client phone number"
               />
-              {clientOptions.length > 0 ? (
-                <div className="rounded-md border bg-white shadow-sm">
-                  {clientOptions.map((client) => (
-                    <button
-                      key={client._id}
-                      type="button"
-                      className="block w-full px-3 py-2 text-left text-sm hover:bg-slate-50"
-                      onClick={() => {
-                        setClientName(client.name)
-                        setClientPhone(client.phone)
-                        setClientLocation(client.location || "")
-                        setClientContactPerson(client.contactPerson || "")
-                        setCustomerId(client._id)
-                        setClientQuery("")
-                        setClientOptions([])
-                      }}
-                    >
-                      {client.name}
-                      <span className="block text-xs text-muted-foreground">
-                        {client.phone} {client.location}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-            <div className="space-y-1">
-              <Label>Phone</Label>
-              <Input value={clientPhone} onChange={(e) => setClientPhone(e.target.value)} />
             </div>
           </div>
-          <div className="space-y-1">
-            <Label>Search stock</Label>
-            <Input
-              value={productQuery}
-              onChange={(e) => setProductQuery(e.target.value)}
-              placeholder="Type a product name"
-            />
-            {products.length > 0 && productQuery.trim().length >= 2 ? (
-              <div className="max-h-56 overflow-y-auto rounded-md border bg-white shadow-sm">
+
+          <div className="space-y-1.5 relative">
+            <Label className="text-xs font-medium">Search stock</Label>
+            <div className="relative">
+              <Package className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                className="h-11 pl-8"
+                value={productQuery}
+                onChange={(e) => setProductQuery(e.target.value)}
+                placeholder="Type a product name to add to quote"
+              />
+            </div>
+            {products.length > 0 && productQuery.trim().length >= 2 && (
+              <div className="absolute z-20 w-full top-[100%] mt-1 bg-white border rounded-lg shadow-lg max-h-56 overflow-y-auto animate-in fade-in-0 zoom-in-95 duration-100">
                 {products.map((product) => (
                   <button
                     key={product._id}
                     type="button"
-                    className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-slate-50"
+                    className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-muted/50 transition-colors border-b last:border-0"
                     onClick={() => addProduct(product)}
                   >
-                    <span>
-                      {product.name}
-                      <span className="block text-xs text-muted-foreground">
+                    <span className="min-w-0 flex-1">
+                      <span className="font-medium block truncate">{product.name}</span>
+                      <span className="block text-xs text-muted-foreground mt-0.5">
                         In stock: {product.currentQuantity}
                         {product.taxable ? ` · Tax ${product.taxRate || 16}%` : " · No tax"}
                       </span>
                     </span>
-                    <span>KES {Number(product.sellingPrice || 0).toLocaleString("en-KE")}</span>
+                    <span className="font-semibold flex-shrink-0 ml-2">KES {Number(product.sellingPrice || 0).toLocaleString("en-KE")}</span>
                   </button>
                 ))}
               </div>
-            ) : null}
+            )}
           </div>
 
-          {items.length > 0 ? (
-            <div className="overflow-x-auto rounded-lg border">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/40 text-left text-xs uppercase text-muted-foreground">
-                  <tr>
-                    <th className="px-3 py-2">Product</th>
-                    <th className="px-3 py-2">Qty</th>
-                    <th className="px-3 py-2">Price</th>
-                    <th className="px-3 py-2">Tax</th>
-                    <th className="px-3 py-2" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((item) => (
-                    <tr key={item.productId} className="border-t">
-                      <td className="px-3 py-2">{item.productName}</td>
-                      <td className="px-3 py-2">
+          {items.length > 0 && (
+            <>
+              <div className="hidden overflow-x-auto rounded-md border md:block">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-500">
+                    <tr>
+                      <th className="px-3 py-2.5 font-medium">Product</th>
+                      <th className="px-3 py-2.5 font-medium w-24">Qty</th>
+                      <th className="px-3 py-2.5 font-medium">Price</th>
+                      <th className="px-3 py-2.5 font-medium">Tax</th>
+                      <th className="px-3 py-2.5 font-medium text-right">Total</th>
+                      <th className="px-3 py-2.5 font-medium w-16"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {items.map((item) => (
+                      <tr key={item.productId} className="hover:bg-slate-50">
+                        <td className="px-3 py-2 font-medium">{item.productName}</td>
+                        <td className="px-3 py-2">
+                          <Input
+                            type="number"
+                            min={1}
+                            className="h-8 w-16 text-xs"
+                            value={item.quantity}
+                            onChange={(e) =>
+                              setItems((current) =>
+                                current.map((row) =>
+                                  row.productId === item.productId
+                                    ? { ...row, quantity: Number(e.target.value || 1) }
+                                    : row,
+                                ),
+                              )
+                            }
+                          />
+                        </td>
+                        <td className="px-3 py-2">{item.unitPrice.toLocaleString("en-KE")}</td>
+                        <td className="px-3 py-2 text-muted-foreground">{item.taxable ? `${item.taxRate}%` : "0%"}</td>
+                        <td className="px-3 py-2 text-right font-medium">
+                          {(item.quantity * item.unitPrice).toLocaleString("en-KE")}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 w-8 p-0"
+                            onClick={() => setItems((current) => current.filter((row) => row.productId !== item.productId))}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="space-y-2 md:hidden">
+                {items.map((item) => (
+                  <div key={item.productId} className="rounded-md border border-slate-200 p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="font-medium">{item.productName}</p>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => setItems((current) => current.filter((row) => row.productId !== item.productId))}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      <div>
+                        <Label className="text-xs">Qty</Label>
                         <Input
                           type="number"
                           min={1}
-                          className="h-8 w-20"
+                          className="h-11"
                           value={item.quantity}
                           onChange={(e) =>
                             setItems((current) =>
@@ -430,53 +519,63 @@ export default function SalesQuotesPage() {
                             )
                           }
                         />
-                      </td>
-                      <td className="px-3 py-2">{item.unitPrice.toLocaleString("en-KE")}</td>
-                      <td className="px-3 py-2">{item.taxable ? `${item.taxRate}%` : "0%"}</td>
-                      <td className="px-3 py-2 text-right">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setItems((current) => current.filter((row) => row.productId !== item.productId))}
-                        >
-                          Remove
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : null}
+                      </div>
+                      <p className="self-end text-sm font-semibold">
+                        KES {(item.quantity * item.unitPrice).toLocaleString("en-KE")}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
 
-          <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-            <span>
-              Subtotal {totals.subTotal.toLocaleString("en-KE")} · Tax {totals.tax.toLocaleString("en-KE")} · Total{" "}
-              <strong>KES {totals.grand.toLocaleString("en-KE")}</strong>
-            </span>
-            <div className="flex gap-2">
-              {editingId ? (
-                <Button variant="outline" onClick={resetDraft}>
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2 border-t">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+              <span className="text-muted-foreground">Subtotal: <span className="font-medium text-foreground">{totals.subTotal.toLocaleString("en-KE")}</span></span>
+              <span className="text-muted-foreground">Tax: <span className="font-medium text-foreground">{totals.tax.toLocaleString("en-KE")}</span></span>
+              <span className="text-base font-semibold" style={{ color: primaryColor }}>Total: KES {totals.grand.toLocaleString("en-KE")}</span>
+            </div>
+            <div className="flex gap-2 w-full sm:w-auto">
+              {editingId && (
+                <Button variant="outline" onClick={resetDraft} className="flex-1 sm:flex-none">
                   Cancel
                 </Button>
-              ) : null}
-              <Button onClick={() => void saveQuote()} disabled={saving}>
-                {editingId ? "Update request" : "Submit for approval"}
+              )}
+              <Button 
+                onClick={() => void saveQuote()} 
+                disabled={saving} 
+                className="flex-1 sm:flex-none text-white hover:opacity-90" 
+                style={{ backgroundColor: primaryColor }}
+              >
+                {saving ? "Saving..." : editingId ? "Update request" : "Submit for approval"}
               </Button>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">My quotes</CardTitle>
+      {/* Quotes List */}
+      <Card className="shadow-sm overflow-hidden">
+        <CardHeader className="flex flex-col gap-3 border-b border-slate-100 pb-3 sm:flex-row sm:items-center sm:justify-between">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <FileText className="h-4 w-4" style={{ color: primaryColor }} />
+            My quotes
+          </CardTitle>
+          <div className="hidden md:block">{statusButtons}</div>
+          <Button variant="outline" className="min-h-10 md:hidden" onClick={() => setFiltersOpen(true)}>
+            <Filter className="mr-1.5 h-4 w-4" />
+            Filters{filterCount ? ` (${filterCount})` : ""}
+          </Button>
         </CardHeader>
-        <CardContent className="space-y-2">
-          {quotes.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No quotes yet.</p>
+        <CardContent className="divide-y p-0">
+          {filteredQuotes.length === 0 ? (
+            <SalesEmpty
+              title={quotes.length === 0 ? "No quotes yet" : "No quotes match these filters"}
+              description="Create a quote from live stock, then wait for admin approval."
+            />
           ) : (
-            quotes.map((quote) => {
+            filteredQuotes.map((quote) => {
               const invoice = invoiceByQuoteId.get(quote._id) ||
                 (quote.convertedInvoiceId
                   ? invoices.find((item) => item._id === quote.convertedInvoiceId)
@@ -487,57 +586,78 @@ export default function SalesQuotesPage() {
                 (!invoice || invoice.status === "cancelled") &&
                 quote.status !== "converted"
               const invoiceReady = invoice?.status === "issued" || invoice?.status === "paid"
+              
               return (
-                <div key={quote._id} className="rounded-lg border p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <p className="font-medium">
-                        {quote.quotationNumber} · {quote.client?.name}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        KES {Number(quote.grandTotal || 0).toLocaleString("en-KE")} · {quote.items?.length || 0} items
+                <div key={quote._id} className="p-4 hover:bg-muted/20 transition-colors">
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-semibold text-sm">{quote.quotationNumber}</p>
+                        <SalesStatusBadge status={quoteStatusLabel(quote, invoice)} />
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1 truncate">
+                        {quote.client?.name} · KES {Number(quote.grandTotal || 0).toLocaleString("en-KE")} · {quote.items?.length || 0} items
                         {invoice ? ` · ${invoice.invoiceNumber}` : ""}
                       </p>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="outline">{quoteStatusLabel(quote, invoice)}</Badge>
-                      {quote.status === "pending_approval" || quote.status === "cancelled" ? (
-                        <Button size="sm" variant="outline" onClick={() => loadForRework(quote)}>
+                    <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
+                      {(quote.status === "pending_approval" || quote.status === "cancelled") && (
+                        <Button size="sm" variant="outline" className="min-h-10" onClick={() => loadForRework(quote)}>
+                          <Pencil className="mr-1.5 h-3 w-3" />
                           {quote.status === "cancelled" ? "Rework" : "Edit"}
                         </Button>
-                      ) : null}
-                      {canDownloadQuote ? (
-                        <Button size="sm" variant="outline" onClick={() => void downloadApproved(quote)}>
+                      )}
+                      {canDownloadQuote && (
+                        <Button size="sm" variant="outline" className="min-h-10" onClick={() => void downloadApproved(quote)}>
+                          <Download className="mr-1.5 h-3 w-3" />
                           Download quote
                         </Button>
-                      ) : null}
-                      {canConvert ? (
+                      )}
+                      {canConvert && (
                         <Button
                           size="sm"
+                          className="min-h-10 text-white hover:opacity-90"
+                          style={{ backgroundColor: primaryColor }}
                           onClick={() => void convertToInvoice(quote)}
                           disabled={convertingId === quote._id}
                         >
-                          {convertingId === quote._id ? "Converting…" : "Convert to invoice"}
+                          {convertingId === quote._id ? (
+                            <>
+                              <Clock className="mr-1.5 h-3 w-3 animate-spin" />
+                              Converting…
+                            </>
+                          ) : (
+                            <>
+                              <ArrowRightLeft className="mr-1.5 h-3 w-3" />
+                              Convert to invoice
+                            </>
+                          )}
                         </Button>
-                      ) : null}
-                      {invoice?.status === "pending_approval" ? (
-                        <span className="text-xs text-muted-foreground">Waiting for invoice approval</span>
-                      ) : null}
-                      {invoiceReady && invoice ? (
+                      )}
+                      {invoice?.status === "pending_approval" && (
+                        <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          Waiting for invoice approval
+                        </span>
+                      )}
+                      {invoiceReady && invoice && (
                         <>
-                          <Button size="sm" variant="outline" onClick={() => void downloadIssuedInvoice(invoice)}>
+                          <Button size="sm" variant="outline" className="min-h-10" onClick={() => void downloadIssuedInvoice(invoice)}>
+                            <Download className="mr-1.5 h-3 w-3" />
                             Download invoice
                           </Button>
-                          <Button size="sm" variant="outline" asChild>
+                          <Button size="sm" variant="outline" className="min-h-10" asChild>
                             <a href={clientInvoicePdfUrl(invoice._id)} target="_blank" rel="noreferrer">
+                              <ExternalLink className="mr-1.5 h-3 w-3" />
                               Client download
                             </a>
                           </Button>
-                          <Button size="sm" variant="ghost" onClick={() => void copyClientLink(invoice)}>
-                            Copy client link
+                          <Button size="sm" variant="ghost" className="min-h-10 text-slate-600" onClick={() => void copyClientLink(invoice)}>
+                            <Copy className="mr-1.5 h-3 w-3" />
+                            Copy link
                           </Button>
                         </>
-                      ) : null}
+                      )}
                     </div>
                   </div>
                 </div>
@@ -546,6 +666,14 @@ export default function SalesQuotesPage() {
           )}
         </CardContent>
       </Card>
-    </div>
+      <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
+        <SheetContent side="bottom" className="pb-8">
+          <SheetHeader>
+            <SheetTitle>Filter quotes</SheetTitle>
+          </SheetHeader>
+          <div className="px-4 pb-4">{statusButtons}</div>
+        </SheetContent>
+      </Sheet>
+    </SalesPage>
   )
 }

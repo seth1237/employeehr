@@ -13,11 +13,91 @@ import { SalesClientActivity } from "../models/SalesClientActivity"
 import { User } from "../models/User"
 import { createOrUpdateStockClient } from "../services/stockClientSave.service"
 import { SalesPlanner } from "../models/SalesPlanner"
+import { StockInvoice } from "../models/StockInvoice"
+import { SalesRepTarget } from "../models/SalesRepTarget"
+import {
+  currentPeriods,
+  inPeriod,
+  invoiceAmount,
+  isGeneratedInvoice,
+  type PeriodKind,
+  type PeriodWindow,
+} from "../lib/sales-periods"
 const VAT_RATE = 16
 const ADMIN_ROLES = new Set(["company_admin", "admin", "hr", "super_admin"])
 
 function isAdminRole(role?: string) {
   return Boolean(role && ADMIN_ROLES.has(role))
+}
+
+function moneyPct(actual: number, target: number) {
+  if (!target || target <= 0) return null
+  return Math.round((actual / target) * 100)
+}
+
+function summarizeSales(
+  invoices: Array<{ status?: string; createdAt?: Date; grandTotal?: number; subTotal?: number }>,
+  window: PeriodWindow,
+  target: number,
+) {
+  const rows = invoices.filter((invoice) => isGeneratedInvoice(invoice) && inPeriod(invoice.createdAt, window))
+  const actual = rows.reduce((sum, invoice) => sum + invoiceAmount(invoice), 0)
+  return {
+    label: window.label,
+    actual,
+    target,
+    count: rows.length,
+    percent: moneyPct(actual, target),
+  }
+}
+
+function summarizeExpenses(planners: any[], window: PeriodWindow) {
+  const lines: Array<{ date: string; clientName: string; transport: number; nightOut: boolean }> = []
+  let transport = 0
+  let nightOuts = 0
+  let visitCount = 0
+  for (const plan of planners) {
+    if (!inPeriod(plan.date, window)) continue
+    for (const visit of plan.visits || []) {
+      visitCount += 1
+      const amount = Number(visit?.expenses?.transport || 0)
+      const nightOut = Boolean(visit?.expenses?.nightOut || visit?.nightOut)
+      transport += amount
+      if (nightOut) nightOuts += 1
+      if (amount > 0 || nightOut) {
+        lines.push({
+          date: String(plan.date || ""),
+          clientName: String(visit.clientName || "Visit"),
+          transport: amount,
+          nightOut,
+        })
+      }
+    }
+  }
+  return { label: window.label, transport, nightOuts, visitCount, lines }
+}
+
+function performanceForUser(
+  invoices: any[],
+  planners: any[],
+  target: { weeklyAmount?: number; monthlyAmount?: number; quarterlyAmount?: number } | null,
+  periods: Record<PeriodKind, PeriodWindow>,
+) {
+  const weeklyTarget = Number(target?.weeklyAmount || 0)
+  const monthlyTarget = Number(target?.monthlyAmount || 0)
+  const quarterlyTarget = Number(target?.quarterlyAmount || 0)
+  return {
+    sales: {
+      weekly: summarizeSales(invoices, periods.weekly, weeklyTarget),
+      monthly: summarizeSales(invoices, periods.monthly, monthlyTarget),
+      quarterly: summarizeSales(invoices, periods.quarterly, quarterlyTarget),
+    },
+    expenses: {
+      weekly: summarizeExpenses(planners, periods.weekly),
+      monthly: summarizeExpenses(planners, periods.monthly),
+      quarterly: summarizeExpenses(planners, periods.quarterly),
+    },
+  }
 }
 
 function escapeRegex(value: string) {
@@ -435,6 +515,21 @@ export class SalesController {
       }
       const date = String(req.body?.date || "").trim() || new Date().toISOString().slice(0, 10)
       const plannerId = String(req.body?.plannerId || "").trim()
+      const planner = plannerId
+        ? await SalesPlanner.findOne({ _id: plannerId, org_id, userId })
+        : await SalesPlanner.findOne({ org_id, userId, date })
+      if (plannerId && !planner) {
+        return res.status(400).json({ success: false, message: "Planner not found" })
+      }
+      if (planner && planner.status !== "approved") {
+        return res.status(400).json({
+          success: false,
+          message:
+            planner.status === "pending"
+              ? "This planner is waiting for admin approval. You can complete visits after it is approved."
+              : "This planner is not approved, so visits cannot be completed.",
+        })
+      }
       const report = await ensureTodayReport(org_id, userId, date)
 
       const existing = await SalesVisit.findOne({
@@ -1112,12 +1207,49 @@ export class SalesController {
       if (!org_id || !userId) {
         return res.status(401).json({ success: false, message: "Unauthorized" })
       }
-      const [reports, visits, quotes] = await Promise.all([
+      const periods = currentPeriods()
+      const quarterFrom = periods.quarterly.from
+      const [reports, visits, quotes, invoices, planners, target] = await Promise.all([
         SalesDailyReport.find({ org_id, userId }).sort({ date: -1 }).limit(30).lean(),
         SalesVisit.find({ org_id, userId }).sort({ checkInAt: -1 }).limit(80).lean(),
         StockQuotation.find({ org_id, createdBy: userId }).sort({ createdAt: -1 }).limit(40).lean(),
+        StockInvoice.find({
+          org_id,
+          createdBy: userId,
+          status: { $in: ["issued", "paid", "pending_approval"] },
+          createdAt: { $gte: quarterFrom },
+        })
+          .sort({ createdAt: -1 })
+          .lean(),
+        SalesPlanner.find({
+          org_id,
+          userId,
+          status: "approved",
+          date: { $gte: toDateKey(quarterFrom) },
+        })
+          .sort({ date: -1 })
+          .lean(),
+        SalesRepTarget.findOne({ org_id, userId }).lean(),
       ])
-      return res.status(200).json({ success: true, data: { reports, visits, quotes } })
+      const performance = performanceForUser(invoices, planners, target, periods)
+      return res.status(200).json({
+        success: true,
+        data: {
+          reports,
+          visits,
+          quotes,
+          invoices: invoices.slice(0, 20).map((invoice) => ({
+            _id: String(invoice._id),
+            invoiceNumber: invoice.invoiceNumber,
+            clientName: invoice.client?.name,
+            grandTotal: invoiceAmount(invoice),
+            status: invoice.status,
+            createdAt: invoice.createdAt,
+          })),
+          sales: performance.sales,
+          expenses: performance.expenses,
+        },
+      })
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Failed to load history"
       return res.status(500).json({ success: false, message })
@@ -1519,6 +1651,126 @@ export class SalesController {
       return res.status(200).json({ success: true, data: planner })
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Failed to review planner"
+      return res.status(500).json({ success: false, message })
+    }
+  }
+
+  static async adminGetPerformance(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.org_id
+      if (!org_id || !isAdminRole(req.user?.role)) {
+        return res.status(403).json({ success: false, message: "Admins only" })
+      }
+      const periods = currentPeriods()
+      const reps = await User.find({ org_id, role: "sales_rep" })
+        .select("firstName lastName email status")
+        .sort({ firstName: 1, lastName: 1 })
+        .lean()
+      const userIds = reps.map((rep) => String(rep._id))
+      const [targets, invoices, planners] = await Promise.all([
+        SalesRepTarget.find({ org_id, userId: { $in: userIds } }).lean(),
+        userIds.length
+          ? StockInvoice.find({
+              org_id,
+              createdBy: { $in: userIds },
+              status: { $in: ["issued", "paid", "pending_approval"] },
+              createdAt: { $gte: periods.quarterly.from },
+            }).lean()
+          : Promise.resolve([]),
+        userIds.length
+          ? SalesPlanner.find({
+              org_id,
+              userId: { $in: userIds },
+              status: "approved",
+              date: { $gte: toDateKey(periods.quarterly.from) },
+            }).lean()
+          : Promise.resolve([]),
+      ])
+      const targetByUser = new Map(targets.map((row) => [String(row.userId), row]))
+      const invoicesByUser = new Map<string, typeof invoices>()
+      for (const invoice of invoices) {
+        const key = String(invoice.createdBy)
+        const list = invoicesByUser.get(key) || []
+        list.push(invoice)
+        invoicesByUser.set(key, list)
+      }
+      const plannersByUser = new Map<string, typeof planners>()
+      for (const plan of planners) {
+        const key = String(plan.userId)
+        const list = plannersByUser.get(key) || []
+        list.push(plan)
+        plannersByUser.set(key, list)
+      }
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          periods: {
+            weekly: periods.weekly.label,
+            monthly: periods.monthly.label,
+            quarterly: periods.quarterly.label,
+          },
+          reps: reps.map((rep) => {
+            const userId = String(rep._id)
+            const target = targetByUser.get(userId) || null
+            const performance = performanceForUser(
+              invoicesByUser.get(userId) || [],
+              plannersByUser.get(userId) || [],
+              target,
+              periods,
+            )
+            return {
+              userId,
+              name: `${rep.firstName || ""} ${rep.lastName || ""}`.trim() || rep.email || "Rep",
+              email: rep.email,
+              status: rep.status,
+              weeklyAmount: Number(target?.weeklyAmount || 0),
+              monthlyAmount: Number(target?.monthlyAmount || 0),
+              quarterlyAmount: Number(target?.quarterlyAmount || 0),
+              sales: performance.sales,
+              expenses: performance.expenses,
+            }
+          }),
+        },
+      })
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to load performance"
+      return res.status(500).json({ success: false, message })
+    }
+  }
+
+  static async adminSetTarget(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.org_id
+      if (!org_id || !isAdminRole(req.user?.role)) {
+        return res.status(403).json({ success: false, message: "Admins only" })
+      }
+      const userId = String(req.params.userId || "").trim()
+      if (!Types.ObjectId.isValid(userId)) {
+        return res.status(400).json({ success: false, message: "Invalid sales rep" })
+      }
+      const rep = await User.findOne({ _id: userId, org_id, role: "sales_rep" }).select("_id")
+      if (!rep) {
+        return res.status(404).json({ success: false, message: "Sales rep not found" })
+      }
+      const weeklyAmount = Math.max(0, Number(req.body?.weeklyAmount || 0))
+      const monthlyAmount = Math.max(0, Number(req.body?.monthlyAmount || 0))
+      const quarterlyAmount = Math.max(0, Number(req.body?.quarterlyAmount || 0))
+      const target = await SalesRepTarget.findOneAndUpdate(
+        { org_id, userId },
+        {
+          org_id,
+          userId,
+          weeklyAmount,
+          monthlyAmount,
+          quarterlyAmount,
+          setBy: req.user?.userId,
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true },
+      )
+      return res.status(200).json({ success: true, data: target })
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to save target"
       return res.status(500).json({ success: false, message })
     }
   }

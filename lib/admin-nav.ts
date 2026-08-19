@@ -37,6 +37,8 @@ export const ADMIN_NAV_ITEMS: AdminNavItem[] = [
   { label: "Client CRM", href: "/admin/clients/clients-list", section: "CLIENTS", keywords: ["customers", "crm", "contacts", "groups", "directory"] },
   { label: "Sales Reports", href: "/admin/sales-reports", section: "CLIENTS", keywords: ["sales rep", "field", "quotes", "approval", "visits"] },
   { label: "Field Reports", href: "/admin/field-management/reports", section: "FIELD MANAGEMENT", keywords: ["visits", "sales report", "outcome", "planner"] },
+  { label: "Planner", href: "/admin/field-management/planner", section: "FIELD MANAGEMENT", keywords: ["sales planner", "approve"] },
+  { label: "Performance", href: "/admin/field-management/performance", section: "FIELD MANAGEMENT", keywords: ["sales target", "quota", "reps"] },
   { label: "Telesales", href: "/admin/clients/telesales", section: "CLIENTS", keywords: ["crm", "calls", "field"] },
   { label: "Installed Machines", href: "/admin/clients/installed-machines", section: "CLIENTS", keywords: ["machines", "service", "tickets"] },
   { label: "Complaints", href: "/admin/clients/complaints", section: "CLIENTS" },

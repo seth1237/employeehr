@@ -199,6 +199,7 @@ export default function SalesReportPage() {
   const [counties, setCounties] = useState<string[]>(KENYA_COUNTIES)
   const [selectedMonth, setSelectedMonth] = useState("")
   const [selectedWeek, setSelectedWeek] = useState<number | null>(null)
+  const [pendingPlannerCount, setPendingPlannerCount] = useState(0)
   const [selectedPlanner, setSelectedPlanner] = useState<Planner | null>(null)
   const [selectedClient, setSelectedClient] = useState<PlannerVisit | null>(null)
   const [matchedClient, setMatchedClient] = useState<any | null>(null)
@@ -224,7 +225,8 @@ export default function SalesReportPage() {
         salesApi.getCategories().catch(() => ({ data: [] })),
       ])
       const list = (plannerRes.data || []).filter((p: Planner) => p.status !== "rejected")
-      setPlanners(list)
+      setPendingPlannerCount(list.filter((p: Planner) => p.status === "pending").length)
+      setPlanners(list.filter((p: Planner) => p.status === "approved"))
       setRoles(optionsRes.data?.roles?.length ? optionsRes.data.roles : DEFAULT_ROLES)
       setCounties(optionsRes.data?.counties?.length ? optionsRes.data.counties : KENYA_COUNTIES)
       setCategories(categoriesRes.data || [])
@@ -394,6 +396,14 @@ export default function SalesReportPage() {
 
   const logVisit = async () => {
     if (!selectedPlanner || !selectedClient) return
+    if (selectedPlanner.status !== "approved") {
+      toast({
+        title: "Planner not approved yet",
+        description: "Complete visits after an admin approves this plan.",
+        variant: "destructive",
+      })
+      return
+    }
     if (reportLocked) {
       toast({
         title: "This report is locked",
@@ -534,10 +544,14 @@ export default function SalesReportPage() {
         <Card className="shadow-sm border-dashed">
           <CardContent className="p-6 text-sm text-muted-foreground flex flex-col items-center justify-center text-center gap-2">
             <Calendar className="h-8 w-8 text-muted-foreground/40" />
-            <p>No visit planners yet.</p>
+            <p>
+              {pendingPlannerCount > 0
+                ? "Your plans are waiting for admin approval. Complete appears after a plan is approved."
+                : "No approved visit planners yet."}
+            </p>
             <Button asChild variant="outline" size="sm" className="mt-2">
               <Link href="/sales/planner" style={{ color: primaryColor }}>
-                Create a planner
+                Open planner
               </Link>
             </Button>
           </CardContent>
@@ -1030,7 +1044,7 @@ export default function SalesReportPage() {
                 className="min-h-11 text-white hover:opacity-90" 
                 style={{ backgroundColor: primaryColor }}
                 onClick={() => void logVisit()} 
-                disabled={saving || matching || reportLocked}
+                disabled={saving || matching || reportLocked || selectedPlanner.status !== "approved"}
               >
                 {saving ? <Clock className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Plus className="mr-1.5 h-3.5 w-3.5" />}
                 {existingVisit ? "Update visit report" : "Save visit report"}

@@ -188,7 +188,25 @@ export default function SalesPlannerPage() {
   const VisitCard = ({ plan, visit }: { plan: any; visit: any }) => {
     const done = isDone(plan.date, visit.clientName)
     const overdue = plan.date < todayKey() && !done
-    const status = done ? "completed" : overdue ? "overdue" : plan.status === "rejected" ? "cancelled" : "planned"
+    const approved = plan.status === "approved"
+    const status = done
+      ? "completed"
+      : overdue
+        ? "overdue"
+        : plan.status === "rejected"
+          ? "cancelled"
+          : plan.status === "pending"
+            ? "pending"
+            : "planned"
+    const statusLabel = done
+      ? "Done"
+      : overdue
+        ? "Overdue"
+        : plan.status === "rejected"
+          ? "Rejected"
+          : plan.status === "pending"
+            ? "Awaiting approval"
+            : "Approved"
     return (
       <Card className="border-slate-200">
         <CardContent className="space-y-2 p-3">
@@ -199,7 +217,7 @@ export default function SalesPlannerPage() {
                 {plan.date === todayKey() ? "Today" : dateLabel(plan.date)}
               </p>
             </div>
-            <SalesStatusBadge status={status} />
+            <SalesStatusBadge status={status} label={statusLabel} />
           </div>
           <p className="text-sm text-slate-700">{visit.reason === "Other" ? visit.customReason : visit.reason}</p>
           {visit.location ? <p className="text-xs text-slate-500">{visit.location}</p> : null}
@@ -218,9 +236,17 @@ export default function SalesPlannerPage() {
             </p>
           ) : null}
           <div className="flex flex-wrap gap-2">
-            <Button asChild size="sm" className="min-h-10">
-              <Link href="/sales/report">{done ? "View" : "Complete"}</Link>
-            </Button>
+            {done ? (
+              <Button asChild size="sm" className="min-h-10">
+                <Link href="/sales/report">View</Link>
+              </Button>
+            ) : approved ? (
+              <Button asChild size="sm" className="min-h-10">
+                <Link href="/sales/report">Complete</Link>
+              </Button>
+            ) : plan.status === "pending" ? (
+              <p className="text-xs text-amber-700">Complete appears after admin approval.</p>
+            ) : null}
             {plan.status === "pending" ? (
               <Button
                 size="sm"
@@ -256,7 +282,7 @@ export default function SalesPlannerPage() {
       <SalesHeader
         color={branding.primaryColor}
         title="Planner"
-        description="Who are we seeing, why, and what will it cost to get there?"
+        description="Who are we seeing, why, and what will it cost to get there? Complete a visit after admin approves the plan."
         actions={
           <>
             <div className="flex rounded-md border border-slate-200 p-0.5">

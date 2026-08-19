@@ -183,6 +183,7 @@ export default function SalesDashboardPage() {
         nextVisitName={nextVisitName}
         quotesNeedingRevision={(reminders?.quotesNeedingRevision || []).length}
         quotesAwaitingDownload={(reminders?.quotesAwaitingDownload || []).length}
+        plannerStatus={todayPlanner?.status}
         onStartDay={() => void startDay()}
         onEndDay={() => void endDay()}
       />
@@ -263,9 +264,21 @@ export default function SalesDashboardPage() {
                       </p>
                     ) : null}
                     <div className="flex gap-2">
-                      <Button asChild size="sm" className="min-h-10 flex-1">
-                        <Link href="/sales/report">{done ? "View report" : "Record visit"}</Link>
-                      </Button>
+                      {done ? (
+                        <Button asChild size="sm" className="min-h-10 flex-1">
+                          <Link href="/sales/report">View report</Link>
+                        </Button>
+                      ) : todayPlanner?.status === "approved" ? (
+                        <Button asChild size="sm" className="min-h-10 flex-1">
+                          <Link href="/sales/report">Record visit</Link>
+                        </Button>
+                      ) : (
+                        <p className="text-xs text-amber-700">
+                          {todayPlanner?.status === "rejected"
+                            ? "This plan was rejected."
+                            : "Waiting for admin approval before you can complete visits."}
+                        </p>
+                      )}
                     </div>
                   </CardContent>
                 </Card>

@@ -68,5 +68,15 @@ router.patch(
   roleMiddleware("company_admin", "admin", "hr"),
   SalesController.adminReviewPlanner,
 )
+router.get(
+  "/admin/performance",
+  roleMiddleware("company_admin", "admin", "hr"),
+  SalesController.adminGetPerformance,
+)
+router.patch(
+  "/admin/performance/:userId",
+  roleMiddleware("company_admin", "admin", "hr"),
+  SalesController.adminSetTarget,
+)
 
 export default router

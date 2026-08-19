@@ -1481,6 +1481,11 @@ export const salesApi = {
   createPlanner: (data: any) => client.post<any>("/api/sales/planner", data),
   adminGetPlanners: (status?: string) => client.get<any>(`/api/sales/admin/planner${status ? `?status=${status}` : ""}`),
   adminReviewPlanner: (id: string, data: { action: "approve" | "reject"; note?: string }) => client.patch<any>(`/api/sales/admin/planner/${id}/review`, data),
+  adminGetPerformance: () => client.get<any>("/api/sales/admin/performance"),
+  adminSetTarget: (
+    userId: string,
+    data: { weeklyAmount: number; monthlyAmount: number; quarterlyAmount: number },
+  ) => client.patch<any>(`/api/sales/admin/performance/${encodeURIComponent(userId)}`, data),
 };
 
 // Export all APIs

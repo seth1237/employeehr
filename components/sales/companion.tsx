@@ -15,6 +15,7 @@ type SalesCompanionProps = {
   nextVisitName?: string
   quotesNeedingRevision: number
   quotesAwaitingDownload: number
+  plannerStatus?: string
   onStartDay: () => void
   onEndDay: () => void
 }
@@ -46,12 +47,15 @@ export function SalesCompanion({
   nextVisitName,
   quotesNeedingRevision,
   quotesAwaitingDownload,
+  plannerStatus,
   onStartDay,
   onEndDay,
 }: SalesCompanionProps) {
   const name = firstName()
   const remaining = Math.max(plannedCount - completedCount, 0)
   const emptyPlan = plannedCount === 0
+  const awaitingApproval = !emptyPlan && plannerStatus === "pending"
+  const planApproved = plannerStatus === "approved"
 
   let title = `${hello()}, ${name}`
   let body = ""
@@ -60,6 +64,8 @@ export function SalesCompanion({
     body = `What are you up to today? It's ${weekday()} and we haven't filled the planner yet.`
   } else if (emptyPlan && started) {
     body = "You've started the day, but the planner is still empty. Let's get your first visit in."
+  } else if (awaitingApproval) {
+    body = "Your plan is with admin. You'll be able to complete visits once it's approved."
   } else if (!started) {
     body = firstVisitName
       ? `You have ${plannedCount} visit${plannedCount === 1 ? "" : "s"} planned today. First up is ${firstVisitName}. Ready to start the day?`
@@ -109,7 +115,7 @@ export function SalesCompanion({
           <Button asChild className="min-h-10">
             <Link href="/sales/planner">Plan my day</Link>
           </Button>
-        ) : remaining > 0 ? (
+        ) : remaining > 0 && planApproved ? (
           <Button asChild className="min-h-10">
             <Link href="/sales/report">Record visit</Link>
           </Button>

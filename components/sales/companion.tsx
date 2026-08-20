@@ -12,6 +12,7 @@ type SalesCompanionProps = {
   plannedCount: number
   completedCount: number
   followUps: number
+  missedVisits?: number
   firstVisitName?: string
   nextVisitName?: string
   quotesNeedingRevision: number
@@ -45,6 +46,7 @@ export function SalesCompanion({
   plannedCount,
   completedCount,
   followUps,
+  missedVisits = 0,
   firstVisitName,
   nextVisitName,
   quotesNeedingRevision,
@@ -87,6 +89,13 @@ export function SalesCompanion({
   }
 
   const extras: string[] = []
+  if (missedVisits > 0) {
+    extras.push(
+      missedVisits === 1
+        ? "1 planned visit was missed. Log it or explain it on the visit report."
+        : `${missedVisits} planned visits were missed.`,
+    )
+  }
   if (followUps > 0) {
     extras.push(
       followUps === 1
@@ -127,6 +136,11 @@ export function SalesCompanion({
         ) : remaining > 0 && planApproved ? (
           <Button asChild className="min-h-12 w-full sm:min-h-10 sm:w-auto">
             <Link href="/sales/report">Record visit</Link>
+          </Button>
+        ) : null}
+        {missedVisits > 0 ? (
+          <Button asChild variant="outline" className="min-h-12 w-full sm:min-h-10 sm:w-auto">
+            <Link href="/sales/report">Log missed visits</Link>
           </Button>
         ) : null}
         {followUps > 0 ? (

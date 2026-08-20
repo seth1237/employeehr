@@ -21,6 +21,7 @@ const alertSchema = new mongoose.Schema(
         "leave_balance_low",
         "project_deadline",
         "feedback_pending",
+        "missed_visit",
       ],
       required: true,
     },

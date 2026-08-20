@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer"
 import type { ICompany } from "../types/interfaces"
+import { emailConfigTestEmail } from "../lib/email-templates"
 import { decryptSecret } from "../utils/encryption"
 
 interface TransportResult {
@@ -20,7 +21,7 @@ export class EmailTransportResolver {
   constructor() {
     // Initialize system default transporter
     this.systemFromAddress = process.env.SMTP_FROM || "noreply@codewithseth.co.ke"
-    this.systemFromName = process.env.SYSTEM_FROM_NAME || "Elevate HR Platform"
+    this.systemFromName = process.env.SYSTEM_FROM_NAME || "ElevateHub"
 
     this.systemTransporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST || "smtp.gmail.com",
@@ -29,6 +30,10 @@ export class EmailTransportResolver {
       auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
+      },
+      requireTLS: Number(process.env.SMTP_PORT) === 465 ? false : true,
+      tls: {
+        rejectUnauthorized: false,
       },
     })
 
@@ -115,22 +120,24 @@ export class EmailTransportResolver {
       const from = fromAddress || username
 
       // Send test email
-      await testTransporter.sendMail({
-        from: `"Email Settings Test" <${from}>`,
+      const info = await testTransporter.sendMail({
+        from: `"ElevateHub" <${from}>`,
         to: testEmail,
-        subject: "Email Configuration Test - Elevate HR",
-        html: `
-          <h2>Email Configuration Successful</h2>
-          <p>Your company email settings have been verified successfully.</p>
-          <p>All emails sent from your organization will now use this email address.</p>
-          <br>
-          <p style="color: #666; font-size: 12px;">This is a test email from Elevate HR Platform</p>
-        `,
+        subject: "ElevateHub email configuration test",
+        text: "Your ElevateHub email settings are working.",
+        html: emailConfigTestEmail(),
+      })
+
+      console.log("Test email queued:", {
+        to: testEmail,
+        messageId: info.messageId,
+        response: info.response,
+        accepted: info.accepted,
       })
 
       return {
         success: true,
-        message: "Email configuration verified successfully",
+        message: `Mail server accepted the message (${info.response || info.messageId}). Check inbox and spam — external providers may filter mail without DKIM/DMARC.`,
       }
     } catch (error) {
       console.error("Email config test failed:", error)

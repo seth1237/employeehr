@@ -452,7 +452,7 @@ export default function AdminSidebar({
   useEffect(() => {
     const loadSectionAccess = async () => {
       const role = currentUser?.role;
-      if (!role || role === "company_admin" || role === "super_admin") {
+      if (!role || role === "super_admin") {
         setAllowedSections(null);
         return;
       }
@@ -573,8 +573,13 @@ export default function AdminSidebar({
   }, [pathname]);
 
   const favoriteItems = useMemo(
-    () => adminMenuItems.filter((item) => favoriteHrefs.includes(item.href)),
-    [favoriteHrefs],
+    () =>
+      adminMenuItems.filter((item) => {
+        if (!favoriteHrefs.includes(item.href)) return false;
+        if (!allowedSections) return true;
+        return allowedSections.has(item.section);
+      }),
+    [favoriteHrefs, allowedSections],
   );
 
   return (

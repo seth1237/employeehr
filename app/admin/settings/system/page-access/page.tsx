@@ -12,7 +12,7 @@ import { api, companyApi, usersApi } from "@/lib/api"
 import { getUser } from "@/lib/auth"
 import { ADMIN_SECTION_OPTIONS } from "@/lib/admin-sections"
 
-type RoleKey = "company_admin" | "admin" | "hr" | "manager" | "employee"
+type RoleKey = "company_admin" | "admin" | "hr" | "manager" | "employee" | "sales_rep"
 
 interface AccessState {
   company_admin: string[]
@@ -20,6 +20,7 @@ interface AccessState {
   hr: string[]
   manager: string[]
   employee: string[]
+  sales_rep: string[]
 }
 
 interface SystemUser {
@@ -50,6 +51,7 @@ const EDITABLE_ROLES: Array<{ key: Exclude<RoleKey, "company_admin">; label: str
   { key: "hr", label: "HR" },
   { key: "manager", label: "Manager" },
   { key: "employee", label: "Employee" },
+  { key: "sales_rep", label: "Sales representative" },
 ]
 
 const PERMISSION_LABELS: Record<string, string> = {
@@ -96,6 +98,7 @@ export default function PageAccessSettingsPage() {
     hr: FALLBACK_SECTIONS,
     manager: [],
     employee: [],
+    sales_rep: [],
   })
 
   const currentUser = useMemo(() => getUser(), [])
@@ -120,6 +123,7 @@ export default function PageAccessSettingsPage() {
             hr: byRole.hr || sections,
             manager: byRole.manager || [],
             employee: byRole.employee || [],
+            sales_rep: byRole.sales_rep || [],
           })
           setUserOverrides(byUser)
         }
@@ -275,6 +279,7 @@ export default function PageAccessSettingsPage() {
           hr: accessState.hr,
           manager: accessState.manager,
           employee: accessState.employee,
+          sales_rep: accessState.sales_rep,
         },
         adminSectionsByUser: userOverrides,
         adminSectionsByDepartment: departmentOverrides,
@@ -294,6 +299,7 @@ export default function PageAccessSettingsPage() {
           hr: byRole.hr || sections,
           manager: byRole.manager || [],
           employee: byRole.employee || [],
+          sales_rep: byRole.sales_rep || [],
         })
         setUserOverrides(data.adminSectionsByUser || {})
         setDepartmentOverrides(data.adminSectionsByDepartment || {})
@@ -372,6 +378,11 @@ export default function PageAccessSettingsPage() {
                 <h3 className="font-semibold">{role.label}</h3>
                 <Badge variant="secondary">{accessState[role.key].length} selected</Badge>
               </div>
+              {role.key === "sales_rep" ? (
+                <p className="text-xs text-muted-foreground">
+                  Sales representatives work in Field sales. They already have leave, planner, visits, quotes, and the AI assistant there. Leave admin sections empty unless a rep also needs an admin page. Default action permissions: view stock, view/manage clients, view reports.
+                </p>
+              ) : null}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {availableSections.map((section) => {
@@ -606,6 +617,7 @@ export default function PageAccessSettingsPage() {
               <option value="hr">HR</option>
               <option value="manager">Manager</option>
               <option value="employee">Employee</option>
+              <option value="sales_rep">Sales representative</option>
             </select>
             <div className="grid gap-3 md:grid-cols-2">
               <div className="rounded-md bg-muted/20 p-3">

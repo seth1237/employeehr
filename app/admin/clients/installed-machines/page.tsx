@@ -67,6 +67,7 @@ interface InstalledMachine {
   attendantNumber?: string;
   attendantRole?: string;
   isTrained?: boolean;
+  photoUrl?: string;
   notes?: string;
   invoiceId?: string;
   quotationId?: string;
@@ -3499,6 +3500,20 @@ export default function InstalledMachinesPage() {
                         {selectedMachine.client?.name || "—"}
                       </p>
                     </div>
+
+                    {selectedMachine.photoUrl ? (
+                      <div className="overflow-hidden rounded-xl border">
+                        <img
+                          src={
+                            selectedMachine.photoUrl.startsWith("http")
+                              ? selectedMachine.photoUrl
+                              : `${API_URL}${selectedMachine.photoUrl}`
+                          }
+                          alt={`${selectedMachine.productName} installation`}
+                          className="max-h-56 w-full object-cover"
+                        />
+                      </div>
+                    ) : null}
 
                     {selectedMachine.installationLocation && (
                       <div>

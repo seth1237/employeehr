@@ -1,5 +1,8 @@
 import type { Response } from "express"
 import { Types } from "mongoose"
+import path from "path"
+import fs from "fs/promises"
+import sharp from "sharp"
 import type { AuthenticatedRequest } from "../middleware/auth"
 import { SalesDailyReport } from "../models/SalesDailyReport"
 import { SalesVisit } from "../models/SalesVisit"
@@ -16,6 +19,13 @@ import { SalesPlanner } from "../models/SalesPlanner"
 import { Company } from "../models/Company"
 import { StockInvoice } from "../models/StockInvoice"
 import { SalesRepTarget } from "../models/SalesRepTarget"
+import { InstalledMachine } from "../models/InstalledMachine"
+import {
+  coverageByPeriod,
+  computeCoverage,
+  dismissMissedVisitAlert,
+  upsertMissedVisitAlerts,
+} from "../lib/sales-coverage"
 import {
   currentPeriods,
   inPeriod,
@@ -151,8 +161,9 @@ function escapeRegex(value: string) {
 }
 
 function parseGps(value: unknown) {
-  if (!value || typeof value !== "object") return undefined
-  const raw = value as { lat?: unknown; lng?: unknown; accuracy?: unknown }
+  const parsed = parseMaybeJson(value)
+  if (!parsed || typeof parsed !== "object") return undefined
+  const raw = parsed as { lat?: unknown; lng?: unknown; accuracy?: unknown }
   const lat = Number(raw.lat)
   const lng = Number(raw.lng)
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return undefined
@@ -164,9 +175,31 @@ function parseGps(value: unknown) {
   }
 }
 
+function parseMaybeJson(value: unknown) {
+  if (typeof value !== "string") return value
+  const trimmed = value.trim()
+  if (!trimmed) return value
+  try {
+    return JSON.parse(trimmed)
+  } catch {
+    return value
+  }
+}
+
+function coerceVisitBody(body: any) {
+  const next = { ...(body || {}) }
+  next.interestCategories = parseMaybeJson(next.interestCategories)
+  next.gps = parseMaybeJson(next.gps)
+  if (typeof next.isTrained === "string") {
+    next.isTrained = next.isTrained === "true" || next.isTrained === "1"
+  }
+  return next
+}
+
 function parseInterestCategories(value: unknown) {
-  if (!Array.isArray(value)) return []
-  return value
+  const parsed = parseMaybeJson(value)
+  if (!Array.isArray(parsed)) return []
+  return parsed
     .map((item: any) => ({
       categoryId: String(item.categoryId || "").trim(),
       categoryName: String(item.categoryName || "").trim(),
@@ -194,11 +227,141 @@ function applyVisitFields(visit: any, body: any, extras: Record<string, unknown>
   visit.interestCategories = parseInterestCategories(body?.interestCategories)
   visit.gps = parseGps(body?.gps) || visit.gps
   visit.nextAction = String(body?.nextAction || "").trim() || undefined
-  visit.followUpDate = body?.followUpDate ? new Date(body.followUpDate) : visit.followUpDate
+  visit.followUpDate = body?.followUpDate ? new Date(String(body.followUpDate).slice(0, 10)) : visit.followUpDate
   visit.notes = String(body?.notes || "").trim() || undefined
   visit.quote_id = String(body?.quote_id || "").trim() || undefined
   Object.assign(visit, extras)
   return visit
+}
+
+function isInstallationPurpose(purpose?: string) {
+  return String(purpose || "").toLowerCase().includes("installation")
+}
+
+function needsInstallationRecord(outcome?: string) {
+  const value = String(outcome || "").toLowerCase()
+  return value.includes("installation completed") || value.includes("partial installation")
+}
+
+async function saveVisitPhotoWebp(file?: Express.Multer.File) {
+  if (!file?.buffer) return undefined
+  const filename = `visit-${Date.now()}-${Math.round(Math.random() * 1e9)}.webp`
+  const uploadDir = path.join(process.cwd(), "uploads/visits")
+  await fs.mkdir(uploadDir, { recursive: true })
+  await sharp(file.buffer).rotate().webp({ quality: 80 }).toFile(path.join(uploadDir, filename))
+  return `/uploads/visits/${filename}`
+}
+
+async function upsertInstalledMachineFromVisit(params: {
+  org_id: string
+  userId: string
+  visit: any
+  body: any
+  photoUrl?: string
+}) {
+  const { org_id, userId, visit, body, photoUrl } = params
+  const productId = String(body?.installProductId || "").trim()
+  const productName = String(body?.installProductName || "").trim()
+  const serialNumber = String(body?.serialNumber || "").trim()
+  const installationLocation = String(body?.installationLocation || "").trim()
+  const attendant = String(body?.attendant || body?.personMet || "").trim()
+  if (!productId || !productName || !serialNumber || !installationLocation || !attendant) {
+    throw new Error("Installation needs the machine, serial number, location, and attendant.")
+  }
+  if (!photoUrl && !visit.photoUrl) {
+    throw new Error("Add a photo of the installed machine.")
+  }
+  const product = await StockProduct.findOne({ _id: productId, org_id }).select("name category").lean()
+  const payload = {
+    org_id,
+    client: {
+      name: String(visit.clientName || "").trim(),
+      number: String(visit.clientPhone || body?.clientPhone || "").trim() || undefined,
+      location: installationLocation,
+      contactPerson: attendant,
+    },
+    productId,
+    productName: product?.name || productName,
+    category: product?.category,
+    serialNumber,
+    installationLocation,
+    installationDepartment: String(body?.installationDepartment || "").trim() || undefined,
+    installationDate: body?.installationDate ? new Date(String(body.installationDate).slice(0, 10)) : new Date(),
+    warrantyUntil: body?.warrantyUntil ? new Date(String(body.warrantyUntil).slice(0, 10)) : undefined,
+    nextServiceDate: body?.nextServiceDate ? new Date(String(body.nextServiceDate).slice(0, 10)) : undefined,
+    status: String(visit.outcome || "").toLowerCase().includes("partial") ? "installation_pending" : "active",
+    notes: String(body?.installNotes || visit.outcomeDetail || visit.notes || "").trim() || undefined,
+    installedBy: userId,
+    attendant,
+    attendantNumber: String(body?.attendantNumber || visit.personPhone || "").trim() || undefined,
+    attendantRole: String(body?.attendantRole || visit.personRole || "").trim() || undefined,
+    isTrained: Boolean(body?.isTrained),
+    photoUrl: photoUrl || visit.photoUrl,
+    visitId: String(visit._id),
+    createdBy: userId,
+  }
+  let machine = visit.installedMachineId
+    ? await InstalledMachine.findOne({ _id: visit.installedMachineId, org_id })
+    : await InstalledMachine.findOne({ org_id, serialNumber, productId })
+  if (machine) {
+    Object.assign(machine, payload)
+    await machine.save()
+  } else {
+    machine = await InstalledMachine.create(payload)
+  }
+  visit.installedMachineId = String(machine._id)
+  visit.photoUrl = payload.photoUrl
+  return machine
+}
+
+async function appendFollowUpPlannerStop(params: {
+  org_id: string
+  userId: string
+  followUpDate?: string
+  visitDate: string
+  visit: any
+  plannerStop?: { location?: string; clientId?: string }
+}) {
+  const date = String(params.followUpDate || "").slice(0, 10)
+  if (!date || date <= params.visitDate) {
+    return { created: false, skipped: !date, reason: date ? "Follow-up date must be after this visit." : "" }
+  }
+  let planner = await SalesPlanner.findOne({ org_id: params.org_id, userId: params.userId, date })
+  if (planner?.status === "approved") {
+    return { created: false, skippedBecauseApproved: true, date }
+  }
+  const clientName = String(params.visit.clientName || "").trim()
+  const stop = {
+    clientName,
+    clientId: String(params.visit.customer_id || params.plannerStop?.clientId || "").trim() || undefined,
+    reason: "Follow-up",
+    expectedOutcome: String(params.visit.outcomeDetail || params.visit.nextAction || "").trim() || undefined,
+    location: String(params.plannerStop?.location || "").trim() || undefined,
+    notes: `Auto-added from the visit on ${params.visitDate}`,
+    interestCategories: (params.visit.interestCategories || []).map((item: any) => item.categoryName).filter(Boolean),
+    expenses: { transport: 0, nightOut: false },
+  }
+  if (!planner) {
+    planner = new SalesPlanner({
+      org_id: params.org_id,
+      userId: params.userId,
+      date,
+      visits: [stop],
+      projectedExpenses: 0,
+      budget: { transport: 0, nightOut: false, nightOutAmount: 0 },
+      status: "pending",
+    })
+  } else {
+    if (!Array.isArray(planner.visits)) planner.visits = []
+    const exists = planner.visits.some(
+      (item: any) => String(item.clientName || "").trim().toLowerCase() === clientName.toLowerCase(),
+    )
+    if (!exists) planner.visits.push(stop)
+    planner.status = "pending"
+    planner.set("adminNotes", undefined)
+  }
+  await planner.save()
+  return { created: true, date, plannerId: String(planner._id) }
 }
 
 function visitCarriedOutDate(visit: any, reportDate?: string) {
@@ -377,11 +540,17 @@ export class SalesController {
       const weekStart = new Date()
       weekStart.setDate(weekStart.getDate() - 6)
       const weekStartKey = weekStart.toISOString().slice(0, 10)
+      const periods = currentPeriods()
+      const coverageFromKey = toDateKey(periods.weekly.from)
+      const alertFrom = new Date()
+      alertFrom.setDate(alertFrom.getDate() - 14)
+      const alertFromKey = toDateKey(alertFrom)
+      const historyFromKey = coverageFromKey < alertFromKey ? coverageFromKey : alertFromKey
 
       const report = await ensureTodayReport(org_id, userId, date)
       const dayStart = startOfLocalDay(date)
       const dayEnd = endOfLocalDay(date)
-      const [visits, quotes, followUps, revisionQuotes, staleQuotes, myClients, callsToday, recentActivities, todayPlanner, upcomingPlanners] =
+      const [visits, quotes, followUps, revisionQuotes, staleQuotes, myClients, callsToday, recentActivities, todayPlanner, upcomingPlanners, coveragePlanners, coverageVisits] =
         await Promise.all([
           SalesVisit.find({ org_id, userId, $or: [{ visitDate: date }, { report_id: String(report._id) }] }).sort({ checkInAt: -1 }).lean(),
           StockQuotation.find({ org_id, createdBy: userId }).sort({ createdAt: -1 }).limit(40).lean(),
@@ -423,6 +592,19 @@ export class SalesController {
             .sort({ date: 1 })
             .limit(5)
             .lean(),
+          SalesPlanner.find({
+            org_id,
+            userId,
+            status: "approved",
+            date: { $gte: historyFromKey, $lte: date },
+          }).lean(),
+          SalesVisit.find({
+            org_id,
+            userId,
+            $or: [{ visitDate: { $gte: historyFromKey } }, { checkInAt: { $gte: new Date(`${historyFromKey}T00:00:00`) } }],
+          })
+            .select("clientName visitDate checkInAt")
+            .lean(),
         ])
 
       const activityFollowUps = await SalesClientActivity.find({
@@ -445,6 +627,21 @@ export class SalesController {
       }
 
       const myClientsCount = await StockClient.countDocuments({ org_id, createdBy: userId })
+      const weekCoverage = computeCoverage(coveragePlanners, coverageVisits, periods.weekly, date)
+      const alertCoverage = computeCoverage(
+        coveragePlanners,
+        coverageVisits,
+        {
+          kind: "monthly",
+          from: new Date(`${alertFromKey}T00:00:00`),
+          to: new Date(`${date}T00:00:00`),
+          label: "Missed window",
+        },
+        date,
+      )
+      await upsertMissedVisitAlerts({ org_id, userId, missedStops: alertCoverage.missedStops }).catch((error) => {
+        console.error("Failed to upsert missed-visit alerts", error)
+      })
       const mapStockQuote = (q: any) => ({
         ...q,
         quoteNumber: q.quotationNumber,
@@ -472,12 +669,17 @@ export class SalesController {
                 source: "activity",
               })),
             ],
+            missedVisits: alertCoverage.missedStops,
             quotesNeedingRevision: revisionQuotes.map(mapStockQuote),
             quotesAwaitingDownload: staleQuotes.map(mapStockQuote),
           },
           kpis: {
             visitsToday: visits.length,
             plannedVisits: Number(todayPlanner?.visits?.length || report.plannedVisits || 0),
+            coveragePlanned: weekCoverage.planned,
+            coverageCompleted: weekCoverage.completed,
+            coverageMissed: weekCoverage.missed,
+            coverageRate: weekCoverage.rate,
             quotesThisWeek: weekQuotes.length,
             quotesSubmitted: quotes.filter((q) => q.status !== "cancelled").length,
             quotesApproved: quotes.filter((q) => Boolean(q.approvedAt) || q.status === "converted").length,
@@ -630,12 +832,13 @@ export class SalesController {
       if (!org_id || !userId) {
         return res.status(401).json({ success: false, message: "Unauthorized" })
       }
-      const clientName = String(req.body?.clientName || "").trim()
+      const body = coerceVisitBody(req.body)
+      const clientName = String(body?.clientName || "").trim()
       if (!clientName) {
         return res.status(400).json({ success: false, message: "Client name is required" })
       }
-      const date = String(req.body?.date || "").trim() || new Date().toISOString().slice(0, 10)
-      const plannerId = String(req.body?.plannerId || "").trim()
+      const date = String(body?.date || "").trim() || new Date().toISOString().slice(0, 10)
+      const plannerId = String(body?.plannerId || "").trim()
       const planner = plannerId
         ? await SalesPlanner.findOne({ _id: plannerId, org_id, userId })
         : await SalesPlanner.findOne({ org_id, userId, date })
@@ -659,6 +862,24 @@ export class SalesController {
                 : "This planner is not approved, so visits cannot be completed.",
         })
       }
+      const plannerStop = (planner.visits || []).find(
+        (item: any) => String(item.clientName || "").trim().toLowerCase() === clientName.toLowerCase(),
+      )
+      const purpose = String(body?.purpose || plannerStop?.reason || "").trim()
+      const outcome = String(body?.outcome || "").trim()
+      const installationRequired = isInstallationPurpose(purpose) && needsInstallationRecord(outcome)
+      const photoUrl = await saveVisitPhotoWebp((req as AuthenticatedRequest & { file?: Express.Multer.File }).file)
+      if (installationRequired && !photoUrl) {
+        const existingPhoto = await SalesVisit.findOne({
+          org_id,
+          userId,
+          clientName: new RegExp(`^${escapeRegex(clientName)}$`, "i"),
+          $or: [...(plannerId ? [{ plannerId }] : []), { visitDate: date }],
+        }).select("photoUrl")
+        if (!existingPhoto?.photoUrl) {
+          return res.status(400).json({ success: false, message: "Add a photo of the installed machine." })
+        }
+      }
       const report = await ensureTodayReport(org_id, userId, date)
 
       const existing = await SalesVisit.findOne({
@@ -678,36 +899,54 @@ export class SalesController {
         })
       }
 
-      if (existing) {
-        applyVisitFields(existing, req.body, {
+      const visit =
+        existing ||
+        (await SalesVisit.create({
+          org_id,
+          report_id: String(report._id),
+          userId,
           clientName,
           visitDate: date,
-          report_id: String(report._id),
           status: "locked",
-          revokedAt: undefined,
-          revokedBy: undefined,
-          revokeNote: undefined,
-        })
-        await existing.save()
-        return res.status(200).json({ success: true, data: existing })
-      }
-
-      const visit = await SalesVisit.create({
-        org_id,
-        report_id: String(report._id),
-        userId,
+          checkInAt: new Date(),
+        }))
+      applyVisitFields(visit, body, {
         clientName,
         visitDate: date,
+        report_id: String(report._id),
         status: "locked",
-        checkInAt: new Date(),
+        revokedAt: undefined,
+        revokedBy: undefined,
+        revokeNote: undefined,
+        purpose: purpose || visit.purpose,
+        ...(photoUrl ? { photoUrl } : {}),
       })
-      applyVisitFields(visit, req.body, { clientName, visitDate: date, status: "locked" })
+      if (installationRequired) {
+        await upsertInstalledMachineFromVisit({
+          org_id,
+          userId,
+          visit,
+          body: { ...body, purpose },
+          photoUrl: photoUrl || visit.photoUrl,
+        })
+      }
       await visit.save()
+      const followUp = await appendFollowUpPlannerStop({
+        org_id,
+        userId,
+        followUpDate: String(body?.followUpDate || "").slice(0, 10),
+        visitDate: date,
+        visit,
+        plannerStop,
+      })
+      await dismissMissedVisitAlert(org_id, userId, date, clientName).catch(() => undefined)
 
-      return res.status(201).json({ success: true, data: visit })
+      return res.status(existing ? 200 : 201).json({ success: true, data: visit, followUp })
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Failed to log visit"
-      return res.status(500).json({ success: false, message })
+      const clientError =
+        /Installation|photo|serial|machine|Follow-up/i.test(message)
+      return res.status(clientError ? 400 : 500).json({ success: false, message })
     }
   }
 
@@ -1337,8 +1576,10 @@ export class SalesController {
         return res.status(401).json({ success: false, message: "Unauthorized" })
       }
       const periods = currentPeriods()
+      const todayKey = toDateKey(new Date())
       const quarterFrom = periods.quarterly.from
-      const [reports, visits, quotes, invoices, planners, target] = await Promise.all([
+      const quarterFromKey = toDateKey(quarterFrom)
+      const [reports, visits, quotes, invoices, planners, target, coverageVisits] = await Promise.all([
         SalesDailyReport.find({ org_id, userId }).sort({ date: -1 }).limit(30).lean(),
         SalesVisit.find({ org_id, userId }).sort({ checkInAt: -1 }).limit(80).lean(),
         StockQuotation.find({ org_id, createdBy: userId }).sort({ createdAt: -1 }).limit(40).lean(),
@@ -1354,11 +1595,18 @@ export class SalesController {
           org_id,
           userId,
           status: "approved",
-          date: { $gte: toDateKey(quarterFrom) },
+          date: { $gte: quarterFromKey },
         })
           .sort({ date: -1 })
           .lean(),
         SalesRepTarget.findOne({ org_id, userId }).lean(),
+        SalesVisit.find({
+          org_id,
+          userId,
+          $or: [{ visitDate: { $gte: quarterFromKey } }, { checkInAt: { $gte: quarterFrom } }],
+        })
+          .select("clientName visitDate checkInAt")
+          .lean(),
       ])
       const performance = performanceForUser(invoices, planners, target, periods)
       return res.status(200).json({
@@ -1377,6 +1625,7 @@ export class SalesController {
           })),
           sales: performance.sales,
           expenses: performance.expenses,
+          coverage: coverageByPeriod(planners, coverageVisits, periods, todayKey),
         },
       })
     } catch (error: unknown) {
@@ -1953,6 +2202,12 @@ export class SalesController {
               quarterlyAmount: Number(target?.quarterlyAmount || 0),
               sales: performance.sales,
               expenses: performance.expenses,
+              coverage: coverageByPeriod(
+                plannersByUser.get(userId) || [],
+                visits.filter((visit) => String(visit.userId) === userId),
+                periods,
+                todayKey,
+              ),
               attendance: {
                 weekly: summarizeAttendance(days, periodMeta.weekly.workdays),
                 monthly: summarizeAttendance(days, periodMeta.monthly.workdays),

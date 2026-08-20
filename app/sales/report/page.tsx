@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { ChevronLeft, PackagePlus, UserPlus, X, Calendar, Users, FileText, MapPin, Lock, Unlock, Plus, Clock } from "lucide-react"
+import { ChevronLeft, PackagePlus, UserPlus, X, Calendar, Users, FileText, MapPin, Lock, Unlock, Plus, Clock, Camera, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -17,6 +17,7 @@ import API_URL from "@/lib/apiBase"
 import { getToken } from "@/lib/auth"
 import { SalesHeader, SalesPage } from "@/components/sales/sales-ui"
 import { PageLoadingSkeleton } from "@/components/admin/ui/page-states"
+import { Checkbox } from "@/components/ui/checkbox"
 
 const DEFAULT_ROLES = [
   "Doctor",
@@ -83,6 +84,24 @@ const emptyForm = {
   interestCategoryId: "",
   interestNote: "",
   notes: "",
+  followUpDate: "",
+}
+
+const emptyInstall = {
+  productId: "",
+  productName: "",
+  productQuery: "",
+  serialNumber: "",
+  installationLocation: "",
+  installationDepartment: "",
+  installationDate: "",
+  attendant: "",
+  attendantNumber: "",
+  attendantRole: "Lab Technician",
+  isTrained: false,
+  warrantyUntil: "",
+  nextServiceDate: "",
+  installNotes: "",
 }
 
 type InterestCategory = {
@@ -206,6 +225,9 @@ export default function SalesReportPage() {
   const [matchedClient, setMatchedClient] = useState<any | null>(null)
   const [matching, setMatching] = useState(false)
   const [form, setForm] = useState(emptyForm)
+  const [install, setInstall] = useState(emptyInstall)
+  const [installPhoto, setInstallPhoto] = useState<File | null>(null)
+  const [installProducts, setInstallProducts] = useState<Array<{ _id: string; name: string; category?: string }>>([])
   const [categories, setCategories] = useState<Array<{ _id: string; name: string }>>([])
   const [interestCategories, setInterestCategories] = useState<InterestCategory[]>([])
   const [showInterest, setShowInterest] = useState(false)
@@ -271,6 +293,18 @@ export default function SalesReportPage() {
   useEffect(() => {
     if (selectedPlanner?.date) void loadVisits(selectedPlanner.date)
   }, [selectedPlanner?.date, loadVisits])
+
+  useEffect(() => {
+    const q = install.productQuery.trim()
+    if (q.length < 2) {
+      setInstallProducts([])
+      return
+    }
+    const handle = setTimeout(() => {
+      void salesApi.searchStock(q, false).then((res) => setInstallProducts(res.data || []))
+    }, 250)
+    return () => clearTimeout(handle)
+  }, [install.productQuery])
 
   const months = useMemo(() => {
     const map = new Map<string, { key: string; label: string; count: number }>()
@@ -354,11 +388,16 @@ export default function SalesReportPage() {
         outcomeDetail: existing.outcomeDetail || "",
         notes: existing.notes || "",
         facilityPhone: existing.clientPhone || "",
+        followUpDate: existing.followUpDate ? String(existing.followUpDate).slice(0, 10) : "",
       })
       setInterestCategories(existing.interestCategories || [])
       setShowInterest((existing.interestCategories || []).length > 0)
+      setInstall(emptyInstall)
+      setInstallPhoto(null)
     } else {
       setForm(emptyForm)
+      setInstall(emptyInstall)
+      setInstallPhoto(null)
       setInterestCategories([])
       setShowInterest(false)
     }
@@ -371,6 +410,10 @@ export default function SalesReportPage() {
   const outcomeOptions = purposeResponses(purpose)
   const selectedOutcome = outcomeOptions.find((option) => option.id === form.outcome)
   const needsInterest = Boolean(selectedOutcome?.showsInterest) || showInterest
+  const isInstallation = String(purpose || "").toLowerCase().includes("installation")
+  const needsMachineRecord =
+    isInstallation &&
+    (form.outcome === "Installation completed" || form.outcome === "Partial installation")
   const existingVisit = visits.find(
     (item) =>
       String(item.clientName || "").trim().toLowerCase() ===
@@ -426,6 +469,24 @@ export default function SalesReportPage() {
       toast({ title: "Select the client response / visit outcome", variant: "destructive" })
       return
     }
+    if (needsMachineRecord) {
+      if (!install.productId || !install.serialNumber.trim() || !install.installationLocation.trim()) {
+        toast({
+          title: "Machine details are required",
+          description: "Pick the product, serial number, and where it was installed.",
+          variant: "destructive",
+        })
+        return
+      }
+      if (!install.attendant.trim()) {
+        toast({ title: "Name the attendant who received the machine", variant: "destructive" })
+        return
+      }
+      if (!installPhoto && !existingVisit?.photoUrl) {
+        toast({ title: "Add a photo of the installed machine", variant: "destructive" })
+        return
+      }
+    }
     if (!clientSaved) {
       if (!form.facilityPhone.trim() || !form.county.trim()) {
         toast({
@@ -468,7 +529,7 @@ export default function SalesReportPage() {
       }
 
       const gps = await readGps()
-      await salesApi.createVisit({
+      const payload: Record<string, unknown> = {
         date: selectedPlanner.date,
         plannerId: selectedPlanner._id,
         clientName: selectedClient.clientName,
@@ -484,10 +545,39 @@ export default function SalesReportPage() {
         personPhone: form.personPhone.trim() || undefined,
         personEmail: form.personEmail.trim() || undefined,
         notes: form.notes.trim() || undefined,
+        followUpDate: form.followUpDate || undefined,
         gps,
+      }
+      if (needsMachineRecord) {
+        Object.assign(payload, {
+          installProductId: install.productId,
+          installProductName: install.productName,
+          serialNumber: install.serialNumber.trim(),
+          installationLocation: install.installationLocation.trim(),
+          installationDepartment: install.installationDepartment.trim() || undefined,
+          installationDate: install.installationDate || selectedPlanner.date,
+          attendant: install.attendant.trim(),
+          attendantNumber: install.attendantNumber.trim() || form.personPhone.trim() || undefined,
+          attendantRole: install.attendantRole,
+          isTrained: install.isTrained,
+          warrantyUntil: install.warrantyUntil || undefined,
+          nextServiceDate: install.nextServiceDate || undefined,
+          installNotes: install.installNotes.trim() || undefined,
+        })
+      }
+      const saved: any = await salesApi.createVisit(payload, installPhoto)
+      const followUp = saved.followUp
+      toast({
+        title: existingVisit ? "Visit report updated and locked" : "Visit report saved and locked",
+        description: followUp?.created
+          ? `Follow-up stop added to the ${followUp.date} planner (pending approval).`
+          : followUp?.skippedBecauseApproved
+            ? `Follow-up date saved. ${followUp.date} already has an approved plan, so it was not changed.`
+            : undefined,
       })
-      toast({ title: existingVisit ? "Visit report updated and locked" : "Visit report saved and locked" })
       setForm(emptyForm)
+      setInstall(emptyInstall)
+      setInstallPhoto(null)
       setInterestCategories([])
       setShowInterest(false)
       void loadVisits(selectedPlanner.date)
@@ -875,6 +965,18 @@ export default function SalesReportPage() {
                   onChange={(e) => setForm((c) => ({ ...c, notes: e.target.value }))}
                 />
               </div>
+              <div className="space-y-1.5 md:col-span-2">
+                <Label className="text-xs font-medium">Follow-up date</Label>
+                <Input
+                  type="date"
+                  className="h-11"
+                  value={form.followUpDate}
+                  onChange={(e) => setForm((c) => ({ ...c, followUpDate: e.target.value }))}
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  If you set a future date, the next planner stop is created automatically for that client.
+                </p>
+              </div>
             </div>
 
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
@@ -904,6 +1006,14 @@ export default function SalesReportPage() {
                             onClick={() => {
                               setForm((c) => ({ ...c, outcome: option.id, outcomeDetail: "" }))
                               if (option.showsInterest) setShowInterest(true)
+                              if (isInstallation) {
+                                setInstall((c) => ({
+                                  ...c,
+                                  attendant: c.attendant || form.personMet,
+                                  attendantNumber: c.attendantNumber || form.personPhone,
+                                  installationDate: c.installationDate || selectedPlanner?.date || "",
+                                }))
+                              }
                             }}
                           >
                             {option.label}
@@ -1033,6 +1143,175 @@ export default function SalesReportPage() {
                 ) : null}
               </aside>
             </div>
+
+            {isInstallation ? (
+              <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+                <div>
+                  <p className="text-sm font-medium">Machine details</p>
+                  <p className="text-xs text-muted-foreground">
+                    {needsMachineRecord
+                      ? "Completed or partial installations need the machine record and a photo (saved as WebP)."
+                      : "Add machine details if you installed or started installing today."}
+                  </p>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="space-y-1.5 md:col-span-2">
+                    <Label className="text-xs">Product {needsMachineRecord ? "*" : ""}</Label>
+                    <div className="relative">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                      <Input
+                        className="h-11 pl-9"
+                        value={install.productQuery || install.productName}
+                        onChange={(e) =>
+                          setInstall((c) => ({ ...c, productQuery: e.target.value, productName: e.target.value, productId: "" }))
+                        }
+                        placeholder="Search stock for the installed machine"
+                      />
+                    </div>
+                    {installProducts.length > 0 ? (
+                      <div className="max-h-36 overflow-y-auto rounded-md border bg-white">
+                        {installProducts.map((product) => (
+                          <button
+                            key={product._id}
+                            type="button"
+                            className="block w-full px-3 py-2 text-left text-sm hover:bg-slate-50"
+                            onClick={() => {
+                              setInstall((c) => ({
+                                ...c,
+                                productId: product._id,
+                                productName: product.name,
+                                productQuery: product.name,
+                              }))
+                              setInstallProducts([])
+                            }}
+                          >
+                            {product.name}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Serial number {needsMachineRecord ? "*" : ""}</Label>
+                    <Input
+                      className="h-11"
+                      value={install.serialNumber}
+                      onChange={(e) => setInstall((c) => ({ ...c, serialNumber: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Installation date</Label>
+                    <Input
+                      type="date"
+                      className="h-11"
+                      value={install.installationDate}
+                      onChange={(e) => setInstall((c) => ({ ...c, installationDate: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Where installed {needsMachineRecord ? "*" : ""}</Label>
+                    <Input
+                      className="h-11"
+                      value={install.installationLocation}
+                      onChange={(e) => setInstall((c) => ({ ...c, installationLocation: e.target.value }))}
+                      placeholder="Lab, theatre, ward…"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Department</Label>
+                    <Input
+                      className="h-11"
+                      value={install.installationDepartment}
+                      onChange={(e) => setInstall((c) => ({ ...c, installationDepartment: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Attendant {needsMachineRecord ? "*" : ""}</Label>
+                    <Input
+                      className="h-11"
+                      value={install.attendant}
+                      onChange={(e) => setInstall((c) => ({ ...c, attendant: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Attendant phone</Label>
+                    <Input
+                      className="h-11"
+                      value={install.attendantNumber}
+                      onChange={(e) => setInstall((c) => ({ ...c, attendantNumber: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Attendant role</Label>
+                    <Select
+                      value={install.attendantRole}
+                      onValueChange={(v) => setInstall((c) => ({ ...c, attendantRole: v }))}
+                    >
+                      <SelectTrigger className="h-11">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {roles.map((role) => (
+                          <SelectItem key={role} value={role}>{role}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Warranty until</Label>
+                    <Input
+                      type="date"
+                      className="h-11"
+                      value={install.warrantyUntil}
+                      onChange={(e) => setInstall((c) => ({ ...c, warrantyUntil: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Next service</Label>
+                    <Input
+                      type="date"
+                      className="h-11"
+                      value={install.nextServiceDate}
+                      onChange={(e) => setInstall((c) => ({ ...c, nextServiceDate: e.target.value }))}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 md:col-span-2">
+                    <Checkbox
+                      id="install-trained"
+                      checked={install.isTrained}
+                      onCheckedChange={(checked) => setInstall((c) => ({ ...c, isTrained: checked === true }))}
+                    />
+                    <Label htmlFor="install-trained" className="text-sm font-normal">Attendant was trained</Label>
+                  </div>
+                  <div className="space-y-1.5 md:col-span-2">
+                    <Label className="text-xs">Installation notes</Label>
+                    <Textarea
+                      className="min-h-[60px] text-sm"
+                      value={install.installNotes}
+                      onChange={(e) => setInstall((c) => ({ ...c, installNotes: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-1.5 md:col-span-2">
+                    <Label className="text-xs">Photo {needsMachineRecord ? "*" : ""}</Label>
+                    <Input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="h-11"
+                      onChange={(e) => setInstallPhoto(e.target.files?.[0] || null)}
+                    />
+                    {installPhoto ? (
+                      <p className="text-xs text-slate-500">
+                        <Camera className="mr-1 inline h-3.5 w-3.5" />
+                        {installPhoto.name} — converted to WebP on save
+                      </p>
+                    ) : existingVisit?.photoUrl ? (
+                      <p className="text-xs text-slate-500">A photo is already on this visit.</p>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            ) : null}
 
             </fieldset>
 

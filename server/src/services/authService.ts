@@ -5,6 +5,7 @@ import { Company } from "../models/Company"
 import { generateToken } from "../config/auth"
 import type { IUser, ICompany, IJWTPayload, IAPIResponse } from "../types/interfaces"
 import { emailService } from "./emailService"
+import { loginOtpEmail, passwordResetOtpEmail } from "../lib/email-templates"
 import { PasswordReset } from "../models/PasswordReset"
 import { LoginOtp } from "../models/LoginOtp"
 import { randomUUID } from "crypto"
@@ -55,16 +56,11 @@ export class AuthService {
       used: false,
     })
 
-    const html = `
-      <p>Your login verification code is:</p>
-      <h2>${otp}</h2>
-      <p>This code will expire in 10 minutes.</p>
-      <p>If you did not attempt to login, ignore this email.</p>
-    `
+    const html = loginOtpEmail(otp)
 
     const sent = await emailService.sendEmail({
       to: params.user.email,
-      subject: "Your login verification code",
+      subject: "Your ElevateHub login code",
       html,
       companyId: params.user.org_id,
     })
@@ -628,14 +624,9 @@ export class AuthService {
 
       await PasswordReset.create({ email: user.email.toLowerCase(), otp, expiresAt, used: false })
 
-      const html = `
-        <p>Your password reset code is:</p>
-        <h2>${otp}</h2>
-        <p>This code will expire in 15 minutes.</p>
-        <p>If you did not request this, ignore this email.</p>
-      `
+      const html = passwordResetOtpEmail(otp)
 
-      await emailService.sendEmail({ to: user.email, subject: "Password reset code", html, companyId: user.org_id })
+      await emailService.sendEmail({ to: user.email, subject: "Your ElevateHub password reset code", html, companyId: user.org_id })
 
       return {
         success: true,

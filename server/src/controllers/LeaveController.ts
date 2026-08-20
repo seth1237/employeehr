@@ -65,7 +65,8 @@ export class LeaveController {
     static async getMyRequests(req: AuthenticatedRequest, res: Response) {
         try {
             const user_id = req.user?.userId
-            const requests = await LeaveRequest.find({ user_id }).sort({ createdAt: -1 })
+            const org_id = req.user?.org_id || req.org_id
+            const requests = await LeaveRequest.find({ user_id, ...(org_id ? { org_id } : {}) }).sort({ createdAt: -1 })
             res.status(200).json({ success: true, data: requests })
             return
         } catch (error: any) {
@@ -78,12 +79,13 @@ export class LeaveController {
     static async getBalance(req: AuthenticatedRequest, res: Response) {
         try {
             const user_id = req.user?.userId
+            const org_id = req.user?.org_id || req.org_id
             const currentYear = new Date().getFullYear()
-            let balance = await LeaveBalance.findOne({ user_id, year: currentYear })
+            let balance = await LeaveBalance.findOne({ user_id, ...(org_id ? { org_id } : {}), year: currentYear })
 
-            if (!balance && user_id && req.user?.org_id) {
+            if (!balance && user_id && org_id) {
                 balance = await LeaveBalance.create({
-                    org_id: req.user.org_id,
+                    org_id,
                     user_id,
                     year: currentYear
                 })

@@ -7,9 +7,10 @@ const router: Router = Router()
 
 router.use(authMiddleware, tenantIsolation)
 
-router.post("/apply", LeaveController.apply)
-router.get("/my-requests", LeaveController.getMyRequests)
-router.get("/balance", LeaveController.getBalance)
+const selfServiceRoles = ["sales_rep", "employee", "manager", "hr", "admin", "company_admin"] as const
+router.post("/apply", roleMiddleware(...selfServiceRoles), LeaveController.apply)
+router.get("/my-requests", roleMiddleware(...selfServiceRoles), LeaveController.getMyRequests)
+router.get("/balance", roleMiddleware(...selfServiceRoles), LeaveController.getBalance)
 
 // Manager routes
 router.get("/team-requests", roleMiddleware("manager", "company_admin", "hr"), LeaveController.getTeamRequests)

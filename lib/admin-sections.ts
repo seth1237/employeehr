@@ -106,15 +106,36 @@ export function resolveAdminAllowedSections(params: {
     effectiveSections?: string[]
     adminSectionsByRole?: Record<string, string[]>
     adminSectionsByUser?: Record<string, string[]>
+    platformEnabledSections?: string[]
   } | null
 }): Set<string> | null {
   const role = params.role || ""
-  if (!role || role === "company_admin" || role === "super_admin") {
-    return null
+  const platform = Array.isArray(params.pageAccess?.platformEnabledSections)
+    ? params.pageAccess!.platformEnabledSections.filter((s) => typeof s === "string" && s.length > 0)
+    : null
+  const platformCap =
+    platform && platform.length > 0 && platform.length < ADMIN_SECTION_OPTIONS.length
+      ? new Set(platform)
+      : platform && platform.length === 0
+        ? new Set<string>()
+        : null
+
+  const applyCap = (allowed: Set<string> | null): Set<string> | null => {
+    if (!platformCap) return allowed
+    if (!allowed) return platformCap
+    return new Set([...allowed].filter((section) => platformCap.has(section)))
+  }
+
+  if (!role || role === "super_admin") {
+    return applyCap(null)
+  }
+
+  if (role === "company_admin") {
+    return applyCap(null)
   }
 
   const data = params.pageAccess
-  if (!data) return null
+  if (!data) return applyCap(null)
 
   const userId = params.userId || ""
   const fromEffective = Array.isArray(data.effectiveSections)
@@ -132,14 +153,13 @@ export function resolveAdminAllowedSections(params: {
     ),
   )
 
-  // Admin-area roles with no configured sections: show everything (fail open).
   if (merged.length === 0 && (role === "admin" || role === "hr")) {
-    return null
+    return applyCap(null)
   }
 
   if (merged.length === 0) {
-    return new Set(["CORE"])
+    return applyCap(new Set(["CORE"]))
   }
 
-  return new Set(["CORE", ...merged])
+  return applyCap(new Set(["CORE", ...merged]))
 }

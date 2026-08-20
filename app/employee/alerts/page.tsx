@@ -13,6 +13,7 @@ import {
   Clock,
   FileWarning,
   Lightbulb,
+  MapPin,
   X,
   Eye,
   EyeOff,
@@ -133,6 +134,8 @@ export default function AlertsPage() {
         return <Clock className="h-5 w-5" />
       case "feedback_pending":
         return <CheckCircle className="h-5 w-5" />
+      case "missed_visit":
+        return <MapPin className="h-5 w-5" />
       default:
         return <AlertTriangle className="h-5 w-5" />
     }
@@ -178,6 +181,7 @@ export default function AlertsPage() {
       leave_balance_low: "Low Leave Balance",
       project_deadline: "Project Deadline",
       feedback_pending: "Pending Feedback",
+      missed_visit: "Missed Visit",
     }
     return labels[type] || type
   }

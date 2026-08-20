@@ -12,6 +12,7 @@ import {
   getAdminSectionForPath,
   resolveAdminAllowedSections,
 } from "@/lib/admin-sections";
+import { firstAllowedAdminPath } from "@/lib/enabled-pages";
 
 export default function AdminLayout({
   children,
@@ -94,10 +95,8 @@ export default function AdminLayout({
     const enforcePageAccess = async () => {
       const user = getUser();
       if (!user || !isAdmin()) return;
-      if (user.role === "company_admin" || user.role === "super_admin") return;
 
       const currentSection = getAdminSectionForPath(pathname);
-      if (!currentSection || currentSection === "CORE") return;
 
       try {
         const response = await api.company.getPageAccess();
@@ -111,9 +110,10 @@ export default function AdminLayout({
 
         if (!allowed) return;
 
-        if (!allowed.has(currentSection)) {
-          router.push("/admin");
-        }
+        if (currentSection && allowed.has(currentSection)) return;
+        if (!currentSection && allowed.has("CORE")) return;
+
+        router.push(firstAllowedAdminPath(allowed));
       } catch {
         // fail open when settings API is unavailable
       }

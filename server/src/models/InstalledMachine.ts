@@ -28,6 +28,8 @@ interface IInstalledMachine {
   attendantNumber?: string;
   attendantRole?: string;
   isTrained?: boolean;
+  photoUrl?: string;
+  visitId?: string;
   createdBy?: string;
   createdAt?: Date;
   updatedAt?: Date;
@@ -65,6 +67,8 @@ const installedMachineSchema = new Schema<IInstalledMachine>(
     attendantNumber: { type: String },
     attendantRole: { type: String },
     isTrained: { type: Boolean, default: false },
+    photoUrl: { type: String },
+    visitId: { type: String, index: true },
     createdBy: { type: String },
   },
   { timestamps: true },

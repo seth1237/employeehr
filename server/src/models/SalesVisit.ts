@@ -34,6 +34,8 @@ export interface ISalesVisit extends Document {
   gps?: { lat: number; lng: number; accuracy?: number }
   nextAction?: string
   followUpDate?: Date
+  photoUrl?: string
+  installedMachineId?: string
   notes?: string
   quote_id?: string
   visitDate?: string
@@ -82,6 +84,8 @@ const salesVisitSchema = new Schema<ISalesVisit>(
     },
     nextAction: { type: String },
     followUpDate: { type: Date },
+    photoUrl: { type: String },
+    installedMachineId: { type: String },
     notes: { type: String },
     quote_id: { type: String },
     visitDate: { type: String, index: true },

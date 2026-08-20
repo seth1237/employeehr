@@ -25,6 +25,9 @@ import { ClientComplaint } from "../../models/ClientComplaint"
 import { ClientConversation } from "../../models/ClientConversation"
 import { CallLog } from "../../models/CallLog"
 import { Ticket } from "../../models/Ticket"
+import { SalesPlanner } from "../../models/SalesPlanner"
+import { SalesVisit } from "../../models/SalesVisit"
+import { SalesQuote } from "../../models/SalesQuote"
 import type { AssistantOrgContext } from "./orgContext"
 import {
   endOfMonth,
@@ -2018,11 +2021,136 @@ export function createAssistantTools(ctx: AssistantOrgContext) {
     },
   )
 
-  // Admin / company_admin / hr get the full company toolset.
-  // Other roles still get org-scoped tools but the catalog is the same —
-  // every tool is hard-filtered by org_id so no cross-company access is possible.
+  const getMyLeave = tool(
+    async () => {
+      assertOrgId(ctx.orgId)
+      const year = new Date().getUTCFullYear()
+      const [balance, requests] = await Promise.all([
+        LeaveBalance.findOne({ org_id: ctx.orgId, user_id: ctx.userId, year }).lean(),
+        LeaveRequest.find({ org_id: ctx.orgId, user_id: ctx.userId }).sort({ createdAt: -1 }).limit(12).lean(),
+      ])
+      return JSON.stringify({
+        year,
+        balance: balance
+          ? {
+              annualRemaining: Number(balance.annual_total || 0) - Number(balance.annual_used || 0),
+              annualTotal: balance.annual_total,
+              sickRemaining: Number(balance.sick_total || 0) - Number(balance.sick_used || 0),
+              sickTotal: balance.sick_total,
+              unpaidUsed: balance.unpaid_used,
+            }
+          : { message: "No leave balance on file yet. Applying for leave will create one." },
+        recentRequests: requests.map((req) => ({
+          type: req.type,
+          status: req.status,
+          startDate: req.startDate ? new Date(req.startDate).toISOString().split("T")[0] : null,
+          endDate: req.endDate ? new Date(req.endDate).toISOString().split("T")[0] : null,
+          reason: req.reason || "",
+        })),
+      })
+    },
+    {
+      name: "get_my_leave",
+      description:
+        "The current user's leave balance and recent leave requests. Use for 'how many leave days do I have?', 'is my leave approved?', or 'show my leave requests'.",
+      schema: emptyArgsSchema,
+    },
+  )
+
+  const getMyFieldWork = tool(
+    async (input) => {
+      assertOrgId(ctx.orgId)
+      const { start, end, label } = resolveRange(input)
+      const startKey = start.toISOString().split("T")[0]
+      const endKey = end.toISOString().split("T")[0]
+      const [planners, visits, quotes] = await Promise.all([
+        SalesPlanner.find({
+          org_id: ctx.orgId,
+          userId: ctx.userId,
+          date: { $gte: startKey, $lte: endKey },
+        })
+          .select("date status visits projectedExpenses")
+          .lean(),
+        SalesVisit.find({
+          org_id: ctx.orgId,
+          userId: ctx.userId,
+          $or: [
+            { visitDate: { $gte: startKey, $lte: endKey } },
+            { checkInAt: { $gte: start, $lte: end } },
+          ],
+        })
+          .select("clientName outcome visitDate checkInAt followUpDate")
+          .sort({ checkInAt: -1 })
+          .limit(40)
+          .lean(),
+        SalesQuote.find({
+          org_id: ctx.orgId,
+          userId: ctx.userId,
+          createdAt: { $gte: start, $lte: end },
+        })
+          .select("quoteNumber clientName status grandTotal createdAt")
+          .lean(),
+      ])
+      const plannerByStatus: Record<string, number> = {}
+      for (const plan of planners) {
+        const status = String(plan.status || "pending")
+        plannerByStatus[status] = (plannerByStatus[status] || 0) + 1
+      }
+      const quoteByStatus: Record<string, number> = {}
+      let quoteValue = 0
+      for (const quote of quotes) {
+        const status = String(quote.status || "draft")
+        quoteByStatus[status] = (quoteByStatus[status] || 0) + 1
+        quoteValue += Number(quote.grandTotal || 0)
+      }
+      return JSON.stringify({
+        period: label,
+        planners: {
+          count: planners.length,
+          byStatus: plannerByStatus,
+          sample: planners.slice(0, 8).map((plan) => ({
+            date: plan.date,
+            status: plan.status,
+            visitCount: plan.visits?.length || 0,
+          })),
+        },
+        visits: {
+          count: visits.length,
+          sample: visits.slice(0, 10).map((visit) => ({
+            clientName: visit.clientName,
+            outcome: visit.outcome || "Logged",
+            date: visit.visitDate || (visit.checkInAt ? new Date(visit.checkInAt).toISOString().split("T")[0] : null),
+            followUpDate: visit.followUpDate ? new Date(visit.followUpDate).toISOString().split("T")[0] : null,
+          })),
+        },
+        quotes: {
+          count: quotes.length,
+          totalValue: Number(quoteValue.toFixed(2)),
+          byStatus: quoteByStatus,
+        },
+      })
+    },
+    {
+      name: "get_my_field_work",
+      description:
+        "This sales person's planners, logged visits, and quotations for a period. Use for 'what's on my planner?', 'how many visits did I log?', or 'which quotes are pending?'.",
+      schema: dateRangeSchema,
+    },
+  )
+
+  if (ctx.role === "sales_rep") {
+    return [
+      getMyLeave,
+      getMyFieldWork,
+      getInventorySummary,
+      getTopProducts,
+      getClientDirectory,
+      getInstalledMachinesSummary,
+      getMyTaskSummary,
+    ]
+  }
+
   return [
-    // Sales
     getSalesSummary,
     getTopProducts,
     getInventorySummary,
@@ -2031,7 +2159,6 @@ export function createAssistantTools(ctx: AssistantOrgContext) {
     getSalesByCustomer,
     getSalesPerformanceTrend,
     getProductCategoryPerformance,
-    // Clients / CRM / Machines
     getClientDirectory,
     getClientGroupsSummary,
     getClientHistory,
@@ -2040,31 +2167,22 @@ export function createAssistantTools(ctx: AssistantOrgContext) {
     getDispatchSummary,
     getPaymentsAndExpensesSummary,
     getComplaintsSummary,
-    // HR
     getEmployeeSummary,
     searchEmployees,
     getLeaveSummary,
     getLeaveBalance,
-    // Payroll
+    getMyLeave,
     getPayrollSummary,
     getPayrollTrend,
-    // Attendance
     getAttendanceSummary,
-    // Tasks
     getMyTaskSummary,
     getTaskSummary,
-    // Performance & KPIs
     getPerformanceSummary,
     getKpiList,
-    // Meetings
     getMeetingSummary,
-    // PDPs
     getPdpSummary,
-    // Feedback
     getFeedbackSummary,
-    // Alerts
     getActiveAlerts,
-    // Cross-domain
     getBusinessSnapshot,
   ]
 }

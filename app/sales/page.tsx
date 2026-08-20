@@ -13,6 +13,7 @@ import {
   Footprints,
   Hourglass,
   MapPin,
+  Palmtree,
   PhoneCall,
   Plus,
   RefreshCw,
@@ -168,6 +169,7 @@ export default function SalesDashboardPage() {
   const quoteValue = Number(kpis?.quoteValueThisWeek || 0)
   const reminderCount =
     (reminders?.followUpsDue || []).length +
+    (reminders?.missedVisits || []).length +
     (reminders?.quotesNeedingRevision || []).length +
     (reminders?.quotesAwaitingDownload || []).length
 
@@ -187,6 +189,7 @@ export default function SalesDashboardPage() {
         plannedCount={plannedCount}
         completedCount={completedCount}
         followUps={Number(kpis?.followUpsDue || 0)}
+        missedVisits={Number(kpis?.coverageMissed || reminders?.missedVisits?.length || 0)}
         firstVisitName={firstVisitName}
         nextVisitName={nextVisitName}
         quotesNeedingRevision={(reminders?.quotesNeedingRevision || []).length}
@@ -198,10 +201,17 @@ export default function SalesDashboardPage() {
 
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
         <SalesKpi
-          label="Visits"
-          value={`${completedCount}/${plannedCount || completedCount || 0}`}
-          hint={plannedCount ? `${plannedCount} planned today` : "Logged today"}
+          label="Coverage"
+          value={`${Number(kpis?.coverageCompleted || 0)}/${Number(kpis?.coveragePlanned || 0)}`}
+          hint={
+            Number(kpis?.coverageMissed || 0) > 0
+              ? `${kpis.coverageMissed} missed this week`
+              : kpis?.coverageRate == null
+                ? "Approved plan vs logged visits"
+                : `${kpis.coverageRate}% this week`
+          }
           icon={Footprints}
+          tone={Number(kpis?.coverageMissed || 0) > 0 ? "alert" : "default"}
           color={branding.primaryColor}
         />
         <SalesKpi
@@ -316,6 +326,20 @@ export default function SalesDashboardPage() {
               <SalesEmpty title="Nothing overdue" description="Log visits and calls as you go." />
             ) : (
               <>
+                {(reminders?.missedVisits || []).map((item: any, index: number) => (
+                  <div key={`${item.date}-${item.clientName}-${index}`} className="flex flex-col gap-2 rounded-md border border-amber-200 bg-amber-50/50 p-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="font-medium text-slate-900">{item.clientName}</p>
+                      <p className="text-xs text-slate-500">
+                        Missed planned visit on {item.date}
+                        {item.reason ? ` · ${item.reason}` : ""}
+                      </p>
+                    </div>
+                    <Button asChild size="sm" className="min-h-10">
+                      <Link href="/sales/report">Log visit</Link>
+                    </Button>
+                  </div>
+                ))}
                 {(reminders?.followUpsDue || []).map((item: any) => (
                   <div key={item._id} className="flex flex-col gap-2 rounded-md border border-slate-200 p-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0">
@@ -377,6 +401,7 @@ export default function SalesDashboardPage() {
             <SalesQuickAction href="/sales/planner" icon={CalendarDays} title="Plan visit" description="Build tomorrow’s route" color={branding.primaryColor} />
             <SalesQuickAction href="/sales/quotes" icon={FileText} title="Create quotation" description="Quote from live stock" color={branding.primaryColor} />
             <SalesQuickAction href="/sales/clients" icon={BookUser} title="New client / call" description="Search the book or log a call" color={branding.primaryColor} />
+            <SalesQuickAction href="/sales/leave" icon={Palmtree} title="Leave tracker" description="Balance, apply, and follow requests" color={branding.primaryColor} />
           </div>
         </div>
       </section>

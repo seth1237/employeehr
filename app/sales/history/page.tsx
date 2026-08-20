@@ -202,7 +202,19 @@ export default function SalesHistoryPage() {
           onClick={() => setTab("visits")}
           aria-pressed={tab === "visits"}
         >
-          <SalesKpi label="Visits" value={stats.visits} icon={Footprints} tone="success" />
+          <SalesKpi
+            label="Coverage"
+            value={`${Number(data?.coverage?.[period]?.completed || 0)}/${Number(data?.coverage?.[period]?.planned || 0)}`}
+            hint={
+              Number(data?.coverage?.[period]?.missed || 0) > 0
+                ? `${data.coverage[period].missed} missed`
+                : data?.coverage?.[period]?.rate == null
+                  ? "Plan vs logged visits"
+                  : `${data.coverage[period].rate}% covered`
+            }
+            icon={Footprints}
+            tone={Number(data?.coverage?.[period]?.missed || 0) > 0 ? "alert" : "success"}
+          />
         </button>
       </div>
 

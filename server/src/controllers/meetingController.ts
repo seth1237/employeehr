@@ -5,6 +5,7 @@ import { User } from "../models/User"
 import { Task } from "../models/Task"
 import { AIAnalysisService } from "../services/aiAnalysisService"
 import { emailService } from "../services/emailService"
+import { meetingInvitationEmail } from "../lib/email-templates"
 import { AIMeetingService } from "../services/aiMeetingService"
 import crypto from "crypto"
 
@@ -127,41 +128,18 @@ export class MeetingController {
               console.log(`Sending meeting invitation email to: ${user.email}`)
               await emailService.sendEmail({
                 to: user.email,
-                subject: `Meeting Invitation: ${title}`,
+                subject: `Meeting invitation: ${title}`,
                 companyId: org_id,
-                html: `
-                  <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                    <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-                      <h2 style="color: #1f2937; margin-top: 0;">You've been invited to a meeting</h2>
-                    </div>
-                    
-                    <div style="background-color: #f9fafb; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-                      <p style="margin: 10px 0;"><strong style="color: #374151;">Meeting Title:</strong> ${title}</p>
-                      <p style="margin: 10px 0;"><strong style="color: #374151;">Scheduled:</strong> ${new Date(scheduled_at).toLocaleString()}</p>
-                      <p style="margin: 10px 0;"><strong style="color: #374151;">Duration:</strong> ${duration_minutes || 60} minutes</p>
-                      
-                      ${description ? `<p style="margin: 10px 0;"><strong style="color: #374151;">Description:</strong> ${description}</p>` : ""}
-                      ${agenda ? `<p style="margin: 10px 0;"><strong style="color: #374151;">Agenda:</strong> ${agenda}</p>` : ""}
-                    </div>
-
-                    <div style="background-color: #eff6ff; padding: 20px; border-radius: 8px; border-left: 4px solid #3b82f6; margin-bottom: 20px;">
-                      <p style="margin: 0 0 10px 0;"><strong style="color: #1e40af;">Meeting Link:</strong></p>
-                      <a href="${meeting_link}" style="color: #2563eb; text-decoration: none; word-break: break-all;">${meeting_link}</a>
-                      <p style="margin: 10px 0 0 0; font-size: 12px; color: #6b7280;">Click the link above to join the meeting</p>
-                    </div>
-
-                    <p style="margin: 10px 0;"><strong style="color: #374151;">Meeting ID:</strong> ${meeting_id}</p>
-                    
-                    ${require_password ? `<div style="background-color: #fefce8; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #eab308;">
-                      <p style="margin: 0;"><strong style="color: #713f12;">🔐 Password Protected:</strong></p>
-                      <p style="margin: 10px 0 0 0; font-family: monospace; background-color: #fef3c7; padding: 10px; border-radius: 4px; color: #92400e;">${password}</p>
-                    </div>` : ""}
-
-                    <p style="color: #6b7280; font-size: 12px; margin-top: 20px; border-top: 1px solid #e5e7eb; padding-top: 20px;">
-                      This is an automated meeting invitation. If you did not expect to receive this email, please contact your organization administrator.
-                    </p>
-                  </div>
-                `,
+                html: meetingInvitationEmail({
+                  title,
+                  scheduledAt: new Date(scheduled_at).toLocaleString(),
+                  durationMinutes: duration_minutes || 60,
+                  description,
+                  agenda,
+                  meetingLink: meeting_link,
+                  meetingId: meeting_id,
+                  password: require_password ? password : undefined,
+                }),
               })
               console.log(`✓ Email sent successfully to: ${user.email}`)
             } catch (emailError) {

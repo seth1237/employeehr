@@ -20,6 +20,18 @@ const SUGGESTIONS = [
   "What is our payroll cost this month?",
 ]
 
+const SALES_SUGGESTIONS = [
+  "What's my leave balance?",
+  "What's on my planner this week?",
+  "How many visits have I logged this month?",
+  "Which of my quotes are waiting on admin?",
+  "Which products are low on stock?",
+]
+
+type AiAssistantChatProps = {
+  variant?: "default" | "sales"
+}
+
 // ─── Minimal inline markdown renderer ────────────────────────────────────────
 // Handles: **bold**, bullet lists (- /•), numbered lists, and line breaks.
 
@@ -125,7 +137,7 @@ function TypingIndicator() {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function AiAssistantChat() {
+export function AiAssistantChat({ variant = "default" }: AiAssistantChatProps) {
   const [open, setOpen] = useState(false)
   const [enabled, setEnabled] = useState<boolean | null>(null)
   const [modelInfo, setModelInfo] = useState<{ model?: string; provider?: string }>({})
@@ -202,14 +214,28 @@ export function AiAssistantChat() {
     setError(null)
   }
 
-  // Short display of model name
-  const modelLabel = modelInfo.model
-    ? modelInfo.model.split("/").pop()?.replace(/-\d{3}$/, "") ?? modelInfo.model
-    : null
+  const suggestions = variant === "sales" ? SALES_SUGGESTIONS : SUGGESTIONS
+  const intro =
+    variant === "sales"
+      ? "Ask about your leave, planner, visits, quotes, or stock. Answers come from your own data."
+      : "Ask about your company's sales, stock, invoices, payroll, or HR metrics. All answers come from your own data."
+  const placeholder =
+    variant === "sales"
+      ? "Ask about leave, visits, quotes, stock…"
+      : enabled === false
+        ? "Not configured"
+        : "Ask about sales, stock, payroll…"
 
   return (
     <>
-      <div className="fixed bottom-5 right-5 z-[60] flex flex-col items-end gap-3">
+      <div
+        className={cn(
+          "fixed z-[60] flex flex-col items-end gap-3",
+          variant === "sales"
+            ? "bottom-20 left-4 items-start lg:bottom-5 lg:left-auto lg:right-5 lg:items-end"
+            : "bottom-5 right-5",
+        )}
+      >
         {/* ── Chat panel ── */}
         {open && (
           <div
@@ -273,11 +299,9 @@ export function AiAssistantChat() {
               {/* Empty state with suggestions */}
               {enabled !== false && messages.length === 0 && (
                 <div className="space-y-3">
-                  <p className="text-sm text-muted-foreground">
-                    Ask about your company's sales, stock, invoices, payroll, or HR metrics. All answers come from your own data.
-                  </p>
+                  <p className="text-sm text-muted-foreground">{intro}</p>
                   <div className="flex flex-wrap gap-1.5">
-                    {SUGGESTIONS.map((suggestion) => (
+                    {suggestions.map((suggestion) => (
                       <button
                         key={suggestion}
                         type="button"
@@ -350,7 +374,7 @@ export function AiAssistantChat() {
                 ref={inputRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder={enabled === false ? "Not configured" : "Ask about sales, stock, payroll…"}
+                placeholder={enabled === false ? "Not configured" : placeholder}
                 disabled={loading || enabled === false}
                 className="flex-1 text-sm"
                 autoComplete="off"

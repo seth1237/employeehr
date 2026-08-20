@@ -28,6 +28,13 @@ import { Company } from "../models/Company";
 import { Branch } from "../models/Branch";
 import { User } from "../models/User";
 import emailService from "../services/email.service";
+import {
+  documentAttachmentEmail,
+  ELEVATE_EMAIL,
+  renderCalloutBox,
+  renderCompanyBrandedEmail,
+  renderInfoPanel,
+} from "../lib/email-templates";
 import { smsService } from "../services/sms.service";
 import { mpesaService } from "../services/mpesa.service";
 import { createOrUpdateStockClient } from "../services/stockClientSave.service";
@@ -875,107 +882,34 @@ async function sendLowStockAlert(product: any, orgId: string) {
     (company as any)?.logo ||
     `${process.env.FRONTEND_URL || "https://hr.codewithseth.co.ke"}/icon.svg`;
   const companyName = (company as any)?.name || "Company";
-  const currentYear = new Date().getFullYear();
   const stockPercentage = Math.round(
     (product.currentQuantity / product.minAlertQuantity) * 100,
   );
 
-  const subject = `⚠️ Low Stock Alert: ${product.name}`;
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="utf-8" />
-      <meta name="viewport" content="width=device-width,initial-scale=1" />
-      <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; color: #1f2937; background: #f8fafc; line-height: 1.6; }
-        .wrapper { width: 100%; padding: 24px 0; }
-        .container { max-width: 640px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
-        .header { padding: 32px 24px; background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); color: #fff; text-align: center; }
-        .logo-wrapper { margin-bottom: 16px; }
-        .logo-wrapper img { max-width: 100px; height: auto; display: block; margin: 0 auto; }
-        .header-title { font-size: 24px; font-weight: 700; margin: 12px 0 4px; letter-spacing: -0.5px; }
-        .content { padding: 32px 24px; }
-        .content-section { margin-bottom: 20px; }
-        .content-section p { margin: 12px 0; line-height: 1.6; }
-        .content-section p:first-child { margin-top: 0; }
-        .alert-box { background: #fff7ed; border: 2px solid #fed7aa; border-left: 4px solid #f97316; padding: 16px; border-radius: 6px; margin: 16px 0; }
-        .alert-box h3 { color: #92400e; font-size: 16px; margin-bottom: 12px; }
-        .stock-details { background: #f9fafb; border: 1px solid #e5e7eb; padding: 16px; border-radius: 6px; margin: 16px 0; }
-        .detail-row { display: flex; justify-content: space-between; margin: 8px 0; padding: 6px 0; border-bottom: 1px solid #e5e7eb; }
-        .detail-row:last-child { border-bottom: none; }
-        .detail-label { font-weight: 600; color: #6b7280; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; }
-        .detail-value { font-weight: 700; color: #1f2937; }
-        .progress-bar { width: 100%; height: 8px; background: #e5e7eb; border-radius: 4px; overflow: hidden; margin: 8px 0; }
-        .progress-fill { height: 100%; background: #f97316; width: ${stockPercentage}%; transition: width 0.3s ease; }
-        .action-button { display: inline-block; padding: 12px 24px; background: ${primaryColor}; color: #fff; text-decoration: none; border-radius: 6px; font-weight: 600; margin-top: 12px; }
-        .action-button:hover { opacity: 0.9; }
-        .footer-content { padding: 24px; border-top: 1px solid #e5e7eb; text-align: center; }
-        .footer-text { font-size: 12px; color: #6b7280; }
-        @media (max-width: 600px) {
-          .container { margin: 12px; border-radius: 8px; }
-          .header { padding: 24px 16px; }
-          .content { padding: 24px 16px; }
-          .header-title { font-size: 20px; }
-          .detail-row { flex-direction: column; }
-          .detail-value { margin-top: 4px; }
-        }
-      </style>
-    </head>
-    <body>
-      <div class="wrapper">
-        <div class="container">
-          <div class="header">
-            <div class="logo-wrapper">
-              <img src="${logoUrl}" alt="${companyName}" style="max-width: 100px; height: auto; border-radius: 4px;" />
-            </div>
-            <div class="header-title">Low Stock Alert</div>
-          </div>
-          <div class="content">
-            <div class="content-section">
-              <p>Hello Team,</p>
-            </div>
-            <div class="alert-box">
-              <h3>⚠️ Stock Level Warning</h3>
-              <p style="margin: 0; font-size: 14px;">The product <strong>${product.name}</strong> has fallen below the minimum alert threshold and requires immediate attention.</p>
-            </div>
-            <div class="stock-details">
-              <div class="detail-row">
-                <span class="detail-label">Product Name</span>
-                <span class="detail-value">${product.name}</span>
-              </div>
-              <div class="detail-row">
-                <span class="detail-label">Current Quantity</span>
-                <span class="detail-value">${product.currentQuantity} units</span>
-              </div>
-              <div class="detail-row">
-                <span class="detail-label">Alert Threshold</span>
-                <span class="detail-value">${product.minAlertQuantity} units</span>
-              </div>
-              <div style="margin-top: 12px;">
-                <span class="detail-label">Stock Level</span>
-                <div class="progress-bar">
-                  <div class="progress-fill"></div>
-                </div>
-                <span style="font-size: 12px; color: #6b7280;">${stockPercentage}% of alert threshold</span>
-              </div>
-            </div>
-            <div class="content-section">
-              <p><strong>Action Required:</strong> Please restock this product as soon as possible to avoid inventory shortages. Monitor stock levels regularly to prevent future disruptions.</p>
-            </div>
-            <div class="content-section">
-              <p style="font-size: 13px; color: #6b7280;">This is an automated alert from your inventory management system. Please take appropriate action to replenish stock.</p>
-            </div>
-          </div>
-          <div class="footer-content">
-            <p class="footer-text">© ${currentYear} <strong>${companyName}</strong>. All rights reserved.</p>
-          </div>
-        </div>
-      </div>
-    </body>
-    </html>
-  `;
+  const subject = `Low stock alert: ${product.name}`;
+  const html = renderCompanyBrandedEmail({
+    title: `Low stock — ${product.name}`,
+    preheader: `${product.name} is below the minimum alert threshold`,
+    headline: "Low stock alert",
+    subtitle: product.name,
+    companyName,
+    logoUrl,
+    accentColor: "#f97316",
+    bodyHtml: `
+      <p style="margin:0 0 12px;">Hello Team,</p>
+      ${renderCalloutBox(
+        `<p style="margin:0;font-size:14px;"><strong>${product.name}</strong> has fallen below the minimum alert threshold and needs attention.</p>`,
+        "warn",
+        "#f97316",
+      )}
+      ${renderInfoPanel("Stock details", [
+        { label: "Product", value: product.name },
+        { label: "Current quantity", value: `${product.currentQuantity} units` },
+        { label: "Alert threshold", value: `${product.minAlertQuantity} units` },
+        { label: "Stock level", value: `${stockPercentage}% of threshold` },
+      ])}
+      <p style="margin:0;color:${ELEVATE_EMAIL.muted};font-size:14px;">Please restock this product as soon as possible to avoid inventory shortages.</p>`,
+  });
 
   await Promise.all(
     recipients.map((recipient) =>
@@ -1423,108 +1357,49 @@ async function sendExpiryReminderEmail(product: any, orgId: string) {
     (company as any)?.logo ||
     `${process.env.FRONTEND_URL || "https://hr.codewithseth.co.ke"}/icon.svg`;
   const companyName = (company as any)?.name || "Company";
-  const currentYear = new Date().getFullYear();
 
   const subject = isExpired
-    ? `🚨 Expired Stock Alert: ${product.name}`
-    : `⏰ Expiry Reminder: ${product.name} (${Math.max(daysLeft, 0)} day(s) left)`;
+    ? `Expired stock alert: ${product.name}`
+    : `Expiry reminder: ${product.name} (${Math.max(daysLeft, 0)} day(s) left)`;
 
   const headerColor = isExpired ? "#dc2626" : "#ea580c";
-  const bgColor = isExpired ? "#fef2f2" : "#fff7ed";
-  const borderColor = isExpired ? "#fecaca" : "#fed7aa";
-  const alertIcon = isExpired ? "🚨" : "⏰";
 
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="utf-8" />
-      <meta name="viewport" content="width=device-width,initial-scale=1" />
-      <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; color: #1f2937; background: #f8fafc; line-height: 1.6; }
-        .wrapper { width: 100%; padding: 24px 0; }
-        .container { max-width: 640px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
-        .header { padding: 32px 24px; background: linear-gradient(135deg, ${headerColor} 0%, ${headerColor}dd 100%); color: #fff; text-align: center; }
-        .logo-wrapper { margin-bottom: 16px; }
-        .logo-wrapper img { max-width: 100px; height: auto; display: block; margin: 0 auto; }
-        .header-title { font-size: 24px; font-weight: 700; margin: 12px 0 4px; letter-spacing: -0.5px; }
-        .content { padding: 32px 24px; }
-        .content-section { margin-bottom: 20px; }
-        .content-section p { margin: 12px 0; line-height: 1.6; }
-        .content-section p:first-child { margin-top: 0; }
-        .alert-box { background: ${bgColor}; border: 2px solid ${borderColor}; border-left: 4px solid ${headerColor}; padding: 16px; border-radius: 6px; margin: 16px 0; }
-        .alert-box h3 { color: ${isExpired ? "#7f1d1d" : "#92400e"}; font-size: 16px; margin-bottom: 8px; }
-        .product-details { background: #f9fafb; border: 1px solid #e5e7eb; padding: 16px; border-radius: 6px; margin: 16px 0; }
-        .detail-row { display: flex; justify-content: space-between; margin: 10px 0; padding: 6px 0; border-bottom: 1px solid #e5e7eb; }
-        .detail-row:last-child { border-bottom: none; }
-        .detail-label { font-weight: 600; color: #6b7280; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; }
-        .detail-value { font-weight: 700; color: #1f2937; text-align: right; }
-        .action-text { background: #f3f4f6; padding: 12px 16px; border-radius: 6px; margin: 16px 0; border-left: 3px solid ${primaryColor}; }
-        .action-text p { margin: 0; font-size: 14px; line-height: 1.6; }
-        .action-text strong { color: ${headerColor}; }
-        .footer-content { padding: 24px; border-top: 1px solid #e5e7eb; text-align: center; }
-        .footer-text { font-size: 12px; color: #6b7280; }
-        @media (max-width: 600px) {
-          .container { margin: 12px; border-radius: 8px; }
-          .header { padding: 24px 16px; }
-          .content { padding: 24px 16px; }
-          .header-title { font-size: 20px; }
-          .detail-row { flex-direction: column; }
-          .detail-value { margin-top: 4px; text-align: left; }
-        }
-      </style>
-    </head>
-    <body>
-      <div class="wrapper">
-        <div class="container">
-          <div class="header">
-            <div class="logo-wrapper">
-              <img src="${logoUrl}" alt="${companyName}" style="max-width: 100px; height: auto; border-radius: 4px;" />
-            </div>
-            <div class="header-title">${isExpired ? "Expired Stock Alert" : "Product Expiry Reminder"}</div>
-          </div>
-          <div class="content">
-            <div class="content-section">
-              <p>Hello Team,</p>
-            </div>
-            <div class="alert-box">
-              <h3>${alertIcon} ${isExpired ? "Product Expired" : "Expiry Alert"}</h3>
-              <p style="margin: 0; font-size: 14px;">${isExpired ? "This product has passed its expiry date and must be removed from stock immediately." : "This product is nearing its expiry date and should be prioritized for sale or disposal."}</p>
-            </div>
-            <div class="product-details">
-              <div class="detail-row">
-                <span class="detail-label">Product Name</span>
-                <span class="detail-value">${product.name}</span>
-              </div>
-              <div class="detail-row">
-                <span class="detail-label">Current Quantity</span>
-                <span class="detail-value">${product.currentQuantity} units</span>
-              </div>
-              <div class="detail-row">
-                <span class="detail-label">Expiry Date</span>
-                <span class="detail-value">${expiryDate.toDateString()}</span>
-              </div>
-              <div class="detail-row">
-                <span class="detail-label">${isExpired ? "Days Expired" : "Days Until Expiry"}</span>
-                <span class="detail-value" style="color: ${isExpired ? "#dc2626" : "#ea580c"};">${isExpired ? Math.abs(daysLeft) : Math.max(daysLeft, 0)} day(s)</span>
-              </div>
-            </div>
-            <div class="action-text">
-              <p><strong>Action Required:</strong> ${isExpired ? "Remove this product from stock immediately to prevent customer dissatisfaction and regulatory issues." : "Prioritize selling remaining stock before the expiry date. Consider promotional pricing if needed."}</p>
-            </div>
-            <div class="content-section">
-              <p style="font-size: 13px; color: #6b7280;">This is an automated alert from your inventory management system. Timely action helps maintain product quality and customer trust.</p>
-            </div>
-          </div>
-          <div class="footer-content">
-            <p class="footer-text">© ${currentYear} <strong>${companyName}</strong>. All rights reserved.</p>
-          </div>
-        </div>
-      </div>
-    </body>
-    </html>
-  `;
+  const html = renderCompanyBrandedEmail({
+    title: isExpired ? `Expired stock — ${product.name}` : `Expiry reminder — ${product.name}`,
+    preheader: isExpired
+      ? `${product.name} has passed its expiry date`
+      : `${product.name} expires in ${Math.max(daysLeft, 0)} day(s)`,
+    headline: isExpired ? "Expired stock alert" : "Product expiry reminder",
+    subtitle: product.name,
+    companyName,
+    logoUrl,
+    accentColor: headerColor,
+    bodyHtml: `
+      <p style="margin:0 0 12px;">Hello Team,</p>
+      ${renderCalloutBox(
+        `<p style="margin:0;font-size:14px;">${
+          isExpired
+            ? "This product has passed its expiry date and must be removed from stock immediately."
+            : "This product is nearing its expiry date and should be prioritized for sale or disposal."
+        }</p>`,
+        "warn",
+        headerColor,
+      )}
+      ${renderInfoPanel("Product details", [
+        { label: "Product", value: product.name },
+        { label: "Current quantity", value: `${product.currentQuantity} units` },
+        { label: "Expiry date", value: expiryDate.toDateString() },
+        {
+          label: isExpired ? "Days expired" : "Days until expiry",
+          value: `${isExpired ? Math.abs(daysLeft) : Math.max(daysLeft, 0)} day(s)`,
+        },
+      ])}
+      <p style="margin:0;color:${ELEVATE_EMAIL.muted};font-size:14px;">${
+        isExpired
+          ? "Remove this product from stock immediately to prevent customer dissatisfaction and regulatory issues."
+          : "Prioritize selling remaining stock before the expiry date. Consider promotional pricing if needed."
+      }</p>`,
+  });
 
   await Promise.all(
     recipients.map((recipient) =>
@@ -2656,15 +2531,26 @@ export class StockController {
 
       const company = await Company.findById(org_id).lean();
       const companyName = company?.name || "Your company";
+      const logoUrl =
+        (company as any)?.logo ||
+        `${process.env.FRONTEND_URL || "https://hr.codewithseth.co.ke"}/icon.svg`;
       const pdfBuffer = await buildInvoicePdfBuffer(
         invoice,
         org_id,
         resolvePublicApiBaseUrl(req),
       );
+      const html = documentAttachmentEmail({
+        documentType: "Invoice",
+        documentNumber: invoice.invoiceNumber || "invoice",
+        recipientName: invoice.client?.name || "there",
+        companyName,
+        logoUrl,
+        accentColor: (company as any)?.primaryColor,
+      });
       const sent = await emailService.sendEmail({
         to,
         subject: `Invoice ${invoice.invoiceNumber} from ${companyName}`,
-        html: `<p>Hello ${invoice.client?.name || "there"},</p><p>Please find attached invoice <strong>${invoice.invoiceNumber}</strong>.</p><p>Thank you,<br/>${companyName}</p>`,
+        html,
         text: `Invoice ${invoice.invoiceNumber} from ${companyName}`,
         companyId: org_id,
         attachments: [
@@ -2718,15 +2604,26 @@ export class StockController {
 
       const company = await Company.findById(org_id).lean();
       const companyName = company?.name || "Your company";
+      const logoUrl =
+        (company as any)?.logo ||
+        `${process.env.FRONTEND_URL || "https://hr.codewithseth.co.ke"}/icon.svg`;
       const pdfBuffer = await buildQuotationPdfBuffer(
         quotation,
         org_id,
         resolvePublicApiBaseUrl(req),
       );
+      const html = documentAttachmentEmail({
+        documentType: "Quotation",
+        documentNumber: quotation.quotationNumber || "quotation",
+        recipientName: quotation.client?.name || "there",
+        companyName,
+        logoUrl,
+        accentColor: (company as any)?.primaryColor,
+      });
       const sent = await emailService.sendEmail({
         to,
         subject: `Quotation ${quotation.quotationNumber} from ${companyName}`,
-        html: `<p>Hello ${quotation.client?.name || "there"},</p><p>Please find attached quotation <strong>${quotation.quotationNumber}</strong>.</p><p>Thank you,<br/>${companyName}</p>`,
+        html,
         text: `Quotation ${quotation.quotationNumber} from ${companyName}`,
         companyId: org_id,
         attachments: [

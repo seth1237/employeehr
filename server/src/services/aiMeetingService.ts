@@ -2,6 +2,7 @@ import axios from "axios"
 import OpenAI from "openai"
 import { Task } from "../models/Task"
 import { User } from "../models/User"
+import { ELEVATE_EMAIL, renderCalloutBox, renderEmailLayout } from "../lib/email-templates"
 
 interface ActionItem {
   description: string
@@ -306,39 +307,48 @@ Return only the HTML content, properly formatted with CSS styles.`
     analysis: MeetingAnalysis,
     reportHtml: string,
   ): string {
-    return `
-      <html>
-        <body style="font-family: Arial, sans-serif; line-height: 1.6;">
-          <h2>Meeting Report: ${meetingTitle}</h2>
-          <p>Hi ${attendeeName},</p>
-          <p>Your meeting has been analyzed by our AI assistant. Here are the key details:</p>
-          
-          <h3>Summary</h3>
-          <p>${analysis.summary}</p>
-          
-          <h3>Key Points</h3>
-          <ul>
-            ${analysis.keyPoints.map((point) => `<li>${point}</li>`).join("")}
-          </ul>
-          
-          <h3>Action Items Assigned to You</h3>
-          <ul>
-            ${analysis.actionItems
-              .filter((item) => item.assigned_to === "your_email")
-              .map(
-                (item) =>
-                  `<li><strong>${item.description}</strong> - Priority: ${item.priority}${item.due_date ? `, Due: ${item.due_date.toDateString()}` : ""}</li>`,
-              )
-              .join("")}
-          </ul>
-          
-          <h3>Full Report</h3>
-          ${reportHtml}
-          
-          <p>Your assigned action items have been automatically created as tasks in the system.</p>
-          <p>Best regards,<br>Elevate AI Assistant</p>
-        </body>
-      </html>
-    `
+    const personalItems = analysis.actionItems.filter(
+      (item) => item.assigned_to === "your_email",
+    )
+    const actionItems = personalItems.length > 0 ? personalItems : analysis.actionItems
+
+    const keyPoints =
+      analysis.keyPoints.length > 0
+        ? `<ul style="margin:0;padding-left:20px;color:${ELEVATE_EMAIL.text};">${analysis.keyPoints.map((p) => `<li style="margin:0 0 8px;">${p}</li>`).join("")}</ul>`
+        : `<p style="margin:0;color:${ELEVATE_EMAIL.muted};">No key points recorded.</p>`
+
+    const actionItemsHtml =
+      actionItems.length > 0
+        ? `<ul style="margin:0;padding-left:20px;">${actionItems
+            .map((item) => {
+              const due = item.due_date ? ` · Due ${item.due_date.toLocaleDateString()}` : ""
+              return `<li style="margin:0 0 10px;color:${ELEVATE_EMAIL.text};"><strong>${item.description}</strong><br /><span style="font-size:13px;color:${ELEVATE_EMAIL.muted};">Priority: ${item.priority}${due}</span></li>`
+            })
+            .join("")}</ul>`
+        : `<p style="margin:0;color:${ELEVATE_EMAIL.muted};">No action items captured.</p>`
+
+    return renderEmailLayout({
+      title: `Meeting report: ${meetingTitle}`,
+      preheader: `AI report for ${meetingTitle}`,
+      headline: "Meeting report",
+      subtitle: meetingTitle,
+      bodyHtml: `
+        <p style="margin:0 0 12px;">Hi <strong>${attendeeName}</strong>,</p>
+        <p style="margin:0 0 16px;">Your meeting has been analyzed. Here are the key details.</p>
+        ${renderCalloutBox(
+          `<p class="eh-text" style="margin:0 0 8px;font-size:13px;font-weight:600;color:${ELEVATE_EMAIL.text};">Summary</p>
+          <p class="eh-text" style="margin:0;color:${ELEVATE_EMAIL.text};">${analysis.summary}</p>`,
+        )}
+        <div style="margin:0 0 18px;">
+          <p style="margin:0 0 8px;font-size:13px;font-weight:600;color:${ELEVATE_EMAIL.text};">Key points</p>
+          ${keyPoints}
+        </div>
+        <div style="margin:0 0 18px;">
+          <p style="margin:0 0 8px;font-size:13px;font-weight:600;color:${ELEVATE_EMAIL.text};">Action items</p>
+          ${actionItemsHtml}
+        </div>
+        ${reportHtml?.trim() ? `<div style="margin:0 0 16px;">${reportHtml}</div>` : ""}
+        <p style="margin:0;font-size:13px;color:${ELEVATE_EMAIL.muted};">Assigned action items have been created as tasks in your dashboard.</p>`,
+    })
   }
 }

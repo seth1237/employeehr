@@ -78,6 +78,14 @@ type PeriodMeta = {
   workdays: string[]
 }
 
+type CoverageSlice = {
+  planned: number
+  completed: number
+  missed: number
+  remaining: number
+  rate: number | null
+}
+
 type RepRow = {
   userId: string
   name: string
@@ -88,6 +96,7 @@ type RepRow = {
   quarterlyAmount: number
   sales: Record<PeriodKey, SalesSlice>
   expenses: Record<PeriodKey, ExpenseSlice>
+  coverage?: Record<PeriodKey, CoverageSlice>
   attendance: Record<PeriodKey, AttendanceSlice>
   days: DayRow[]
   locations: LocationRow[]
@@ -264,7 +273,7 @@ export default function FieldPerformancePage() {
         <div>
           <h1 className="text-2xl font-semibold">Sales performance</h1>
           <p className="text-sm text-muted-foreground">
-            Open one sales person for attendance, locations from Start day / visits, and sales vs target.
+            Open one sales person for attendance, visit coverage, locations from Start day / visits, and sales vs target.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -374,6 +383,7 @@ export default function FieldPerformancePage() {
                       <TableRow>
                         <TableHead>Rep</TableHead>
                         <TableHead>Sales</TableHead>
+                        <TableHead>Coverage</TableHead>
                         <TableHead>Attendance</TableHead>
                         <TableHead>Hours</TableHead>
                         <TableHead>Locations</TableHead>
@@ -383,6 +393,7 @@ export default function FieldPerformancePage() {
                       {filtered.map((rep) => {
                         const sales = rep.sales[period]
                         const attendance = rep.attendance?.[period]
+                        const coverage = rep.coverage?.[period]
                         return (
                           <TableRow
                             key={rep.userId}
@@ -397,6 +408,14 @@ export default function FieldPerformancePage() {
                               <p className="tabular-nums">{kes(sales?.actual || 0)}</p>
                               <p className="text-xs text-muted-foreground">
                                 {sales?.percent == null ? "No target" : `${sales.percent}% of target`}
+                              </p>
+                            </TableCell>
+                            <TableCell>
+                              <p className="tabular-nums">
+                                {coverage?.completed || 0}/{coverage?.planned || 0}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {coverage?.missed ? `${coverage.missed} missed` : coverage?.rate == null ? "No plan" : `${coverage.rate}%`}
                               </p>
                             </TableCell>
                             <TableCell>
@@ -420,7 +439,7 @@ export default function FieldPerformancePage() {
                       <span className="text-xs font-normal text-muted-foreground">{selected.email}</span>
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="grid gap-3 sm:grid-cols-4">
+                  <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                     <div>
                       <p className="text-xs text-muted-foreground">Invoices</p>
                       <p className="mt-1 text-xl font-semibold tabular-nums">{kes(selected.sales[period]?.actual || 0)}</p>
@@ -428,6 +447,19 @@ export default function FieldPerformancePage() {
                         {selected.sales[period]?.percent == null
                           ? "No target"
                           : `${selected.sales[period].percent}% of ${kes(selected.sales[period].target)}`}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Visit coverage</p>
+                      <p className="mt-1 text-xl font-semibold tabular-nums">
+                        {selected.coverage?.[period]?.completed || 0}/{selected.coverage?.[period]?.planned || 0}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {selected.coverage?.[period]?.missed
+                          ? `${selected.coverage[period].missed} missed`
+                          : selected.coverage?.[period]?.rate == null
+                            ? "No approved plan in this period"
+                            : `${selected.coverage[period].rate}% covered`}
                       </p>
                     </div>
                     <div>

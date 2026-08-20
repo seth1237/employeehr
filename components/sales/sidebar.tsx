@@ -11,6 +11,7 @@ import {
   BookUser,
   CalendarDays,
   LogOut,
+  Palmtree,
   X,
 } from "lucide-react"
 import { logout } from "@/lib/auth"
@@ -21,6 +22,7 @@ const navigation = [
   { name: "Visit reports", href: "/sales/report", icon: ClipboardList },
   { name: "Clients", href: "/sales/clients", icon: BookUser },
   { name: "Quotes", href: "/sales/quotes", icon: FileText },
+  { name: "Leave", href: "/sales/leave", icon: Palmtree },
   { name: "History", href: "/sales/history", icon: History },
 ]
 

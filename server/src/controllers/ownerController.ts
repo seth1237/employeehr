@@ -14,7 +14,9 @@ import { LeaveRequest } from "../models/LeaveRequest"
 import { OwnerActionOtp } from "../models/OwnerActionOtp"
 import { isPlatformOwner } from "../utils/platformOwner"
 import { emailService } from "../services/emailService"
+import { companyDeleteOtpEmail } from "../lib/email-templates"
 import { permanentlyDeleteCompany } from "../services/companyDeletionService"
+import { sanitizeEnabledPages } from "../lib/enabledPages"
 
 const COMPANY_DELETE_OTP_EMAIL = String(
   process.env.COMPANY_DELETE_OTP_EMAIL || "info@elevatehub.co.ke",
@@ -225,15 +227,13 @@ export class OwnerController {
         return res.status(403).json({ success: false, message: "Unauthorized: Owner access required" })
       }
 
-      const { companyId, enabledPages } = req.body
+      const { companyId } = req.body
 
       if (!companyId) {
         return res.status(400).json({ success: false, message: "companyId is required" })
       }
 
-      if (!Array.isArray(enabledPages)) {
-        return res.status(400).json({ success: false, message: "enabledPages must be an array" })
-      }
+      const enabledPages = sanitizeEnabledPages(req.body.enabledPages)
 
       const company = await Company.findByIdAndUpdate(
         companyId,
@@ -766,21 +766,14 @@ export class OwnerController {
         used: false,
       })
 
-      const html = `
-        <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto;">
-          <h2 style="color:#0f172a;">Company deletion verification</h2>
-          <p>A platform owner requested permanent deletion of:</p>
-          <ul>
-            <li><strong>Company:</strong> ${company.name}</li>
-            <li><strong>Slug:</strong> ${company.slug}</li>
-            <li><strong>ID:</strong> ${companyId}</li>
-            <li><strong>Requested by:</strong> ${req.user?.email || "unknown"}</li>
-          </ul>
-          <p style="font-size:28px;letter-spacing:6px;font-weight:bold;color:#b91c1c;">${otp}</p>
-          <p>This code expires in ${COMPANY_DELETE_OTP_MINUTES} minutes.</p>
-          <p style="color:#64748b;font-size:13px;">If you did not expect this, ignore the email and secure the owner account.</p>
-        </div>
-      `
+      const html = companyDeleteOtpEmail({
+        otp,
+        companyName: company.name,
+        companySlug: company.slug,
+        companyId,
+        requestedBy: req.user?.email || "unknown",
+        expiresMinutes: COMPANY_DELETE_OTP_MINUTES,
+      })
 
       const sent = await emailService.sendEmail({
         to: COMPANY_DELETE_OTP_EMAIL,

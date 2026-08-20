@@ -4,16 +4,19 @@ import { Company } from "../models/Company";
 import { User } from "../models/User";
 import { Department } from "../models/Department";
 import { Branch } from "../models/Branch";
+import AuditLog from "../models/AuditLog";
 import {
   buildCompanyBranding,
   buildInvoiceDocumentSettings,
 } from "../services/companyDocumentSettings.service";
+import { resolveEnabledAdminSections } from "../lib/enabledPages";
 
 const ADMIN_SECTION_OPTIONS = [
   "CORE",
   "RECRUITMENT",
   "EMPLOYEE MANAGEMENT",
   "INVENTORY MANAGER",
+  "FIELD MANAGEMENT",
   "CLIENTS",
   "FLEET",
   "IMPORTATION",
@@ -67,6 +70,7 @@ const DEFAULT_PERMISSION_MATRIX: Record<string, string[]> = {
   ],
   manager: ["users:read", "reports:read", "stock:read", "clients:read"],
   employee: ["reports:read"],
+  sales_rep: ["stock:read", "clients:read", "clients:write", "reports:read"],
 };
 
 const sanitizeList = (value: unknown, allowed: string[]): string[] => {
@@ -108,6 +112,7 @@ const buildRoleSectionDefaults = (raw: any) => ({
   hr: resolveAdminAreaSections(raw?.hr),
   manager: sanitizeList(raw?.manager, ADMIN_SECTION_OPTIONS),
   employee: sanitizeList(raw?.employee, ADMIN_SECTION_OPTIONS),
+  sales_rep: sanitizeList(raw?.sales_rep, ADMIN_SECTION_OPTIONS),
 });
 
 const buildPermissionDefaults = (raw: any) => ({
@@ -128,6 +133,10 @@ const buildPermissionDefaults = (raw: any) => ({
     sanitizeList(raw?.employee, PERMISSION_OPTIONS).length > 0
       ? sanitizeList(raw.employee, PERMISSION_OPTIONS)
       : DEFAULT_PERMISSION_MATRIX.employee,
+  sales_rep:
+    sanitizeList(raw?.sales_rep, PERMISSION_OPTIONS).length > 0
+      ? sanitizeList(raw.sales_rep, PERMISSION_OPTIONS)
+      : DEFAULT_PERMISSION_MATRIX.sales_rep,
 });
 
 const logPermissionChange = async (
@@ -606,7 +615,7 @@ export class CompanyController {
       }
 
       const company = await Company.findById(req.org_id).select(
-        "pageAccessSettings",
+        "pageAccessSettings enabledPages",
       );
       if (!company) {
         return res
@@ -683,13 +692,23 @@ export class CompanyController {
         (branch: any) => branchSections[String(branch._id)] || [],
       );
 
-      const effectiveSections = Array.from(
-        new Set([
-          ...(roleSections[role] || []),
-          ...directUserSections,
-          ...currentDepartmentSections,
-          ...currentBranchSections,
-        ]),
+      const platformEnabledSections = resolveEnabledAdminSections(
+        (company as any).enabledPages,
+      );
+      const capSections = (list: string[]) =>
+        platformEnabledSections.length === ADMIN_SECTION_OPTIONS.length
+          ? list
+          : list.filter((section) => platformEnabledSections.includes(section));
+
+      const effectiveSections = capSections(
+        Array.from(
+          new Set([
+            ...(roleSections[role] || []),
+            ...directUserSections,
+            ...currentDepartmentSections,
+            ...currentBranchSections,
+          ]),
+        ),
       );
 
       const effectivePermissions = Array.from(
@@ -712,9 +731,13 @@ export class CompanyController {
           permissionMatrixByUser,
           effectiveSections,
           effectivePermissions,
+          platformEnabledSections,
           currentDepartment: matchingDepartment || null,
           managedBranches,
-          availableSections: ADMIN_SECTION_OPTIONS,
+          availableSections:
+            platformEnabledSections.length === ADMIN_SECTION_OPTIONS.length
+              ? ADMIN_SECTION_OPTIONS
+              : platformEnabledSections,
           availablePermissions: PERMISSION_OPTIONS,
         },
       });
@@ -793,6 +816,7 @@ export class CompanyController {
         hr: hrSections.length > 0 ? hrSections : ADMIN_SECTION_OPTIONS,
         manager: sanitizeList(payload.manager, ADMIN_SECTION_OPTIONS),
         employee: sanitizeList(payload.employee, ADMIN_SECTION_OPTIONS),
+        sales_rep: sanitizeList(payload.sales_rep, ADMIN_SECTION_OPTIONS),
       };
 
       const nextUserSettings = normalizeSettingsMap(

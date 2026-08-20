@@ -38,10 +38,15 @@ class ApiClient {
     options: RequestInit = {},
   ): Promise<ApiResponse<T>> {
     const token = getToken();
+    const isFormData =
+      typeof FormData !== "undefined" && options.body instanceof FormData;
     const headers: Record<string, string> = {
-      "Content-Type": "application/json",
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...(options.headers as Record<string, string>),
     };
+    if (isFormData) {
+      delete headers["Content-Type"];
+    }
 
     if (token) {
       headers["Authorization"] = `Bearer ${token}`;
@@ -137,9 +142,10 @@ class ApiClient {
   }
 
   async post<T>(endpoint: string, body?: any): Promise<ApiResponse<T>> {
+    const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
     return this.request<T>(endpoint, {
       method: "POST",
-      body: body ? JSON.stringify(body) : undefined,
+      body: body == null ? undefined : isFormData ? body : JSON.stringify(body),
     });
   }
 
@@ -1437,7 +1443,18 @@ export const salesApi = {
   startDay: (data?: any) => client.post<any>("/api/sales/report/start", data || {}),
   endDay: (data?: any) => client.post<any>("/api/sales/report/end", data || {}),
   submitReport: (id: string) => client.post<any>(`/api/sales/report/${id}/submit`, {}),
-  createVisit: (data: any) => client.post<any>("/api/sales/visits", data),
+  createVisit: (data: any, photo?: File | null) => {
+    if (photo) {
+      const form = new FormData()
+      Object.entries(data || {}).forEach(([key, value]) => {
+        if (value == null || value === "") return
+        form.append(key, typeof value === "object" ? JSON.stringify(value) : String(value))
+      })
+      form.append("photo", photo)
+      return client.post<any>("/api/sales/visits", form)
+    }
+    return client.post<any>("/api/sales/visits", data)
+  },
   getCategories: () => client.get<any[]>("/api/sales/categories"),
   searchStock: (q: string, inStockOnly = true) =>
     client.get<any[]>(

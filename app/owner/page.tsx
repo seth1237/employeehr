@@ -34,6 +34,7 @@ import {
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { getToken, getUser } from "@/lib/auth"
+import { resolveEnabledAdminSections } from "@/lib/enabled-pages"
 import API_URL from "@/lib/apiBase"
 
 interface Company {
@@ -120,27 +121,24 @@ interface PlatformInsights {
 }
 
 const FEATURE_SECTIONS = {
-  "Human Resources": [
-    { id: "dashboard", label: "Dashboard", icon: "📊" },
-    { id: "attendance", label: "Attendance Tracking", icon: "📍" },
-    { id: "leave", label: "Leave Management", icon: "🏖️" },
-    { id: "payroll", label: "Payroll", icon: "💰" },
+  Core: [{ id: "CORE", label: "Dashboard & users" }],
+  People: [
+    { id: "RECRUITMENT", label: "Recruitment" },
+    { id: "EMPLOYEE MANAGEMENT", label: "Employee management" },
+    { id: "PERFORMANCE", label: "Performance" },
   ],
-  "Performance & Development": [
-    { id: "performance", label: "Performance Reviews", icon: "⭐" },
-    { id: "kpis", label: "KPIs & Goals", icon: "🎯" },
-    { id: "feedback", label: "360° Feedback", icon: "💬" },
+  Commercial: [
+    { id: "CLIENTS", label: "Clients" },
+    { id: "FIELD MANAGEMENT", label: "Field management" },
+    { id: "INVENTORY MANAGER", label: "Stock / inventory" },
+    { id: "IMPORTATION", label: "Importation" },
+    { id: "FLEET", label: "Fleet" },
+    { id: "ACCOUNTS", label: "Accounts" },
   ],
-  Operations: [
-    { id: "meetings", label: "Meetings", icon: "📅" },
-    { id: "communications", label: "Communications", icon: "📢" },
-    { id: "stock", label: "Stock Management", icon: "📦" },
-  ],
-  Analytics: [
-    { id: "reports", label: "Reports", icon: "📈" },
-    { id: "recruitment", label: "Recruitment", icon: "👥" },
-  ],
+  System: [{ id: "SYSTEM", label: "Company settings" }],
 }
+
+const CLIENTS_ONLY_PAGES = ["CORE", "CLIENTS"]
 
 const OWNER_EMAILS = ["bellarinseth@gmail.com", "info@elevatehub.co.ke"]
 
@@ -278,6 +276,10 @@ export default function OwnerPage() {
         })
         const result = await res.json()
         setCompanies(result.data || [])
+        setSelectedCompany((current) => {
+          if (!current) return current
+          return (result.data || []).find((company: Company) => company._id === current._id) || current
+        })
       } else {
         const res = await fetch(`${API_URL}/api/owner/user-activity`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -297,11 +299,16 @@ export default function OwnerPage() {
       const res = await fetch(`${API_URL}/api/owner/companies/${companyId}/pages`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ enabledPages }),
+        body: JSON.stringify({ companyId, enabledPages }),
       })
       if (res.ok) {
         toast({ description: "Permissions synchronized" })
-        loadData()
+        setSelectedCompany((current) =>
+          current && current._id === companyId ? { ...current, enabledPages } : current,
+        )
+        setCompanies((current) =>
+          current.map((company) => (company._id === companyId ? { ...company, enabledPages } : company)),
+        )
       }
     } catch {
       toast({ description: "Update failed", variant: "destructive" })
@@ -1165,6 +1172,34 @@ export default function OwnerPage() {
                     Global Module Rights
                   </h3>
                 </div>
+                <p className="mb-4 text-xs text-slate-500">
+                  Turn off areas this company should not see. Use Clients only to leave Dashboard & users plus the Clients hub.
+                </p>
+                <div className="mb-4 flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-8 text-xs"
+                    onClick={() => handleUpdatePages(selectedCompany._id, CLIENTS_ONLY_PAGES)}
+                  >
+                    Clients only
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 text-xs"
+                    onClick={() =>
+                      handleUpdatePages(
+                        selectedCompany._id,
+                        Object.values(FEATURE_SECTIONS).flatMap((features) => features.map((item) => item.id)),
+                      )
+                    }
+                  >
+                    All modules
+                  </Button>
+                </div>
                 <div className="space-y-6">
                   {Object.entries(FEATURE_SECTIONS).map(([section, features]) => (
                     <div key={section} className="space-y-3">
@@ -1172,27 +1207,36 @@ export default function OwnerPage() {
                         {section}
                       </h4>
                       <div className="grid grid-cols-2 gap-2">
-                        {features.map((f) => (
+                        {features.map((f) => {
+                          const enabled = resolveEnabledAdminSections(selectedCompany.enabledPages)
+                          const checked = enabled.includes(f.id as (typeof enabled)[number])
+                          return (
                           <label
                             key={f.id}
                             className="flex items-center justify-between p-3 border border-slate-100 rounded-md bg-slate-50/30 hover:border-slate-300 cursor-pointer"
                           >
-                            <span className="text-xs font-semibold text-slate-700 flex items-center gap-2">
-                              <span>{f.icon}</span> {f.label}
-                            </span>
+                            <span className="text-xs font-semibold text-slate-700">{f.label}</span>
                             <Checkbox
-                              checked={selectedCompany.enabledPages?.includes(f.id) ?? true}
-                              onCheckedChange={(checked) => {
-                                const pages = selectedCompany.enabledPages || []
-                                const next = checked
-                                  ? [...pages, f.id]
-                                  : pages.filter((p) => p !== f.id)
-                                handleUpdatePages(selectedCompany._id, next)
+                              checked={checked}
+                              onCheckedChange={(isChecked) => {
+                                const current = resolveEnabledAdminSections(selectedCompany.enabledPages)
+                                const next = isChecked
+                                  ? Array.from(new Set([...current, f.id]))
+                                  : current.filter((page) => page !== f.id)
+                                if (next.length === 0) {
+                                  toast({
+                                    description: "Leave at least one module on.",
+                                    variant: "destructive",
+                                  })
+                                  return
+                                }
+                                void handleUpdatePages(selectedCompany._id, next)
                               }}
                               className="h-4 w-4"
                             />
                           </label>
-                        ))}
+                          )
+                        })}
                       </div>
                     </div>
                   ))}

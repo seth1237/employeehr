@@ -6,6 +6,7 @@ import { getUser, postLoginPath } from "@/lib/auth"
 import { SalesSidebar } from "@/components/sales/sidebar"
 import { SalesTopNav } from "@/components/sales/top-nav"
 import { SalesMobileNav } from "@/components/sales/mobile-nav"
+import { AiAssistantChat } from "@/components/ai/ai-assistant-chat"
 
 export default function SalesLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -42,6 +43,7 @@ export default function SalesLayout({ children }: { children: React.ReactNode })
         <main className="flex-1 overflow-y-auto">{children}</main>
         <SalesMobileNav />
       </div>
+      <AiAssistantChat variant="sales" />
     </div>
   )
 }

@@ -902,7 +902,7 @@ export default function TelesalesActivityPage() {
               {exporting ? "Exporting…" : "Export PDF"}
             </Button>
             <Button asChild variant="outline" size="sm">
-              <Link href="/admin/clients/telesales">
+              <Link href="/admin/clients/clients-list">
                 <PhoneCall className="h-4 w-4 mr-1.5" />
                 Open Telesales
               </Link>

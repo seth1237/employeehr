@@ -32,7 +32,6 @@ import {
   ShieldCheck,
   Clock3,
   Truck,
-  PhoneCall,
   Activity,
   Star,
 } from "lucide-react";
@@ -184,12 +183,6 @@ const adminMenuItems = [
     label: "Sales Reports",
     icon: FileText,
     href: "/admin/sales-reports",
-    section: "CLIENTS",
-  },
-  {
-    label: "Telesales",
-    icon: PhoneCall,
-    href: "/admin/clients/telesales",
     section: "CLIENTS",
   },
   {

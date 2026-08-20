@@ -763,6 +763,7 @@ export const meetingsApi = {
 // Stock API
 export const stockApi = {
   getClients: () => client.get<any[]>("/api/stock/clients"),
+  getClientInsights: () => client.get<any>("/api/stock/clients/insights"),
   getSavedClients: (page?: number, limit?: number) =>
     client.get<any[]>(
       `/api/stock/clients/saved${

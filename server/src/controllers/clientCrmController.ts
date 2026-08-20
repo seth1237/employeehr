@@ -3,6 +3,8 @@ import type { AuthenticatedRequest } from "../middleware/auth"
 import { StockClient, DEFAULT_CONTACT_ROLES } from "../models/StockClient"
 import { StockClientGroup } from "../models/StockClientGroup"
 import { InstalledMachine } from "../models/InstalledMachine"
+import { ClientComplaint } from "../models/ClientComplaint"
+import { ClientConversation } from "../models/ClientConversation"
 import { Company } from "../models/Company"
 import { isPlatformOwner } from "../utils/platformOwner"
 
@@ -86,6 +88,200 @@ async function findClientProfile(
 }
 
 export class ClientCrmController {
+  static async getInsights(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id
+      if (!org_id) {
+        return res.status(401).json({ success: false, message: "Unauthorized" })
+      }
+
+      const now = new Date()
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+      const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+
+      const [
+        clientAgg,
+        countyGroups,
+        machinesAgg,
+        openComplaints,
+        totalComplaints,
+        callsThisMonth,
+        callsLastMonth,
+        recentClients,
+      ] = await Promise.all([
+        StockClient.aggregate([
+          { $match: { org_id } },
+          {
+            $facet: {
+              totals: [{ $count: "count" }],
+              thisMonth: [
+                { $match: { createdAt: { $gte: startOfMonth } } },
+                { $count: "count" },
+              ],
+              lastMonth: [
+                {
+                  $match: {
+                    createdAt: { $gte: startOfLastMonth, $lt: startOfMonth },
+                  },
+                },
+                { $count: "count" },
+              ],
+              last30Days: [
+                { $match: { createdAt: { $gte: thirtyDaysAgo } } },
+                { $count: "count" },
+              ],
+              last7Days: [
+                { $match: { createdAt: { $gte: sevenDaysAgo } } },
+                { $count: "count" },
+              ],
+              withContacts: [
+                { $match: { "contacts.0": { $exists: true } } },
+                { $count: "count" },
+              ],
+              withEmail: [
+                { $match: { email: { $exists: true, $nin: [null, ""] } } },
+                { $count: "count" },
+              ],
+              inGroups: [
+                { $match: { "groupIds.0": { $exists: true } } },
+                { $count: "count" },
+              ],
+              contacts: [
+                {
+                  $unwind: {
+                    path: "$contacts",
+                    preserveNullAndEmptyArrays: false,
+                  },
+                },
+                { $count: "count" },
+              ],
+            },
+          },
+        ]),
+        StockClientGroup.find({ org_id }).select("name memberKeys").lean(),
+        InstalledMachine.aggregate([
+          { $match: { org_id } },
+          {
+            $facet: {
+              totals: [{ $count: "count" }],
+              active: [{ $match: { status: "active" } }, { $count: "count" }],
+              maintenance: [
+                { $match: { status: "maintenance" } },
+                { $count: "count" },
+              ],
+              pending: [
+                { $match: { status: "installation_pending" } },
+                { $count: "count" },
+              ],
+              uniqueClients: [
+                {
+                  $group: {
+                    _id: {
+                      $toLower: {
+                        $trim: { input: { $ifNull: ["$client.name", ""] } },
+                      },
+                    },
+                  },
+                },
+                { $match: { _id: { $ne: "" } } },
+                { $count: "count" },
+              ],
+            },
+          },
+        ]),
+        ClientComplaint.countDocuments({
+          org_id,
+          status: {
+            $in: ["new", "under_review", "assigned", "in_progress", "escalated"],
+          },
+        }),
+        ClientComplaint.countDocuments({ org_id }),
+        ClientConversation.countDocuments({
+          org_id,
+          createdAt: { $gte: startOfMonth },
+        }),
+        ClientConversation.countDocuments({
+          org_id,
+          createdAt: { $gte: startOfLastMonth, $lt: startOfMonth },
+        }),
+        StockClient.find({ org_id })
+          .select("sourceName sourceLocation createdAt contacts")
+          .sort({ createdAt: -1 })
+          .limit(8)
+          .lean(),
+      ])
+
+      const facet = clientAgg[0] || {}
+      const machines = machinesAgg[0] || {}
+      const countOf = (rows?: Array<{ count?: number }>) => Number(rows?.[0]?.count || 0)
+
+      const clientsSaved = countOf(facet.totals)
+      const addedThisMonth = countOf(facet.thisMonth)
+      const addedLastMonth = countOf(facet.lastMonth)
+      const withContacts = countOf(facet.withContacts)
+
+      const monthDelta = addedThisMonth - addedLastMonth
+      const callDelta = callsThisMonth - callsLastMonth
+      const topCounties = [...countyGroups]
+        .map((group: any) => ({
+          name: String(group.name || "Unnamed county").trim() || "Unnamed county",
+          count: Array.isArray(group.memberKeys) ? group.memberKeys.length : 0,
+        }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 8)
+      const uniqueCounties = countyGroups.length
+      const groupsCount = uniqueCounties
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          clientsSaved,
+          addedThisMonth,
+          addedLastMonth,
+          addedLast30Days: countOf(facet.last30Days),
+          addedLast7Days: countOf(facet.last7Days),
+          monthDelta,
+          withContacts,
+          withoutContacts: Math.max(0, clientsSaved - withContacts),
+          withEmail: countOf(facet.withEmail),
+          inGroups: countOf(facet.inGroups),
+          totalContacts: countOf(facet.contacts),
+          groups: groupsCount,
+          uniqueCounties,
+          topCounties,
+          machines: {
+            total: countOf(machines.totals),
+            active: countOf(machines.active),
+            maintenance: countOf(machines.maintenance),
+            pending: countOf(machines.pending),
+            clientsWithMachines: countOf(machines.uniqueClients),
+          },
+          complaints: {
+            total: totalComplaints,
+            open: openComplaints,
+          },
+          callsThisMonth,
+          callsLastMonth,
+          callDelta,
+          recentClients: recentClients.map((client: any) => ({
+            name: String(client.sourceName || "").trim(),
+            county: String(client.sourceLocation || "").trim(),
+            createdAt: client.createdAt,
+            contacts: Array.isArray(client.contacts) ? client.contacts.length : 0,
+          })),
+        },
+      })
+    } catch (error: any) {
+      console.error("getClientInsights failed:", error)
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to load client insights",
+      })
+    }
+  }
+
   static async listContactRoles(req: AuthenticatedRequest, res: Response) {
     try {
       const org_id = req.user?.org_id

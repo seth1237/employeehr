@@ -81,6 +81,7 @@ router.post("/tenders/:tenderId/approve", TenderController.approveTender);
 router.post("/tenders/:tenderId/reject", TenderController.rejectTender);
 router.post("/tenders/:tenderId/convert", TenderController.convertTenderToInvoice);
 
+router.get("/clients/insights", ClientCrmController.getInsights);
 router.get("/clients/saved", StockController.getSavedClients);
 router.get("/clients/contact-roles", ClientCrmController.listContactRoles);
 router.post("/clients/contact-roles/rename", ClientCrmController.renameContactRole);

@@ -18,6 +18,7 @@ import {
   Plus,
   RefreshCw,
   Users,
+  Video,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -399,6 +400,7 @@ export default function SalesDashboardPage() {
           <div className="grid gap-2">
             <SalesQuickAction href="/sales/report" icon={ClipboardList} title="Record visit" description="File a visit from today’s planner" color={branding.primaryColor} />
             <SalesQuickAction href="/sales/planner" icon={CalendarDays} title="Plan visit" description="Build tomorrow’s route" color={branding.primaryColor} />
+            <SalesQuickAction href="/sales/meetings" icon={Video} title="Meetings" description="Join invites and past calls" color={branding.primaryColor} />
             <SalesQuickAction href="/sales/quotes" icon={FileText} title="Create quotation" description="Quote from live stock" color={branding.primaryColor} />
             <SalesQuickAction href="/sales/clients" icon={BookUser} title="New client / call" description="Search the book or log a call" color={branding.primaryColor} />
             <SalesQuickAction href="/sales/leave" icon={Palmtree} title="Leave tracker" description="Balance, apply, and follow requests" color={branding.primaryColor} />

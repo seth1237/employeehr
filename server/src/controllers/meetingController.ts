@@ -49,6 +49,13 @@ export class MeetingController {
       const org_id = req.user?.org_id
       const organizer_id = req.user?.userId
 
+      if (req.user?.role === "sales_rep") {
+        return res.status(403).json({
+          success: false,
+          message: "Sales reps can join meetings but cannot create them",
+        })
+      }
+
       const {
         title,
         description,
@@ -173,12 +180,18 @@ export class MeetingController {
     try {
       const org_id = req.user?.org_id
       const user_id = req.user?.userId
+      const role = req.user?.role
       const { status, type } = req.query
 
-      const query: any = {
-        org_id,
-        $or: [{ organizer_id: user_id }, { "attendees.user_id": user_id }],
-      }
+      // Sales reps only see meetings they were invited to (join + history).
+      // Other roles still see meetings they organize or attend.
+      const query: any =
+        role === "sales_rep"
+          ? { org_id, "attendees.user_id": user_id }
+          : {
+              org_id,
+              $or: [{ organizer_id: user_id }, { "attendees.user_id": user_id }],
+            }
 
       if (status) query.status = status
       if (type) query.meeting_type = type
@@ -206,11 +219,23 @@ export class MeetingController {
     try {
       const { id } = req.params
       const org_id = req.user?.org_id
+      const user_id = req.user?.userId
+      const role = req.user?.role
 
       const meeting = await Meeting.findOne({ _id: id, org_id }).lean()
 
       if (!meeting) {
         return res.status(404).json({ success: false, message: "Meeting not found" })
+      }
+
+      if (role === "sales_rep") {
+        const invited = meeting.attendees?.some((a: any) => String(a.user_id) === String(user_id))
+        if (!invited) {
+          return res.status(403).json({
+            success: false,
+            message: "You can only open meetings you were invited to",
+          })
+        }
       }
 
       const meetingWithDetails = await enrichMeeting(meeting)

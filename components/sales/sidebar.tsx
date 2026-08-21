@@ -12,6 +12,7 @@ import {
   CalendarDays,
   LogOut,
   Palmtree,
+  Video,
   X,
 } from "lucide-react"
 import { logout } from "@/lib/auth"
@@ -20,6 +21,7 @@ const navigation = [
   { name: "Today", href: "/sales", icon: LayoutDashboard },
   { name: "Planner", href: "/sales/planner", icon: CalendarDays },
   { name: "Visit reports", href: "/sales/report", icon: ClipboardList },
+  { name: "Meetings", href: "/sales/meetings", icon: Video },
   { name: "Clients", href: "/sales/clients", icon: BookUser },
   { name: "Quotes", href: "/sales/quotes", icon: FileText },
   { name: "Leave", href: "/sales/leave", icon: Palmtree },

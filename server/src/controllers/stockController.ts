@@ -151,6 +151,53 @@ function buildBulkSmsClientKey(phone: string, name: string, location: string) {
   ].join("|");
 }
 
+/** True when the value can be normalized into a sendable phone number (never leading 0). */
+function hasValidSmsPhone(rawPhone: string | undefined | null) {
+  return smsService.isSendablePhone(rawPhone);
+}
+
+function personalizeBulkSmsMessage(
+  template: string,
+  recipient: {
+    name?: string;
+    phone?: string;
+    location?: string;
+    contactPerson?: string;
+    contactName?: string;
+    contactRole?: string;
+  },
+) {
+  const contactName = String(
+    recipient.contactName ||
+      recipient.contactPerson ||
+      recipient.name ||
+      "there",
+  ).trim();
+  const firstName = contactName.split(/\s+/).filter(Boolean)[0] || contactName;
+  const clientName = String(recipient.name || "").trim();
+  const location = String(recipient.location || "").trim();
+  const role = String(recipient.contactRole || "").trim();
+  const phone = String(recipient.phone || "").trim();
+
+  return String(template || "")
+    .replace(/\{Contact person name\}/gi, contactName)
+    .replace(/\{Contact person\}/gi, contactName)
+    .replace(/\{contact_person_name\}/gi, contactName)
+    .replace(/\{contact_name\}/gi, contactName)
+    .replace(/\{name\}/gi, contactName)
+    .replace(/\{first_name\}/gi, firstName)
+    .replace(/\{First name\}/gi, firstName)
+    .replace(/\{client_name\}/gi, clientName)
+    .replace(/\{Client name\}/gi, clientName)
+    .replace(/\{facility\}/gi, clientName)
+    .replace(/\{Facility\}/gi, clientName)
+    .replace(/\{location\}/gi, location)
+    .replace(/\{Location\}/gi, location)
+    .replace(/\{role\}/gi, role)
+    .replace(/\{Role\}/gi, role)
+    .replace(/\{phone\}/gi, phone);
+}
+
 function uniqueStrings(values: string[]) {
   return Array.from(
     new Set(values.map((value) => String(value || "").trim()).filter(Boolean)),
@@ -281,7 +328,7 @@ function upsertBulkSmsClient(
   const phone = String(client?.number || "").trim();
   const name = String(client?.name || "").trim();
   const location = String(client?.location || "").trim();
-  if (!phone || !name) return null;
+  if (!hasValidSmsPhone(phone) || !name) return null;
 
   const key = buildBulkSmsClientKey(phone, name, location);
   const existing = map.get(key);
@@ -444,6 +491,9 @@ async function buildBulkSmsAudience(
     ...parseBulkSmsFilterList(filters.groupId),
   ]);
   const quotationProductId = String(filters.quotationProductId || "").trim();
+  const quotationCategoryId = String(
+    filters.quotationCategoryId || filters.categoryId || "",
+  ).trim();
   const branchId = String(filters.branchId || "").trim();
   const inactiveDays = Math.max(1, Number(filters.inactiveDays || 90));
   const inactiveCutoff = new Date();
@@ -480,11 +530,28 @@ async function buildBulkSmsAudience(
   if (audienceType === "pending_quotations") {
     clients = clients.filter((client) => client.pendingQuotationsCount > 0);
   } else if (audienceType === "quotation_product") {
-    clients = quotationProductId
-      ? clients.filter((client) =>
-          client.quotedProductIds.includes(quotationProductId),
-        )
-      : [];
+    const allowedProductIds = new Set<string>();
+
+    if (quotationProductId) {
+      allowedProductIds.add(quotationProductId);
+    } else if (quotationCategoryId) {
+      const productsInCategory = await StockProduct.find({
+        org_id: orgId,
+        category: quotationCategoryId,
+      })
+        .select("_id")
+        .lean();
+      for (const product of productsInCategory) {
+        allowedProductIds.add(String(product._id));
+      }
+    }
+
+    clients =
+      allowedProductIds.size > 0
+        ? clients.filter((client) =>
+            client.quotedProductIds.some((id) => allowedProductIds.has(id)),
+          )
+        : [];
   } else if (audienceType === "branch") {
     clients = branchId
       ? clients.filter((client) => client.branchId === branchId)
@@ -532,8 +599,9 @@ async function buildBulkSmsAudience(
 
       for (const contact of matchingContacts) {
         const contactName = String(contact.name || "").trim();
-        const phone = String(contact.phone || facility.phone || "").trim();
-        if (!phone || !contactName) continue;
+        // Only message contacts that have their own phone number on file.
+        const phone = String(contact.phone || "").trim();
+        if (!hasValidSmsPhone(phone) || !contactName) continue;
 
         const roleLabel = String(contact.role || "").trim();
         expanded.push({
@@ -553,6 +621,9 @@ async function buildBulkSmsAudience(
     }
     clients = expanded;
   }
+
+  // Final safety: never list / send to recipients without a sendable number.
+  clients = clients.filter((client) => hasValidSmsPhone(client.phone));
 
   clients = clients.sort((a, b) => {
     const byName = a.name.localeCompare(b.name);
@@ -3744,11 +3815,63 @@ export class StockController {
       ).trim();
 
       const recipientResults = [];
+      const seenPhones = new Map<
+        string,
+        { key: string; name: string; phone: string }
+      >();
+
       for (const recipient of recipients) {
+        if (!hasValidSmsPhone(recipient.phone)) {
+          recipientResults.push({
+            key: recipient.key,
+            name: recipient.name,
+            phone: recipient.phone,
+            location: recipient.location,
+            status: "skipped",
+            skipReason: "invalid_phone",
+            errorMessage: "Missing or invalid phone number",
+          });
+          continue;
+        }
+
+        const normalizedPhone = smsService.normalizePhone(recipient.phone);
+        const contactLabel =
+          recipient.contactName ||
+          recipient.contactPerson ||
+          recipient.name;
+        const alreadySentTo = seenPhones.get(normalizedPhone);
+
+        if (alreadySentTo) {
+          recipientResults.push({
+            key: recipient.key,
+            name: recipient.name,
+            phone: recipient.phone,
+            normalizedPhone,
+            location: recipient.location,
+            status: "skipped",
+            skipReason: "duplicate",
+            duplicateOfKey: alreadySentTo.key,
+            duplicateOfName: alreadySentTo.name,
+            errorMessage: `Duplicate number — already sent once to ${alreadySentTo.name} (${alreadySentTo.phone})`,
+          });
+          continue;
+        }
+
+        seenPhones.set(normalizedPhone, {
+          key: recipient.key,
+          name: contactLabel,
+          phone: recipient.phone,
+        });
+
+        const personalizedMessage = personalizeBulkSmsMessage(
+          message,
+          recipient,
+        );
+
         try {
           const smsResult = await smsService.sendDispatchSms({
             to: recipient.phone,
-            message,
+            message: personalizedMessage,
             senderName: smsSenderName,
           });
 
@@ -3756,7 +3879,7 @@ export class StockController {
             key: recipient.key,
             name: recipient.name,
             phone: recipient.phone,
-            normalizedPhone: smsResult.normalizedTo,
+            normalizedPhone: smsResult.normalizedTo || normalizedPhone,
             location: recipient.location,
             status: smsResult.success ? "sent" : "failed",
             providerMessageId: smsResult.providerMessageId,
@@ -3769,6 +3892,7 @@ export class StockController {
             key: recipient.key,
             name: recipient.name,
             phone: recipient.phone,
+            normalizedPhone,
             location: recipient.location,
             status: "failed",
             errorMessage: sendError?.message || "Failed to send SMS",
@@ -3785,6 +3909,11 @@ export class StockController {
       const skippedCount = recipientResults.filter(
         (recipient) => recipient.status === "skipped",
       ).length;
+      const duplicateCount = recipientResults.filter(
+        (recipient) =>
+          recipient.status === "skipped" &&
+          recipient.skipReason === "duplicate",
+      ).length;
 
       const campaign = await BulkSmsCampaign.create({
         org_id,
@@ -3793,8 +3922,10 @@ export class StockController {
         filters,
         audienceCount: recipients.length,
         sentCount,
+        deliveredCount: 0,
         failedCount,
         skippedCount,
+        duplicateCount,
         status:
           failedCount > 0
             ? sentCount > 0
@@ -3805,9 +3936,13 @@ export class StockController {
         createdBy: String(userId),
       });
 
+      const uniqueSentTarget = seenPhones.size;
       return res.status(201).json({
         success: true,
-        message: `Campaign sent to ${sentCount}/${recipients.length} clients`,
+        message:
+          duplicateCount > 0
+            ? `Campaign sent to ${sentCount}/${uniqueSentTarget} unique numbers (${duplicateCount} duplicate${duplicateCount === 1 ? "" : "s"} skipped)`
+            : `Campaign sent to ${sentCount}/${recipients.length} clients`,
         data: campaign,
       });
     } catch (error: any) {

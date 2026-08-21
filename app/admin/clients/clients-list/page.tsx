@@ -145,6 +145,26 @@ function pendingQuotationsFor(row: SavedClientRow) {
   ).length;
 }
 
+function hasUsablePhone(raw?: string | null) {
+  const digits = String(raw || "").replace(/\D/g, "").replace(/^0+/, "")
+  if (!digits) return false
+  // Align with SMS rules: after stripping leading zeros, must start with 254, 7, or 1
+  if (digits.startsWith("254")) return digits.length >= 11
+  if (digits.startsWith("7") || digits.startsWith("1")) return digits.length >= 8
+  return false
+}
+
+type MissingPhoneEntry = {
+  clientKey: string;
+  facilityName: string;
+  location: string;
+  facilityPhone: string;
+  contactName: string;
+  contactRole: string;
+  contactIndex: number | null;
+  kind: "contact" | "facility";
+};
+
 export default function AccountsClientsPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -195,6 +215,8 @@ export default function AccountsClientsPage() {
     email: "",
   });
   const [showContactsDialog, setShowContactsDialog] = useState(false);
+  const [showMissingPhonesDialog, setShowMissingPhonesDialog] = useState(false);
+  const [missingPhoneSearch, setMissingPhoneSearch] = useState("");
   const [contactRoles, setContactRoles] = useState<string[]>([
     "Doctor",
     "Lab Technician",
@@ -680,6 +702,71 @@ export default function AccountsClientsPage() {
     [rows, selectedClientKey],
   );
 
+  const missingPhoneEntries = useMemo(() => {
+    const entries: MissingPhoneEntry[] = [];
+    for (const row of rows) {
+      const facilityPhone = String(row.client.number || "").trim();
+      const contacts = row.contacts || [];
+
+      if (contacts.length === 0) {
+        if (!hasUsablePhone(facilityPhone) && !row.client.contactPerson) {
+          entries.push({
+            clientKey: row.key,
+            facilityName: row.client.name,
+            location: row.client.location || "",
+            facilityPhone,
+            contactName: "No contact person",
+            contactRole: "—",
+            contactIndex: null,
+            kind: "facility",
+          });
+        } else if (row.client.contactPerson && !hasUsablePhone(facilityPhone)) {
+          entries.push({
+            clientKey: row.key,
+            facilityName: row.client.name,
+            location: row.client.location || "",
+            facilityPhone,
+            contactName: row.client.contactPerson,
+            contactRole: "Contact",
+            contactIndex: null,
+            kind: "contact",
+          });
+        }
+        continue;
+      }
+
+      contacts.forEach((contact, index) => {
+        if (hasUsablePhone(contact.phone)) return;
+        entries.push({
+          clientKey: row.key,
+          facilityName: row.client.name,
+          location: row.client.location || "",
+          facilityPhone,
+          contactName: contact.name || "Unnamed contact",
+          contactRole: contact.role || "Contact",
+          contactIndex: index,
+          kind: "contact",
+        });
+      });
+    }
+
+    return entries.sort((a, b) =>
+      a.facilityName.localeCompare(b.facilityName) ||
+      a.contactName.localeCompare(b.contactName),
+    );
+  }, [rows]);
+
+  const filteredMissingPhoneEntries = useMemo(() => {
+    const q = missingPhoneSearch.trim().toLowerCase();
+    if (!q) return missingPhoneEntries;
+    return missingPhoneEntries.filter((entry) =>
+      [entry.facilityName, entry.location, entry.contactName, entry.contactRole]
+        .join(" ")
+        .toLowerCase()
+        .includes(q),
+    );
+  }, [missingPhoneEntries, missingPhoneSearch]);
+
   const toggleClientSelected = (key: string) => {
     setSelectedClientKeys((current) =>
       current.includes(key)
@@ -1012,7 +1099,10 @@ export default function AccountsClientsPage() {
     setEditingContactIndex(null);
   };
 
-  const openContactsDialog = (row: SavedClientRow) => {
+  const openContactsDialog = (
+    row: SavedClientRow,
+    options?: { editContactIndex?: number | null },
+  ) => {
     setSelectedClientKey(row.key);
     setContactsDraft(
       row.contacts?.length
@@ -1044,6 +1134,50 @@ export default function AccountsClientsPage() {
       isActive: false,
     });
     setShowContactsDialog(true);
+
+    const editIndex = options?.editContactIndex;
+    if (typeof editIndex === "number" && editIndex >= 0) {
+      // Defer so draft state is applied before we enter edit mode.
+      window.setTimeout(() => {
+        const contact =
+          (row.contacts || [])[editIndex] ||
+          (row.client.contactPerson
+            ? {
+                role: "Facility Manager",
+                name: row.client.contactPerson,
+                phone: undefined,
+                email: row.client.email,
+                isActive: true,
+              }
+            : null);
+        if (!contact) return;
+        setEditingContactIndex(editIndex);
+        setContactForm({
+          role: contact.role || "Doctor",
+          customRole: "",
+          name: contact.name || "",
+          phone: contact.phone || "",
+          email: contact.email || "",
+          notes: contact.notes || "",
+          isActive: Boolean(contact.isActive),
+        });
+      }, 0);
+    }
+  };
+
+  const openMissingPhoneEntry = (entry: MissingPhoneEntry) => {
+    const row = rows.find((candidate) => candidate.key === entry.clientKey);
+    if (!row) return;
+    setShowMissingPhonesDialog(false);
+    const editIndex =
+      typeof entry.contactIndex === "number"
+        ? entry.contactIndex
+        : entry.kind === "contact"
+          ? 0
+          : null;
+    openContactsDialog(row, {
+      editContactIndex: editIndex,
+    });
   };
 
   const resolveContactRole = () => {
@@ -1830,6 +1964,22 @@ export default function AccountsClientsPage() {
             >
               <Users className="mr-2 h-4 w-4" />
               Contact roles
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setMissingPhoneSearch("");
+                setShowMissingPhonesDialog(true);
+              }}
+            >
+              <PhoneCall className="mr-2 h-4 w-4" />
+              Missing phone numbers
+              {missingPhoneEntries.length > 0 ? (
+                <Badge variant="secondary" className="ml-2">
+                  {missingPhoneEntries.length}
+                </Badge>
+              ) : null}
             </Button>
             <Button
               size="sm"
@@ -2892,6 +3042,80 @@ export default function AccountsClientsPage() {
             <Button
               variant="outline"
               onClick={() => setShowHistoryDialog(false)}
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={showMissingPhonesDialog}
+        onOpenChange={setShowMissingPhonesDialog}
+      >
+        <DialogContent className="max-h-[85vh] max-w-3xl overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Contacts without phone numbers</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            These contacts cannot receive bulk SMS until a phone number is
+            added. Edit a row to open the contact details form.
+          </p>
+          <Input
+            placeholder="Search facility, contact, role, location…"
+            value={missingPhoneSearch}
+            onChange={(event) => setMissingPhoneSearch(event.target.value)}
+          />
+          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+            {filteredMissingPhoneEntries.length === 0 ? (
+              <p className="py-10 text-center text-sm text-muted-foreground">
+                {missingPhoneEntries.length === 0
+                  ? "Every listed contact already has a phone number."
+                  : "No matches for that search."}
+              </p>
+            ) : (
+              filteredMissingPhoneEntries.map((entry, index) => (
+                <div
+                  key={`${entry.clientKey}-${entry.contactIndex ?? "f"}-${index}`}
+                  className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="min-w-0 space-y-0.5">
+                    <p className="truncate font-medium text-foreground">
+                      {entry.contactName}
+                      <span className="ml-2 text-xs font-normal text-muted-foreground">
+                        {entry.contactRole}
+                      </span>
+                    </p>
+                    <p className="truncate text-sm text-muted-foreground">
+                      {entry.facilityName}
+                      {entry.location ? ` · ${entry.location}` : ""}
+                    </p>
+                    <p className="text-xs text-amber-700">
+                      {entry.kind === "facility"
+                        ? "Facility has no phone on file"
+                        : "Contact phone missing"}
+                      {hasUsablePhone(entry.facilityPhone)
+                        ? ` · Facility line: ${entry.facilityPhone}`
+                        : ""}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0"
+                    onClick={() => openMissingPhoneEntry(entry)}
+                  >
+                    <Pencil className="mr-2 h-4 w-4" />
+                    Edit contact
+                  </Button>
+                </div>
+              ))
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowMissingPhonesDialog(false)}
             >
               Close
             </Button>

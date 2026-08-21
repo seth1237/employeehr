@@ -42,6 +42,7 @@ export const ADMIN_NAV_ITEMS: AdminNavItem[] = [
   { label: "Installed Machines", href: "/admin/clients/installed-machines", section: "CLIENTS", keywords: ["machines", "service", "tickets"] },
   { label: "Complaints", href: "/admin/clients/complaints", section: "CLIENTS" },
   { label: "Bulk SMS", href: "/admin/clients/bulk-sms", section: "CLIENTS" },
+  { label: "SMS Campaign History", href: "/admin/clients/bulk-sms/history", section: "CLIENTS", keywords: ["bulk sms", "delivery", "dlr"] },
   { label: "Fleet Tracker", href: "/admin/fleet", section: "FLEET", keywords: ["vehicles"] },
   { label: "Alerts & Notifications", href: "/admin/alerts", section: "SYSTEM", keywords: ["inbox", "bell"] },
   { label: "KPIs", href: "/admin/kpis", section: "PERFORMANCE" },

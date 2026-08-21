@@ -150,27 +150,57 @@ class SmsService {
     return JSON.parse(decrypted)
   }
 
+  /**
+   * Standardize phone for SMS sending.
+   * Never returns a number starting with 0.
+   * Accepts inputs that become 254…, 7…, or 1… after cleaning, then sends as 254…
+   * (local 7… / 1… get the country code prepended).
+   */
   normalizePhone(rawPhone: string): string {
     const trimmed = String(rawPhone || "").trim()
     if (!trimmed) return ""
 
-    const withoutSymbols = trimmed.replace(/[\s()-]/g, "")
-    if (withoutSymbols.startsWith("+")) {
-      return withoutSymbols.slice(1).replace(/\D/g, "")
+    let digits = trimmed.replace(/[\s()\-./]/g, "")
+    if (digits.startsWith("+")) {
+      digits = digits.slice(1)
+    }
+    digits = digits.replace(/\D/g, "")
+    if (!digits) return ""
+
+    // Strip every leading zero — outbound numbers must never start with 0
+    while (digits.startsWith("0")) {
+      digits = digits.slice(1)
+    }
+    if (!digits) return ""
+
+    const country = this.defaultCountryCode || "254"
+
+    if (digits.startsWith(country)) {
+      // Already international (254…)
+      return digits.length >= country.length + 8 ? digits : ""
     }
 
-    const digitsOnly = withoutSymbols.replace(/\D/g, "")
-    if (!digitsOnly) return ""
-
-    if (digitsOnly.startsWith("0")) {
-      return `${this.defaultCountryCode}${digitsOnly.slice(1)}`
+    // Local mobile (7…) or landline/other (1…) without leading 0
+    if (digits.startsWith("7") || digits.startsWith("1")) {
+      if (digits.length < 8) return ""
+      return `${country}${digits}`
     }
 
-    if (digitsOnly.startsWith(this.defaultCountryCode)) {
-      return digitsOnly
-    }
+    // Unknown local format — do not invent a number that starts with 0
+    return ""
+  }
 
-    return `${this.defaultCountryCode}${digitsOnly}`
+  /** True when the raw value can be normalized into a sendable SMS number. */
+  isSendablePhone(rawPhone: string | undefined | null): boolean {
+    const normalized = this.normalizePhone(String(rawPhone || ""))
+    if (!normalized) return false
+    // Final form must start with 254, 7, or 1 — never 0
+    return (
+      !normalized.startsWith("0") &&
+      (normalized.startsWith("254") ||
+        normalized.startsWith("7") ||
+        normalized.startsWith("1"))
+    )
   }
 
   private parseBulkSmsResponse(responseData: any) {

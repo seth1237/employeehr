@@ -11,21 +11,15 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
-import { History, MessageSquare, Search, Send, Users, ChevronDown, ChevronUp, X } from "lucide-react"
+import { History, MessageSquare, Search, Send, Users, ChevronDown, X } from "lucide-react"
 import { TableSkeleton } from "@/components/admin/ui/page-states"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { Checkbox } from "@/components/ui/checkbox"
+import Link from "next/link"
 
 type AudienceType = "all" | "pending_quotations" | "quotation_product" | "branch" | "inactive"
 
@@ -58,9 +52,12 @@ interface BulkSmsRecipient {
   phone: string
   normalizedPhone?: string
   location?: string
-  status: "sent" | "failed" | "skipped"
+  status: "sent" | "delivered" | "failed" | "skipped"
+  skipReason?: "duplicate" | "invalid_phone" | "other"
+  duplicateOfName?: string
   errorMessage?: string
   sentAt?: string
+  deliveredAt?: string
 }
 
 interface BulkSmsCampaign {
@@ -69,14 +66,54 @@ interface BulkSmsCampaign {
   message: string
   audienceCount: number
   sentCount: number
+  deliveredCount?: number
   failedCount: number
   skippedCount: number
+  duplicateCount?: number
   status: "completed" | "completed_with_errors" | "failed"
   recipients?: BulkSmsRecipient[]
   createdAt: string
 }
 
-type CampaignReportTab = "failed" | "sent" | "skipped" | "all"
+const MESSAGE_TOKENS = [
+  { token: "{Contact person name}", label: "Contact person name" },
+  { token: "{first_name}", label: "First name" },
+  { token: "{client_name}", label: "Client / facility" },
+  { token: "{location}", label: "Location" },
+  { token: "{role}", label: "Role" },
+] as const
+
+function personalizePreview(
+  template: string,
+  client?: BulkSmsClient | null,
+) {
+  const contactName =
+    client?.contactName ||
+    client?.contactPerson ||
+    client?.name ||
+    "Jane Doe"
+  const firstName = contactName.split(/\s+/).filter(Boolean)[0] || contactName
+  const clientName = client?.name || "Acme Clinic"
+  const location = client?.location || "Nairobi"
+  const role = client?.contactRole || "Contact"
+  return String(template || "")
+    .replace(/\{Contact person name\}/gi, contactName)
+    .replace(/\{Contact person\}/gi, contactName)
+    .replace(/\{contact_person_name\}/gi, contactName)
+    .replace(/\{contact_name\}/gi, contactName)
+    .replace(/\{name\}/gi, contactName)
+    .replace(/\{first_name\}/gi, firstName)
+    .replace(/\{First name\}/gi, firstName)
+    .replace(/\{client_name\}/gi, clientName)
+    .replace(/\{Client name\}/gi, clientName)
+    .replace(/\{facility\}/gi, clientName)
+    .replace(/\{Facility\}/gi, clientName)
+    .replace(/\{location\}/gi, location)
+    .replace(/\{Location\}/gi, location)
+    .replace(/\{role\}/gi, role)
+    .replace(/\{Role\}/gi, role)
+    .replace(/\{phone\}/gi, client?.phone || "")
+}
 
 function MultiSelectFilter({
   label,
@@ -172,9 +209,6 @@ export default function BulkSmsPage() {
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
   const [status, setStatus] = useState("")
   const [error, setError] = useState("")
-  const [historyOpen, setHistoryOpen] = useState(false)
-  const [expandedCampaignId, setExpandedCampaignId] = useState<string | null>(null)
-  const [campaignReportTab, setCampaignReportTab] = useState<CampaignReportTab>("failed")
 
   const [branding, setBranding] = useState<{ primaryColor?: string; secondaryColor?: string }>({})
   const primaryColor = branding.primaryColor || "#0f766e"
@@ -188,12 +222,14 @@ export default function BulkSmsPage() {
     region: "",
     contactRoles: [] as string[],
     groupIds: [] as string[],
+    quotationCategoryId: "",
     quotationProductId: "",
     branchId: "",
     inactiveDays: "90",
   })
 
   const [products, setProducts] = useState<any[]>([])
+  const [categories, setCategories] = useState<Array<{ _id: string; name: string }>>([])
   const [branches, setBranches] = useState<any[]>([])
   const [contactRoles, setContactRoles] = useState<string[]>([])
   const [clientGroups, setClientGroups] = useState<ClientGroupOption[]>([])
@@ -255,7 +291,14 @@ export default function BulkSmsPage() {
     filters.groupIds.forEach((groupId) => {
       if (groupId.trim()) params.append("groupIds", groupId.trim())
     })
-    if (filters.audienceType === "quotation_product" && filters.quotationProductId.trim()) params.set("quotationProductId", filters.quotationProductId.trim())
+    if (filters.audienceType === "quotation_product") {
+      if (filters.quotationCategoryId.trim()) {
+        params.set("quotationCategoryId", filters.quotationCategoryId.trim())
+      }
+      if (filters.quotationProductId.trim()) {
+        params.set("quotationProductId", filters.quotationProductId.trim())
+      }
+    }
     if (filters.audienceType === "branch" && filters.branchId.trim()) params.set("branchId", filters.branchId.trim())
     if (filters.inactiveDays.trim()) params.set("inactiveDays", filters.inactiveDays.trim())
     return params.toString()
@@ -273,9 +316,38 @@ export default function BulkSmsPage() {
     return clients.filter((client) => selectedKeys.has(client.key))
   }, [clients, selectedKeys])
 
+  const productsForFilter = useMemo(() => {
+    if (!filters.quotationCategoryId.trim()) return products
+    return products.filter(
+      (product) => String(product.category || "") === filters.quotationCategoryId,
+    )
+  }, [products, filters.quotationCategoryId])
+
   const selectedCount = selectedKeys.size
   const visibleCount = clients.length
   const allVisibleSelected = visibleCount > 0 && clients.every((client) => selectedKeys.has(client.key))
+  const previewClient = selectedClients[0] || clients[0] || null
+  const messagePreview = personalizePreview(campaign.message, previewClient)
+
+  const messageTextareaRef = useRef<HTMLTextAreaElement | null>(null)
+
+  const insertToken = (token: string) => {
+    const textarea = messageTextareaRef.current
+    const current = campaign.message
+    if (!textarea) {
+      setCampaign((prev) => ({ ...prev, message: `${prev.message}${token}` }))
+      return
+    }
+    const start = textarea.selectionStart ?? current.length
+    const end = textarea.selectionEnd ?? current.length
+    const next = `${current.slice(0, start)}${token}${current.slice(end)}`
+    setCampaign((prev) => ({ ...prev, message: next }))
+    requestAnimationFrame(() => {
+      const cursor = start + token.length
+      textarea.focus()
+      textarea.setSelectionRange(cursor, cursor)
+    })
+  }
 
   const loadCampaigns = async () => {
     const response = await fetch(`${API_URL}/api/stock/bulk-sms/campaigns`, { headers })
@@ -319,12 +391,13 @@ export default function BulkSmsPage() {
   useEffect(() => {
     const loadMetadata = async () => {
       try {
-        const [productsRes, branchesRes, brandingRes, rolesRes, groupsRes] = await Promise.all([
+        const [productsRes, branchesRes, brandingRes, rolesRes, groupsRes, categoriesRes] = await Promise.all([
           fetch(`${API_URL}/api/stock/products`, { headers }),
           fetch(`${API_URL}/api/branches`, { headers }),
           fetch(`${API_URL}/api/company/branding`, { headers }),
           fetch(`${API_URL}/api/stock/clients/contact-roles`, { headers }),
           fetch(`${API_URL}/api/stock/clients/groups`, { headers }),
+          fetch(`${API_URL}/api/stock/categories`, { headers }),
         ])
         if (productsRes.ok) {
           const productsJson = await productsRes.json()
@@ -348,6 +421,15 @@ export default function BulkSmsPage() {
           const groupsJson = await groupsRes.json()
           setClientGroups((groupsJson.data || []) as ClientGroupOption[])
         }
+        if (categoriesRes.ok) {
+          const categoriesJson = await categoriesRes.json()
+          setCategories(
+            ((categoriesJson.data || []) as Array<{ _id: string; name: string }>).map((category) => ({
+              _id: String(category._id),
+              name: String(category.name || "Untitled category"),
+            })),
+          )
+        }
       } catch (err) {
         console.error("Failed to load metadata", err)
       }
@@ -357,7 +439,7 @@ export default function BulkSmsPage() {
 
   useEffect(() => {
     loadCampaigns().catch((campaignError) => setError(campaignError.message || "Failed to load campaigns"))
-  }, [open, historyOpen])
+  }, [])
 
   const toggleClient = (key: string) => {
     setSelectedKeys((prev) => {
@@ -422,199 +504,17 @@ export default function BulkSmsPage() {
             <p className="text-sm font-medium tracking-wide" style={{ color: primaryColor }}>Clients</p>
             <h1 className="text-xl font-semibold tracking-tight text-foreground">Bulk SMS campaigns</h1>
             <p className="text-sm text-muted-foreground">
-              Pick one or more groups and contact roles, then message those people directly.
+              Only clients and contacts with phone numbers are listed. Messages are sent to those numbers, with optional name personalization.
+              Delivery status updates when Onfon posts DLR to{" "}
+              <code className="rounded bg-muted px-1 py-0.5 text-[11px]">/api/sms/dlr</code>.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Dialog
-              open={historyOpen}
-              onOpenChange={(open) => {
-                setHistoryOpen(open)
-                if (!open) {
-                  setExpandedCampaignId(null)
-                  setCampaignReportTab("failed")
-                }
-              }}
-            >
-              <DialogTrigger asChild>
-                <Button variant="outline"><History className="mr-2 h-4 w-4" /> Campaign History</Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>Campaign History</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4 py-4">
-                  {campaigns.length === 0 ? (
-                    <div className="py-12 text-center text-muted-foreground">No campaigns found.</div>
-                  ) : (
-                    campaigns.map((item) => {
-                      const recipients = Array.isArray(item.recipients) ? item.recipients : []
-                      const isExpanded = expandedCampaignId === item._id
-                      const defaultTab: CampaignReportTab =
-                        item.failedCount > 0 ? "failed" : item.sentCount > 0 ? "sent" : "all"
-                      const activeTab = isExpanded ? campaignReportTab : defaultTab
-                      const filteredRecipients =
-                        activeTab === "all"
-                          ? recipients
-                          : recipients.filter((recipient) => recipient.status === activeTab)
-
-                      return (
-                      <div key={item._id} className="rounded-xl border p-4 space-y-3">
-                        <div className="flex items-start justify-between gap-4">
-                          <div>
-                            <h3 className="font-semibold text-lg">{item.name}</h3>
-                            <p className="text-sm text-muted-foreground">{new Date(item.createdAt).toLocaleString()}</p>
-                          </div>
-                          <Badge className={
-                            item.status === "completed" ? "bg-green-100 text-green-700" :
-                            item.status === "completed_with_errors" ? "bg-amber-100 text-amber-700" :
-                            "bg-red-100 text-red-700"
-                          }>
-                            {item.status.replace(/_/g, " ")}
-                          </Badge>
-                        </div>
-                        <div className="bg-muted/30 rounded-lg p-3 text-sm italic text-muted-foreground">
-                          "{item.message}"
-                        </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2">
-                          <div className="space-y-1">
-                            <p className="text-xs text-muted-foreground uppercase font-medium">Total</p>
-                            <p className="text-xl font-bold">{item.audienceCount}</p>
-                          </div>
-                          <div className="space-y-1 text-green-600">
-                            <p className="text-xs text-muted-foreground uppercase font-medium">Sent</p>
-                            <p className="text-xl font-bold">{item.sentCount}</p>
-                          </div>
-                          <div className="space-y-1 text-red-600">
-                            <p className="text-xs text-muted-foreground uppercase font-medium">Failed</p>
-                            <p className="text-xl font-bold">{item.failedCount}</p>
-                          </div>
-                          <div className="space-y-1 text-muted-foreground">
-                            <p className="text-xs text-muted-foreground uppercase font-medium">Skipped</p>
-                            <p className="text-xl font-bold">{item.skippedCount}</p>
-                          </div>
-                        </div>
-
-                        <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                          <p className="text-xs text-muted-foreground">
-                            {recipients.length > 0
-                              ? "Open the report to see numbers that sent or failed."
-                              : "No recipient-level details stored for this campaign."}
-                          </p>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={recipients.length === 0}
-                            onClick={() => {
-                              if (isExpanded) {
-                                setExpandedCampaignId(null)
-                                return
-                              }
-                              setExpandedCampaignId(item._id)
-                              setCampaignReportTab(defaultTab)
-                            }}
-                          >
-                            {isExpanded ? (
-                              <>
-                                <ChevronUp className="mr-1.5 h-4 w-4" />
-                                Hide report
-                              </>
-                            ) : (
-                              <>
-                                <ChevronDown className="mr-1.5 h-4 w-4" />
-                                View report
-                              </>
-                            )}
-                          </Button>
-                        </div>
-
-                        {isExpanded && recipients.length > 0 ? (
-                          <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
-                            <div className="flex flex-wrap gap-2">
-                              {(
-                                [
-                                  { key: "failed", label: `Failed (${item.failedCount})` },
-                                  { key: "sent", label: `Sent (${item.sentCount})` },
-                                  { key: "skipped", label: `Skipped (${item.skippedCount})` },
-                                  { key: "all", label: `All (${recipients.length})` },
-                                ] as Array<{ key: CampaignReportTab; label: string }>
-                              ).map((tab) => (
-                                <Button
-                                  key={tab.key}
-                                  type="button"
-                                  size="sm"
-                                  variant={activeTab === tab.key ? "default" : "outline"}
-                                  onClick={() => setCampaignReportTab(tab.key)}
-                                >
-                                  {tab.label}
-                                </Button>
-                              ))}
-                            </div>
-
-                            {filteredRecipients.length === 0 ? (
-                              <p className="py-6 text-center text-sm text-muted-foreground">
-                                No {activeTab === "all" ? "" : `${activeTab} `}recipients in this campaign.
-                              </p>
-                            ) : (
-                              <div className="overflow-x-auto rounded-md border bg-background">
-                                <table className="w-full min-w-[640px] text-sm">
-                                  <thead className="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                                    <tr>
-                                      <th className="px-3 py-2 font-medium">Name</th>
-                                      <th className="px-3 py-2 font-medium">Phone</th>
-                                      <th className="px-3 py-2 font-medium">Location</th>
-                                      <th className="px-3 py-2 font-medium">Status</th>
-                                      <th className="px-3 py-2 font-medium">Details</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {filteredRecipients.map((recipient) => (
-                                      <tr key={`${item._id}-${recipient.key}-${recipient.phone}`} className="border-b last:border-0">
-                                        <td className="px-3 py-2 align-top font-medium">{recipient.name || "—"}</td>
-                                        <td className="px-3 py-2 align-top font-mono text-xs">
-                                          {recipient.normalizedPhone || recipient.phone || "—"}
-                                        </td>
-                                        <td className="px-3 py-2 align-top text-muted-foreground">
-                                          {recipient.location || "—"}
-                                        </td>
-                                        <td className="px-3 py-2 align-top">
-                                          <Badge
-                                            className={
-                                              recipient.status === "sent"
-                                                ? "bg-green-100 text-green-700"
-                                                : recipient.status === "failed"
-                                                  ? "bg-red-100 text-red-700"
-                                                  : "bg-slate-100 text-slate-700"
-                                            }
-                                          >
-                                            {recipient.status}
-                                          </Badge>
-                                        </td>
-                                        <td className="px-3 py-2 align-top text-muted-foreground">
-                                          {recipient.status === "failed"
-                                            ? recipient.errorMessage || "Send failed"
-                                            : recipient.status === "sent"
-                                              ? recipient.sentAt
-                                                ? `Sent ${new Date(recipient.sentAt).toLocaleString()}`
-                                                : "Delivered to provider"
-                                              : "Skipped"}
-                                        </td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                            )}
-                          </div>
-                        ) : null}
-                      </div>
-                      )
-                    })
-                  )}
-                </div>
-              </DialogContent>
-            </Dialog>
+            <Button asChild variant="outline">
+              <Link href="/admin/clients/bulk-sms/history">
+                <History className="mr-2 h-4 w-4" /> Campaign History
+              </Link>
+            </Button>
             <Button variant="outline" onClick={() => loadAudience({ silent: true })} disabled={loading || refreshing}>
               {refreshing ? "Refreshing..." : "Refresh Audience"}
             </Button>
@@ -655,7 +555,17 @@ export default function BulkSmsPage() {
             <select
               className="h-10 rounded-md border bg-background px-3 text-sm"
               value={filters.audienceType}
-              onChange={(event) => setFilters((prev) => ({ ...prev, audienceType: event.target.value as AudienceType }))}
+              onChange={(event) =>
+                setFilters((prev) => ({
+                  ...prev,
+                  audienceType: event.target.value as AudienceType,
+                  quotationCategoryId:
+                    event.target.value === "quotation_product" ? prev.quotationCategoryId : "",
+                  quotationProductId:
+                    event.target.value === "quotation_product" ? prev.quotationProductId : "",
+                  branchId: event.target.value === "branch" ? prev.branchId : "",
+                }))
+              }
             >
               <option value="all">All clients</option>
               <option value="pending_quotations">Pending quotations</option>
@@ -695,16 +605,45 @@ export default function BulkSmsPage() {
             />
 
             {filters.audienceType === "quotation_product" ? (
-              <select
-                className="h-10 rounded-md border bg-background px-3 text-sm"
-                value={filters.quotationProductId}
-                onChange={(event) => setFilters((prev) => ({ ...prev, quotationProductId: event.target.value }))}
-              >
-                <option value="">Select product...</option>
-                {products.map((p) => (
-                  <option key={p._id} value={p._id}>{p.name}</option>
-                ))}
-              </select>
+              <>
+                <select
+                  className="h-10 rounded-md border bg-background px-3 text-sm"
+                  value={filters.quotationCategoryId}
+                  onChange={(event) =>
+                    setFilters((prev) => ({
+                      ...prev,
+                      quotationCategoryId: event.target.value,
+                      // Reset product when category changes so the list stays coherent
+                      quotationProductId: "",
+                    }))
+                  }
+                >
+                  <option value="">All categories</option>
+                  {categories.map((category) => (
+                    <option key={category._id} value={category._id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="h-10 rounded-md border bg-background px-3 text-sm"
+                  value={filters.quotationProductId}
+                  onChange={(event) =>
+                    setFilters((prev) => ({ ...prev, quotationProductId: event.target.value }))
+                  }
+                >
+                  <option value="">
+                    {filters.quotationCategoryId
+                      ? "All products in category"
+                      : "Select product (or pick a category)"}
+                  </option>
+                  {productsForFilter.map((p) => (
+                    <option key={p._id} value={p._id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </>
             ) : null}
 
             {filters.audienceType === "branch" ? (
@@ -795,7 +734,7 @@ export default function BulkSmsPage() {
                         <strong>{selectedGroupNames.join(", ")}</strong>
                       </>
                     ) : null}
-                    . SMS goes to each contact&apos;s phone when available.
+                    . SMS goes to each contact&apos;s own phone number (contacts without a number are hidden — add phones in Client CRM).
                   </>
                 ) : (
                   <>
@@ -825,7 +764,9 @@ export default function BulkSmsPage() {
             {loading && clients.length === 0 ? (
               <TableSkeleton rows={8} />
             ) : clients.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">No clients match these filters.</p>
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                No clients with phone numbers match these filters. Add numbers in Client CRM, or pick different filters.
+              </p>
             ) : (
               <div className="max-h-[680px] space-y-2 overflow-auto pr-1">
                 {clients.map((client) => (
@@ -890,14 +831,38 @@ export default function BulkSmsPage() {
               </div>
               <div className="space-y-2">
                 <Label>Message</Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {MESSAGE_TOKENS.map((item) => (
+                    <button
+                      key={item.token}
+                      type="button"
+                      className="rounded-full border bg-muted/40 px-2.5 py-1 text-[11px] font-medium text-foreground hover:bg-muted"
+                      onClick={() => insertToken(item.token)}
+                      title={`Insert ${item.token}`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
                 <Textarea
+                  ref={messageTextareaRef}
                   rows={7}
                   maxLength={800}
-                  placeholder="Write the SMS message to send..."
+                  placeholder="Hello {Contact person name}, hope you are doing fine..."
                   value={campaign.message}
                   onChange={(event) => setCampaign((prev) => ({ ...prev, message: event.target.value }))}
                 />
-                <p className="text-xs text-muted-foreground">{campaign.message.length}/800 characters</p>
+                <p className="text-xs text-muted-foreground">
+                  {campaign.message.length}/800 characters · Click a chip to insert a personalization field. Each recipient gets their own values.
+                </p>
+                {campaign.message.trim() ? (
+                  <div className="rounded-lg border bg-muted/30 p-3">
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                      Preview{previewClient ? ` · ${previewClient.contactName || previewClient.contactPerson || previewClient.name}` : ""}
+                    </p>
+                    <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">{messagePreview}</p>
+                  </div>
+                ) : null}
               </div>
 
               {(error || status) && (
@@ -912,15 +877,22 @@ export default function BulkSmsPage() {
           </Card>
 
           <Card className="shadow-sm">
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0">
               <CardTitle className="text-base">Recent Campaigns</CardTitle>
+              <Button asChild variant="ghost" size="sm" className="h-8 px-2 text-xs">
+                <Link href="/admin/clients/bulk-sms/history">View all</Link>
+              </Button>
             </CardHeader>
             <CardContent className="space-y-2">
               {campaigns.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No campaigns sent yet.</p>
               ) : (
-                campaigns.map((item) => (
-                  <div key={item._id} className="rounded-xl border bg-white/90 p-3 text-sm shadow-sm">
+                campaigns.slice(0, 5).map((item) => (
+                  <Link
+                    key={item._id}
+                    href="/admin/clients/bulk-sms/history"
+                    className="block rounded-xl border bg-white/90 p-3 text-sm shadow-sm transition hover:bg-muted/40"
+                  >
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <p className="font-medium">{item.name}</p>
@@ -934,12 +906,18 @@ export default function BulkSmsPage() {
                         {item.status.replace(/_/g, " ")}
                       </Badge>
                     </div>
-                    <div className="mt-2 grid grid-cols-3 gap-2 text-xs text-muted-foreground">
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground sm:grid-cols-4">
                       <span>Total: {item.audienceCount}</span>
+                      <span>
+                        Delivered:{" "}
+                        {typeof item.deliveredCount === "number"
+                          ? item.deliveredCount
+                          : (item.recipients || []).filter((r) => r.status === "delivered").length}
+                      </span>
                       <span>Sent: {item.sentCount}</span>
                       <span>Failed: {item.failedCount}</span>
                     </div>
-                  </div>
+                  </Link>
                 ))
               )}
             </CardContent>

@@ -1,12 +1,17 @@
 import type { Response } from "express"
 import type { AuthenticatedRequest } from "../middleware/auth"
 import { Meeting } from "../models/Meeting"
-import { User } from "../models/User"
 import { Task } from "../models/Task"
 import { AIAnalysisService } from "../services/aiAnalysisService"
 import { emailService } from "../services/emailService"
 import { meetingInvitationEmail } from "../lib/email-templates"
 import { AIMeetingService } from "../services/aiMeetingService"
+import {
+  enrichMeeting,
+  findUserByIdSafe,
+  findUsersByIdsSafe,
+  isGuestUserId,
+} from "../lib/meeting-users"
 import crypto from "crypto"
 
 const aiService = new AIAnalysisService()
@@ -117,9 +122,10 @@ export class MeetingController {
       // Send invitation emails to attendees if any
       if (formattedAttendees.length > 0) {
         try {
-          const attendeeUsers = await User.find({
-            _id: { $in: formattedAttendees.map((a) => a.user_id) },
-          })
+          const attendeeUsers = await findUsersByIdsSafe(
+            formattedAttendees.map((a) => a.user_id),
+            "firstName lastName email",
+          )
 
           console.log(`Found ${attendeeUsers.length} attendee users out of ${formattedAttendees.length} attendees`)
 
@@ -181,31 +187,9 @@ export class MeetingController {
         .sort({ scheduled_at: -1 })
         .lean()
 
-      // Populate organizer and attendee details
+      // Populate organizer and attendee details (skip guest_* IDs — not User ObjectIds)
       const meetingsWithDetails = await Promise.all(
-        meetings.map(async (meeting) => {
-          const organizer = await User.findById(meeting.organizer_id).select(
-            "firstName lastName email employee_id"
-          )
-
-          const attendeeDetails = await Promise.all(
-            meeting.attendees.map(async (attendee) => {
-              const user = await User.findById(attendee.user_id).select(
-                "firstName lastName email employee_id"
-              )
-              return {
-                ...attendee,
-                user,
-              }
-            })
-          )
-
-          return {
-            ...meeting,
-            organizer,
-            attendees: attendeeDetails,
-          }
-        })
+        meetings.map((meeting) => enrichMeeting(meeting)),
       )
 
       res.status(200).json({ success: true, data: meetingsWithDetails })
@@ -229,30 +213,11 @@ export class MeetingController {
         return res.status(404).json({ success: false, message: "Meeting not found" })
       }
 
-      // Populate organizer and attendee details
-      const organizer = await User.findById(meeting.organizer_id).select(
-        "firstName lastName email employee_id position"
-      )
-
-      const attendeeDetails = await Promise.all(
-        meeting.attendees.map(async (attendee) => {
-          const user = await User.findById(attendee.user_id).select(
-            "firstName lastName email employee_id position department"
-          )
-          return {
-            ...attendee,
-            user,
-          }
-        })
-      )
+      const meetingWithDetails = await enrichMeeting(meeting)
 
       res.status(200).json({
         success: true,
-        data: {
-          ...meeting,
-          organizer,
-          attendees: attendeeDetails,
-        },
+        data: meetingWithDetails,
       })
     } catch (error: any) {
       console.error("Get meeting error:", error)
@@ -285,30 +250,11 @@ export class MeetingController {
         }
       }
 
-      // Populate organizer and attendee details
-      const organizer = await User.findById(meeting.organizer_id).select(
-        "firstName lastName email employee_id position"
-      )
-
-      const attendeeDetails = await Promise.all(
-        meeting.attendees.map(async (attendee) => {
-          const user = await User.findById(attendee.user_id).select(
-            "firstName lastName email employee_id position department"
-          )
-          return {
-            ...attendee,
-            user,
-          }
-        })
-      )
+      const meetingWithDetails = await enrichMeeting(meeting)
 
       res.status(200).json({
         success: true,
-        data: {
-          ...meeting,
-          organizer,
-          attendees: attendeeDetails,
-        },
+        data: meetingWithDetails,
       })
     } catch (error: any) {
       console.error("Get meeting by meeting_id error:", error)
@@ -378,32 +324,14 @@ export class MeetingController {
 
       await meeting.save()
 
-      const organizer = await User.findById(meeting.organizer_id).select(
-        "firstName lastName email employee_id position"
-      )
-
-      const attendeeDetails = await Promise.all(
-        meeting.attendees.map(async (attendee: any) => {
-          const user = await User.findById(attendee.user_id).select(
-            "firstName lastName email employee_id position department"
-          )
-          return {
-            ...attendee.toObject(),
-            user,
-          }
-        })
-      )
+      const meetingWithDetails = await enrichMeeting(meeting.toObject())
 
       return res.status(200).json({
         success: true,
         message: "Joined meeting successfully",
         data: {
           guest_user_id: guestUserId,
-          meeting: {
-            ...meeting.toObject(),
-            organizer,
-            attendees: attendeeDetails,
-          },
+          meeting: meetingWithDetails,
         },
       })
     } catch (error: any) {
@@ -437,30 +365,11 @@ export class MeetingController {
         }
       }
 
-      // Populate organizer and attendee details
-      const organizer = await User.findById(meeting.organizer_id).select(
-        "firstName lastName email employee_id position"
-      )
-
-      const attendeeDetails = await Promise.all(
-        meeting.attendees.map(async (attendee) => {
-          const user = await User.findById(attendee.user_id).select(
-            "firstName lastName email employee_id position department"
-          )
-          return {
-            ...attendee,
-            user,
-          }
-        })
-      )
+      const meetingWithDetails = await enrichMeeting(meeting)
 
       res.status(200).json({
         success: true,
-        data: {
-          ...meeting,
-          organizer,
-          attendees: attendeeDetails,
-        },
+        data: meetingWithDetails,
       })
     } catch (error: any) {
       console.error("Get meeting by meeting_id error:", error)
@@ -551,12 +460,20 @@ export class MeetingController {
       // Get attendee details for AI context
       const attendeeDetails = await Promise.all(
         meeting.attendees.map(async (attendee) => {
-          const user = await User.findById(attendee.user_id)
+          if (isGuestUserId(attendee.user_id) || (attendee as any).is_guest) {
+            return {
+              user_id: attendee.user_id,
+              user_name: String((attendee as any).display_name || "Guest").trim() || "Guest",
+            }
+          }
+          const user = await findUserByIdSafe(attendee.user_id, "firstName lastName")
           return {
             user_id: attendee.user_id,
-            user_name: user ? `${user.firstName} ${user.lastName}` : "Unknown",
+            user_name: user
+              ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Unknown"
+              : "Unknown",
           }
-        })
+        }),
       )
 
       // Analyze with AI
@@ -611,8 +528,9 @@ export class MeetingController {
       )
 
       for (const attendee of meeting.attendees) {
-        const user = await User.findById(attendee.user_id)
-        if (user) {
+        if (isGuestUserId(attendee.user_id) || (attendee as any).is_guest) continue
+        const user = await findUserByIdSafe(attendee.user_id, "email")
+        if (user?.email) {
           await emailService.sendEmail({
             to: user.email,
             subject: `Meeting Summary: ${meeting.title}`,
@@ -767,18 +685,19 @@ export class MeetingController {
       await meeting.save()
 
       // Step 2: Get attendee emails for AI context
-      const attendeeEmails = await Promise.all(
-        meeting.attendees.map(async (attendee) => {
-          const user = await User.findById(attendee.user_id)
-          return user?.email || ""
-        }),
+      const attendeeUsers = await findUsersByIdsSafe(
+        meeting.attendees.map((a) => a.user_id),
+        "email",
       )
+      const attendeeEmails = attendeeUsers
+        .map((user) => String(user.email || "").trim())
+        .filter(Boolean)
 
       // Step 3: Analyze meeting with AI
       console.log("🤖 Analyzing meeting...")
       const analysis = await aiMeetingService.analyzeMeeting(
         finalTranscript,
-        attendeeEmails.filter((e) => e),
+        attendeeEmails,
       )
 
       // Step 4: Generate detailed report

@@ -2,10 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Dialog,
   DialogContent,
@@ -13,7 +10,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Textarea } from '@/components/ui/textarea'
 import {
   Video,
@@ -24,22 +20,28 @@ import {
   PhoneOff,
   Hand,
   Send,
-  Smile,
   Users,
   Clock,
   AlertCircle,
   Loader,
-  CheckCircle,
   VideoOff,
   MessageSquare,
-  Menu,
   X,
   MonitorUp,
   MonitorOff,
+  Captions,
+  MoreHorizontal,
+  Copy,
+  Check,
+  Info,
 } from 'lucide-react'
 import { useWebRTC } from '@/hooks/use-webrtc'
 import API_URL from '@/lib/apiBase'
 import { MeetingReport } from '@/components/meetings/meeting-report'
+import {
+  ParticipantTile,
+  getMeetingGridClass,
+} from '@/components/meetings/participant-tile'
 
 interface Meeting {
   _id: string
@@ -191,7 +193,12 @@ export function MeetingInterface({
   const [allowDelayedAudio, setAllowDelayedAudio] = useState(true)
   const [isHandRaised, setIsHandRaised] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
+  const [peopleOpen, setPeopleOpen] = useState(false)
+  const [moreOpen, setMoreOpen] = useState(false)
+  const [copiedInfo, setCopiedInfo] = useState(false)
+  const [elapsedLabel, setElapsedLabel] = useState('0:00')
   const [chatMessage, setChatMessage] = useState('')
+  const [nowTick, setNowTick] = useState(() => Date.now())
   
   const localVideoRef = useRef<HTMLVideoElement>(null)
   const remoteVideoRefs = useRef<Map<string, HTMLVideoElement>>(new Map())
@@ -216,6 +223,23 @@ export function MeetingInterface({
   useEffect(() => {
     setIsMeetingActive(meeting.status === 'in-progress')
   }, [meeting.status])
+
+  useEffect(() => {
+    if (!isMeetingActive || !joinTime) return
+    const timer = window.setInterval(() => setNowTick(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [isMeetingActive, joinTime])
+
+  useEffect(() => {
+    if (!joinTime) {
+      setElapsedLabel('0:00')
+      return
+    }
+    const totalSeconds = Math.max(0, Math.floor((nowTick - joinTime.getTime()) / 1000))
+    const minutes = Math.floor(totalSeconds / 60)
+    const seconds = totalSeconds % 60
+    setElapsedLabel(`${minutes}:${String(seconds).padStart(2, '0')}`)
+  }, [joinTime, nowTick])
 
   // Get current user details
   useEffect(() => {
@@ -756,188 +780,234 @@ export function MeetingInterface({
     )
   )
 
-  const raisedHandNames = Object.values(raisedHands)
-    .filter((entry) => entry.isRaised)
-    .sort((a, b) => b.timestamp - a.timestamp)
-    .map((entry) => entry.userName)
-
   const latestReactions = reactions.slice(-6)
 
+  const handleCopyMeetingInfo = async () => {
+    const link = meeting.meeting_link || `${typeof window !== 'undefined' ? window.location.origin : ''}/meeting/${meeting.meeting_id}`
+    try {
+      await navigator.clipboard.writeText(`${meeting.title}\n${link}`)
+      setCopiedInfo(true)
+      window.setTimeout(() => setCopiedInfo(false), 1800)
+    } catch {
+      // ignore clipboard failures
+    }
+  }
+
+  const tileCount = 1 + remoteStreams.size
+  const sidePanelOpen = chatOpen || peopleOpen
+  const clockLabel = new Date(nowTick).toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+
+  const controlBtn =
+    'h-12 w-12 rounded-full border-0 p-0 text-white shadow-none transition hover:opacity-90 disabled:opacity-50'
+  const controlIdle = 'bg-[#3c4043] hover:bg-[#4a4d51]'
+  const controlActive = 'bg-white text-[#202124] hover:bg-gray-100'
+  const controlDanger = 'bg-[#ea4335] hover:bg-[#d93025]'
+
   return (
-    <div className="w-full h-screen bg-black flex flex-col">
-      {/* Minimized Floating Window */}
+    <div className="relative flex h-screen w-full flex-col overflow-hidden bg-[#202124] text-white">
+      {/* Minimized floating window */}
       {isMinimized && isMeetingActive && (
-        <div className="fixed bottom-4 right-4 z-50 bg-gray-900 rounded-lg shadow-2xl border-2 border-gray-700 w-80">
-          <div className="p-3 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              {recordingActive && (
-                <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
-              )}
-              <span className="text-white font-medium text-sm">
-                {meeting.title}
-              </span>
+        <div className="fixed bottom-5 right-5 z-50 w-72 overflow-hidden rounded-2xl border border-white/10 bg-[#292a2d] shadow-2xl">
+          <div className="flex items-center justify-between px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">{meeting.title}</p>
+              <p className="text-[11px] text-white/55">{elapsedLabel} in call</p>
             </div>
             <Button
               onClick={() => setIsMinimized(false)}
               variant="ghost"
               size="sm"
-              className="text-white h-8 w-8 p-0"
+              className="h-8 w-8 p-0 text-white hover:bg-white/10"
             >
               ↑
             </Button>
           </div>
-          <div className="px-3 pb-3 flex gap-2">
+          <div className="flex gap-2 px-3 pb-3">
             <Button
               onClick={toggleAudio}
-              variant={isAudioOn ? 'default' : 'destructive'}
-              size="sm"
-              className="flex-1"
+              className={`${controlBtn} flex-1 ${isAudioOn ? controlIdle : controlDanger}`}
             >
-              {isAudioOn ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
+              {isAudioOn ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
             </Button>
             <Button
-              onClick={handleEndMeeting}
-              variant="destructive"
-              size="sm"
-              className="flex-1"
+              onClick={isGuest || !isOrganizer ? handleLeaveMeeting : handleEndMeeting}
+              className={`${controlBtn} flex-1 ${controlDanger}`}
             >
-              <PhoneOff className="w-4 h-4" />
+              <PhoneOff className="h-4 w-4" />
             </Button>
           </div>
         </div>
       )}
 
-      {/* Full Meeting View */}
       {!isMinimized && (
         <>
-          {/* Video Area */}
-          <div className="flex-1 bg-gradient-to-b from-gray-900 to-black p-4 overflow-hidden">
-            {isMeetingActive ? (
-              <>
-                {permissionStatus === 'pending' && isConnecting && (
-                  <div className="flex items-center justify-center h-full">
-                    <Card className="w-full max-w-md p-8 text-center bg-gray-800 border-gray-700">
-                      <Loader className="w-16 h-16 text-blue-500 mx-auto mb-4 animate-spin" />
-                      <h3 className="text-xl font-semibold text-white mb-2">
-                        Requesting Permissions
-                      </h3>
-                      <p className="text-gray-400">
-                        Please allow access to your camera and microphone
-                      </p>
-                    </Card>
-                  </div>
+          {/* Top bar */}
+          <header className="z-20 flex h-14 shrink-0 items-center justify-between gap-3 border-b border-white/5 bg-[#202124]/95 px-4 backdrop-blur">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h1 className="truncate text-[15px] font-medium tracking-tight">{meeting.title}</h1>
+                {recordingActive && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-[#ea4335]/15 px-2 py-0.5 text-[11px] font-medium text-[#f28b82]">
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#ea4335]" />
+                    Captions
+                  </span>
                 )}
+              </div>
+              <p className="truncate text-xs text-white/50">
+                {meeting.meeting_id} · {participants.length + (isMeetingActive ? 1 : 0)} in call
+                {isConnected ? ' · Connected' : isMeetingActive ? ' · Connecting…' : ''}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleCopyMeetingInfo}
+                className="hidden h-9 gap-1.5 rounded-full px-3 text-white/80 hover:bg-white/10 hover:text-white sm:inline-flex"
+              >
+                {copiedInfo ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                {copiedInfo ? 'Copied' : 'Copy link'}
+              </Button>
+              <span className="hidden text-sm text-white/70 tabular-nums md:inline">{clockLabel}</span>
+            </div>
+          </header>
 
-                {permissionStatus === 'denied' && (
-                  <div className="flex items-center justify-center h-full">
-                    <Card className="w-full max-w-md p-8 text-center bg-gray-800 border-gray-700">
-                      <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-                      <h3 className="text-xl font-semibold text-white mb-2">
-                        Permission Denied
-                      </h3>
-                      <p className="text-gray-400 mb-4">{permissionError}</p>
-                      <Button onClick={requestMediaPermissions} className="w-full">
-                        Try Again
-                      </Button>
-                    </Card>
-                  </div>
-                )}
+          {/* Stage + side panel */}
+          <div className="relative flex min-h-0 flex-1">
+            <main className="relative flex min-w-0 flex-1 flex-col">
+              {/* Floating reactions */}
+              {latestReactions.length > 0 && (
+                <div className="pointer-events-none absolute right-4 top-4 z-20 flex max-w-[50%] flex-wrap justify-end gap-2">
+                  {latestReactions.map((reaction, index) => (
+                    <span
+                      key={`${reaction.userId}-${reaction.timestamp}-${index}`}
+                      className="rounded-full bg-black/55 px-3 py-1.5 text-sm shadow-lg backdrop-blur"
+                    >
+                      {reaction.reaction}{' '}
+                      <span className="text-white/70">{reaction.userName}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
 
-                {permissionStatus === 'granted' && (
-                  <div className="relative grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 h-full auto-rows-fr">
-                    {latestReactions.length > 0 && (
-                      <div className="absolute top-3 right-3 z-20 flex flex-wrap gap-2 max-w-[60%] justify-end">
-                        {latestReactions.map((reaction, index) => (
-                          <Badge
-                            key={`${reaction.userId}-${reaction.timestamp}-${index}`}
-                            variant="secondary"
-                            className="bg-black/70 text-white border-gray-600"
-                          >
-                            {reaction.reaction} {reaction.userName}
-                          </Badge>
-                        ))}
-                      </div>
+              <div className="flex min-h-0 flex-1 items-center justify-center p-3 sm:p-4 lg:p-5">
+                {!isMeetingActive ? (
+                  <div className="w-full max-w-lg rounded-3xl border border-white/10 bg-[#292a2d] p-8 text-center shadow-2xl">
+                    <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-[#3c4043]">
+                      <Video className="h-7 w-7 text-white" />
+                    </div>
+                    <h2 className="text-2xl font-semibold tracking-tight">{meeting.title}</h2>
+                    {meeting.description && (
+                      <p className="mt-2 text-sm leading-relaxed text-white/60">{meeting.description}</p>
                     )}
-                    {/* Local video */}
-                    <Card className="relative overflow-hidden bg-gray-900 border-gray-700">
-                      {isVideoOn || isScreenSharing ? (
-                        <>
+                    <div className="mt-5 flex flex-wrap items-center justify-center gap-4 text-sm text-white/55">
+                      <span className="inline-flex items-center gap-1.5">
+                        <Clock className="h-4 w-4" />
+                        {new Date(meeting.scheduled_at).toLocaleString()}
+                      </span>
+                      <span className="inline-flex items-center gap-1.5">
+                        <Users className="h-4 w-4" />
+                        {meeting.attendees.length} invited
+                      </span>
+                    </div>
+                    {isOrganizer ? (
+                      <Button
+                        onClick={handleStartMeeting}
+                        className="mt-7 h-11 w-full rounded-full border-0 bg-[#1a73e8] text-white hover:bg-[#1765cc]"
+                      >
+                        <Video className="mr-2 h-4 w-4" />
+                        Start meeting
+                      </Button>
+                    ) : (
+                      <p className="mt-7 text-sm text-white/50">
+                        Waiting for the host to start this meeting…
+                      </p>
+                    )}
+                  </div>
+                ) : permissionStatus === 'pending' && isConnecting ? (
+                  <div className="w-full max-w-md rounded-3xl border border-white/10 bg-[#292a2d] p-8 text-center">
+                    <Loader className="mx-auto mb-4 h-10 w-10 animate-spin text-[#8ab4f8]" />
+                    <h3 className="text-lg font-semibold">Getting your camera ready</h3>
+                    <p className="mt-2 text-sm text-white/55">
+                      Allow camera and microphone access to join the call.
+                    </p>
+                  </div>
+                ) : permissionStatus === 'denied' ? (
+                  <div className="w-full max-w-md rounded-3xl border border-white/10 bg-[#292a2d] p-8 text-center">
+                    <AlertCircle className="mx-auto mb-4 h-10 w-10 text-[#f28b82]" />
+                    <h3 className="text-lg font-semibold">Camera or mic blocked</h3>
+                    <p className="mt-2 text-sm text-white/55">{permissionError}</p>
+                    <Button
+                      onClick={requestMediaPermissions}
+                      className="mt-6 h-10 w-full rounded-full bg-[#1a73e8] text-white hover:bg-[#1765cc]"
+                    >
+                      Try again
+                    </Button>
+                  </div>
+                ) : (
+                  <div
+                    className={`grid h-full w-full gap-3 ${getMeetingGridClass(tileCount)}`}
+                  >
+                    <ParticipantTile
+                      name={userName || 'You'}
+                      isLocal
+                      isGuest={isGuest}
+                      isOrganizer={isOrganizer}
+                      isMuted={!isAudioOn}
+                      isCameraOff={!isVideoOn && !isScreenSharing}
+                      isScreenSharing={isScreenSharing}
+                      isHandRaised={isHandRaised}
+                      showVideo={isVideoOn || isScreenSharing}
+                    >
+                      <video
+                        ref={localVideoRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        className="h-full w-full object-cover"
+                      />
+                      {isScreenSharing && isVideoOn && localStream ? (
+                        <div className="absolute bottom-12 right-3 h-24 w-36 overflow-hidden rounded-xl border border-white/20 bg-black shadow-xl">
                           <video
-                            ref={localVideoRef}
                             autoPlay
                             playsInline
                             muted
-                            className="w-full h-full object-cover"
+                            className="h-full w-full object-cover"
+                            ref={(el) => {
+                              if (el) el.srcObject = localStream
+                            }}
                           />
-                          {isScreenSharing && isVideoOn && localStream && (
-                            <div className="absolute bottom-12 right-2 w-32 h-24 rounded-lg overflow-hidden border-2 border-gray-700 shadow-xl z-30 bg-black">
-                               <video
-                                 autoPlay
-                                 playsInline
-                                 muted
-                                 className="w-full h-full object-cover"
-                                 ref={(el) => { if (el) el.srcObject = localStream }}
-                               />
-                            </div>
-                          )}
-                        </>
-                      ) : (
-                        <div className="flex items-center justify-center h-full bg-gray-800">
-                          <div className="text-center">
-                            <div className="w-20 h-20 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-2">
-                              <span className="text-2xl font-bold text-white">
-                                {userName.charAt(0).toUpperCase()}
-                              </span>
-                            </div>
-                            <VideoOff className="w-8 h-8 text-gray-500 mx-auto mb-2" />
-                            <p className="text-gray-400 text-sm">{userName} (Video Off)</p>
-                          </div>
                         </div>
-                      )}
-                      <div className="absolute bottom-2 left-2 bg-black/70 px-3 py-1 rounded-lg">
-                        <p className="text-white text-sm font-medium">
-                          {userName} (You)
-                          {isGuest && <Badge className="ml-2 text-xs" variant="secondary">Guest</Badge>}
-                        </p>
-                      </div>
-                      {!isAudioOn && (
-                        <div className="absolute top-2 right-2 bg-red-600 p-2 rounded-full">
-                          <MicOff className="w-4 h-4 text-white" />
-                        </div>
-                      )}
-                      {recordingActive && (
-                        <div className="absolute top-2 left-2 flex items-center gap-1 bg-red-600/90 px-2 py-1 rounded">
-                          <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-                          <span className="text-white text-xs">CAPT</span>
-                        </div>
-                      )}
-                    </Card>
+                      ) : null}
+                    </ParticipantTile>
 
-                    {/* Remote participants */}
                     {Array.from(remoteStreams.entries()).map(([socketId, stream]) => {
-                      const participant = participants.find(p => p.socketId === socketId)
-                      const hasVideo = stream.getVideoTracks().length > 0
+                      const participant = participants.find((p) => p.socketId === socketId)
+                      const hasVideo = stream.getVideoTracks().some((t) => t.enabled && t.readyState === 'live')
+                      const remoteName = participant?.userName || 'Participant'
+                      const remoteRaised = Boolean(
+                        participant?.userId && raisedHands[participant.userId]?.isRaised,
+                      )
                       return (
-                        <Card key={socketId} className="relative overflow-hidden bg-gray-900 border-gray-700">
-                          {hasVideo ? (
-                            <video
-                              ref={(el) => {
-                                if (el) remoteVideoRefs.current.set(socketId, el)
-                              }}
-                              autoPlay
-                              playsInline
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center bg-gray-800">
-                              <div className="text-center">
-                                <div className="w-16 h-16 rounded-full bg-indigo-600/80 text-white flex items-center justify-center mx-auto mb-2 text-xl font-semibold">
-                                  {(participant?.userName || 'P').charAt(0).toUpperCase()}
-                                </div>
-                                <p className="text-sm text-gray-300">Audio participant</p>
-                              </div>
-                            </div>
-                          )}
+                        <ParticipantTile
+                          key={socketId}
+                          name={remoteName}
+                          isMuted={false}
+                          isCameraOff={!hasVideo}
+                          isHandRaised={remoteRaised}
+                          showVideo={hasVideo}
+                        >
+                          <video
+                            ref={(el) => {
+                              if (el) remoteVideoRefs.current.set(socketId, el)
+                            }}
+                            autoPlay
+                            playsInline
+                            className="h-full w-full object-cover"
+                          />
                           <audio
                             ref={(el) => {
                               if (el) remoteAudioRefs.current.set(socketId, el)
@@ -945,374 +1015,425 @@ export function MeetingInterface({
                             autoPlay
                             playsInline
                           />
-                          <div className="absolute top-2 left-2 bg-black/70 px-2 py-1 rounded text-white text-xs">
-                            {participant?.userName || 'Participant'}
-                          </div>
-                          {!speakerEnabled && (
-                            <div className="absolute top-2 right-2 bg-gray-900/80 px-2 py-1 rounded text-[10px] text-gray-200">
-                              Muted locally
-                            </div>
-                          )}
-                        </Card>
+                        </ParticipantTile>
                       )
                     })}
 
-                    {/* Empty slots for invited participants */}
                     {remoteStreams.size === 0 && (
-                      <Card className="flex items-center justify-center bg-gray-800 border-gray-700 border-dashed">
-                        <div className="text-center text-gray-500">
-                          <Users className="w-12 h-12 mx-auto mb-2" />
-                          <p className="text-sm">Waiting for participants...</p>
-                        </div>
-                      </Card>
+                      <div className="flex min-h-[180px] flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 bg-[#292a2d]/80 text-center">
+                        <Users className="mb-3 h-10 w-10 text-white/35" />
+                        <p className="text-sm font-medium text-white/70">Waiting for others to join</p>
+                        <p className="mt-1 max-w-xs text-xs text-white/40">
+                          Share the meeting link so teammates or guests can enter.
+                        </p>
+                      </div>
                     )}
                   </div>
                 )}
-              </>
-            ) : (
-              <div className="flex items-center justify-center h-full">
-                <Card className="w-full max-w-md p-8 text-center bg-gray-800 border-gray-700">
-                  <h3 className="text-xl font-semibold text-white mb-4">
-                    {meeting.title}
-                  </h3>
-                  <p className="text-gray-400 mb-6">{meeting.description}</p>
-                  <div className="space-y-2 text-sm text-gray-400 mb-8">
-                    <div className="flex items-center justify-center gap-2">
-                      <Clock className="w-4 h-4" />
-                      {new Date(meeting.scheduled_at).toLocaleString()}
+              </div>
+
+              {/* Bottom control bar — Google Meet pattern */}
+              {isMeetingActive && permissionStatus === 'granted' && (
+                <footer className="relative z-30 shrink-0 border-t border-white/5 bg-[#202124]/95 px-3 py-3 backdrop-blur sm:px-5">
+                  <div className="mx-auto grid max-w-7xl grid-cols-[1fr_auto_1fr] items-center gap-2">
+                    <div className="flex min-w-0 items-center gap-3 text-sm text-white/70">
+                      <span className="tabular-nums">{elapsedLabel}</span>
+                      <span className="hidden truncate sm:inline">{meeting.meeting_id}</span>
                     </div>
-                    <div className="flex items-center justify-center gap-2">
-                      <Users className="w-4 h-4" />
-                      {meeting.attendees.length} attendee(s)
+
+                    <div className="flex items-center justify-center gap-2 sm:gap-2.5">
+                      <Button
+                        onClick={toggleAudio}
+                        className={`${controlBtn} ${isAudioOn ? controlIdle : controlDanger}`}
+                        title={isAudioOn ? 'Turn off microphone' : 'Turn on microphone'}
+                      >
+                        {isAudioOn ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5" />}
+                      </Button>
+
+                      {meeting.meeting_type !== 'audio' && (
+                        <Button
+                          onClick={toggleVideo}
+                          className={`${controlBtn} ${isVideoOn ? controlIdle : controlDanger}`}
+                          title={isVideoOn ? 'Turn off camera' : 'Turn on camera'}
+                        >
+                          {isVideoOn ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
+                        </Button>
+                      )}
+
+                      <Button
+                        onClick={() => setSpeakerEnabled((prev) => !prev)}
+                        className={`${controlBtn} ${speakerEnabled ? controlIdle : controlDanger}`}
+                        title={speakerEnabled ? 'Mute speakers' : 'Unmute speakers'}
+                      >
+                        {speakerEnabled ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
+                      </Button>
+
+                      {meeting.meeting_type !== 'audio' && (
+                        <Button
+                          onClick={toggleScreenShare}
+                          className={`${controlBtn} ${isScreenSharing ? controlActive : controlIdle} ${isScreenSharing ? '!text-[#202124]' : ''}`}
+                          title={isScreenSharing ? 'Stop presenting' : 'Present now'}
+                        >
+                          {isScreenSharing ? (
+                            <MonitorOff className="h-5 w-5" />
+                          ) : (
+                            <MonitorUp className="h-5 w-5" />
+                          )}
+                        </Button>
+                      )}
+
+                      <Button
+                        onClick={handleToggleRaiseHand}
+                        className={`${controlBtn} ${isHandRaised ? controlActive + ' !text-[#202124]' : controlIdle}`}
+                        title={isHandRaised ? 'Lower hand' : 'Raise hand'}
+                      >
+                        <Hand className="h-5 w-5" />
+                      </Button>
+
+                      <div className="relative">
+                        <Button
+                          onClick={() => setMoreOpen((prev) => !prev)}
+                          className={`${controlBtn} ${controlIdle}`}
+                          title="More options"
+                        >
+                          <MoreHorizontal className="h-5 w-5" />
+                        </Button>
+                        {moreOpen && (
+                          <div className="absolute bottom-14 left-1/2 z-40 w-48 -translate-x-1/2 overflow-hidden rounded-xl border border-white/10 bg-[#292a2d] py-1 shadow-2xl">
+                            <button
+                              type="button"
+                              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm hover:bg-white/5"
+                              onClick={() => {
+                                sendReaction('👏')
+                                setMoreOpen(false)
+                              }}
+                            >
+                              👏 Send clap
+                            </button>
+                            <button
+                              type="button"
+                              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm hover:bg-white/5"
+                              onClick={() => {
+                                sendReaction('👍')
+                                setMoreOpen(false)
+                              }}
+                            >
+                              👍 Thumbs up
+                            </button>
+                            <button
+                              type="button"
+                              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm hover:bg-white/5"
+                              onClick={() => {
+                                sendReaction('🎉')
+                                setMoreOpen(false)
+                              }}
+                            >
+                              🎉 Celebrate
+                            </button>
+                            <button
+                              type="button"
+                              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm hover:bg-white/5"
+                              onClick={() => {
+                                setAllowDelayedAudio((prev) => !prev)
+                                setMoreOpen(false)
+                              }}
+                            >
+                              <Info className="h-4 w-4" />
+                              Delayed audio: {allowDelayedAudio ? 'On' : 'Off'}
+                            </button>
+                            <button
+                              type="button"
+                              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm hover:bg-white/5"
+                              onClick={() => {
+                                setIsMinimized(true)
+                                setMoreOpen(false)
+                              }}
+                            >
+                              Minimize call
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      <Button
+                        onClick={
+                          isGuest || !isOrganizer ? handleLeaveMeeting : handleEndMeeting
+                        }
+                        className={`${controlBtn} ${controlDanger} ml-1 sm:ml-2`}
+                        title={isOrganizer && !isGuest ? 'End call for everyone' : 'Leave call'}
+                      >
+                        <PhoneOff className="h-5 w-5" />
+                      </Button>
+                    </div>
+
+                    <div className="flex items-center justify-end gap-1.5 sm:gap-2">
+                      <Button
+                        onClick={() => {
+                          setPeopleOpen((prev) => !prev)
+                          setChatOpen(false)
+                        }}
+                        variant="ghost"
+                        className={`h-10 rounded-full px-3 text-white hover:bg-white/10 ${peopleOpen ? 'bg-white/10' : ''}`}
+                        title="People"
+                      >
+                        <Users className="h-4 w-4 sm:mr-1.5" />
+                        <span className="hidden sm:inline">People</span>
+                      </Button>
+                      <Button
+                        onClick={() => {
+                          setChatOpen((prev) => !prev)
+                          setPeopleOpen(false)
+                        }}
+                        variant="ghost"
+                        className={`h-10 rounded-full px-3 text-white hover:bg-white/10 ${chatOpen ? 'bg-white/10' : ''}`}
+                        title="Chat"
+                      >
+                        <MessageSquare className="h-4 w-4 sm:mr-1.5" />
+                        <span className="hidden sm:inline">Chat</span>
+                      </Button>
+                      <Button
+                        onClick={() => setShowTranscript((prev) => !prev)}
+                        variant="ghost"
+                        className={`h-10 rounded-full px-3 text-white hover:bg-white/10 ${showTranscript ? 'bg-white/10' : ''}`}
+                        title="Captions"
+                      >
+                        <Captions className="h-4 w-4 sm:mr-1.5" />
+                        <span className="hidden sm:inline">Captions</span>
+                      </Button>
                     </div>
                   </div>
-                  {isOrganizer && (
+                </footer>
+              )}
+            </main>
+
+            {/* Side panel: People / Chat */}
+            {isMeetingActive && sidePanelOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+                  onClick={() => {
+                    setChatOpen(false)
+                    setPeopleOpen(false)
+                  }}
+                />
+                <aside className="fixed inset-y-0 right-0 z-50 flex w-full max-w-[360px] flex-col border-l border-white/10 bg-[#292a2d] shadow-2xl lg:static lg:z-auto lg:max-w-[340px]">
+                  <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+                    <div className="flex gap-1 rounded-full bg-black/20 p-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPeopleOpen(true)
+                          setChatOpen(false)
+                        }}
+                        className={`rounded-full px-3 py-1.5 text-sm ${peopleOpen ? 'bg-white/10 text-white' : 'text-white/55'}`}
+                      >
+                        People
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setChatOpen(true)
+                          setPeopleOpen(false)
+                        }}
+                        className={`rounded-full px-3 py-1.5 text-sm ${chatOpen ? 'bg-white/10 text-white' : 'text-white/55'}`}
+                      >
+                        Chat
+                      </button>
+                    </div>
                     <Button
-                      onClick={handleStartMeeting}
-                      className="w-full text-white"
-                      style={{ backgroundColor: brandingColors?.primary || '#059669' }}
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0 text-white/70 hover:bg-white/10 hover:text-white"
+                      onClick={() => {
+                        setChatOpen(false)
+                        setPeopleOpen(false)
+                      }}
                     >
-                      <Video className="w-4 h-4 mr-2" />
-                      Start Meeting
+                      <X className="h-4 w-4" />
                     </Button>
+                  </div>
+
+                  {peopleOpen && (
+                    <div className="flex-1 overflow-y-auto p-4">
+                      <p className="mb-3 text-xs font-medium uppercase tracking-wide text-white/40">
+                        In this call · {joinedMemberNames.length || participants.length + 1}
+                      </p>
+                      <div className="space-y-1">
+                        {/* Local user */}
+                        <div className="flex items-center gap-3 rounded-xl px-2 py-2.5 hover:bg-white/5">
+                          <div
+                            className="flex h-9 w-9 items-center justify-center rounded-full text-sm font-semibold text-white"
+                            style={{
+                              backgroundColor: '#1a73e8',
+                            }}
+                          >
+                            {(userName || 'Y').charAt(0).toUpperCase()}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium">
+                              {userName || 'You'} <span className="text-white/40">(You)</span>
+                            </p>
+                            <p className="text-xs text-white/45">
+                              {isOrganizer ? 'Host' : isGuest ? 'Guest' : 'Participant'}
+                              {!isAudioOn ? ' · Mic off' : ''}
+                            </p>
+                          </div>
+                          {isHandRaised && <Hand className="h-4 w-4 text-[#f9ab00]" />}
+                        </div>
+
+                        {participants.map((participant) => (
+                          <div
+                            key={participant.socketId}
+                            className="flex items-center gap-3 rounded-xl px-2 py-2.5 hover:bg-white/5"
+                          >
+                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#3c4043] text-sm font-semibold">
+                              {(participant.userName || 'P').charAt(0).toUpperCase()}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-medium">{participant.userName}</p>
+                              <p className="text-xs text-white/45">In call</p>
+                            </div>
+                            {raisedHands[participant.userId]?.isRaised && (
+                              <Hand className="h-4 w-4 text-[#f9ab00]" />
+                            )}
+                          </div>
+                        ))}
+
+                        {meeting.attendees
+                          .filter(
+                            (a) =>
+                              !a.attended &&
+                              a.user_id !== currentUserId &&
+                              !participants.some((p) => p.userId === a.user_id),
+                          )
+                          .map((attendee) => {
+                            const name =
+                              attendee.display_name ||
+                              `${attendee.user?.firstName || ''} ${attendee.user?.lastName || ''}`.trim() ||
+                              'Invitee'
+                            return (
+                              <div
+                                key={attendee.user_id}
+                                className="flex items-center gap-3 rounded-xl px-2 py-2.5 opacity-60"
+                              >
+                                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#3c4043]/70 text-sm font-semibold">
+                                  {name.charAt(0).toUpperCase()}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate text-sm font-medium">{name}</p>
+                                  <p className="text-xs text-white/45">Invited · not joined</p>
+                                </div>
+                              </div>
+                            )
+                          })}
+                      </div>
+                    </div>
                   )}
-                </Card>
-              </div>
+
+                  {chatOpen && (
+                    <>
+                      <div className="flex-1 space-y-2 overflow-y-auto p-4">
+                        {chatMessages.length === 0 ? (
+                          <div className="flex h-full min-h-[200px] flex-col items-center justify-center text-center">
+                            <MessageSquare className="mb-3 h-8 w-8 text-white/30" />
+                            <p className="text-sm text-white/55">No messages yet</p>
+                            <p className="mt-1 text-xs text-white/35">
+                              Messages are only visible during this call.
+                            </p>
+                          </div>
+                        ) : (
+                          chatMessages.slice(-100).map((message, index) => {
+                            const mine = message.userId === currentUserId
+                            return (
+                              <div
+                                key={`${message.userId}-${message.timestamp}-${index}`}
+                                className={`max-w-[90%] rounded-2xl px-3 py-2 ${
+                                  mine
+                                    ? 'ml-auto bg-[#1a73e8] text-white'
+                                    : 'bg-black/25 text-white'
+                                }`}
+                              >
+                                {!mine && (
+                                  <p className="mb-0.5 text-[11px] font-medium text-white/60">
+                                    {message.userName}
+                                  </p>
+                                )}
+                                <p className="break-words text-sm leading-relaxed">{message.message}</p>
+                              </div>
+                            )
+                          })
+                        )}
+                      </div>
+                      <div className="border-t border-white/10 p-3">
+                        <div className="flex items-center gap-2">
+                          <Input
+                            value={chatMessage}
+                            onChange={(e) => setChatMessage(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault()
+                                handleSendChat()
+                              }
+                            }}
+                            placeholder="Send a message"
+                            className="h-10 border-white/10 bg-black/20 text-white placeholder:text-white/35"
+                          />
+                          <Button
+                            onClick={handleSendChat}
+                            className="h-10 w-10 rounded-full bg-[#1a73e8] p-0 hover:bg-[#1765cc]"
+                          >
+                            <Send className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </aside>
+              </>
             )}
           </div>
 
-          {/* Controls */}
-          {isMeetingActive && !isMinimized && permissionStatus === 'granted' && (
-            <div className="bg-gray-900 border-t border-gray-700 p-4 space-y-3">
-              <div className="max-w-7xl mx-auto flex items-center justify-between gap-4 flex-wrap">
-                <div className="flex items-center gap-4 text-white">
-                  <div className="flex items-center gap-2">
-                    <Clock className="w-4 h-4" />
-                    <span className="text-sm">
-                      {joinTime && new Date().getTime() - joinTime.getTime() > 0
-                        ? `${Math.floor((new Date().getTime() - joinTime.getTime()) / 60000)}m`
-                        : '0m'}
-                    </span>
-                  </div>
-                  <Badge variant="outline" className="text-white border-white">
-                    {participants.length + 1} participant{participants.length !== 0 ? 's' : ''}
-                  </Badge>
-                  {isConnected && (
-                    <Badge variant="outline" className="text-green-500 border-green-500">
-                      Connected
-                    </Badge>
-                  )}
-                  {raisedHandNames.length > 0 && (
-                    <Badge variant="outline" className="text-yellow-400 border-yellow-500">
-                      {raisedHandNames.length} hand{raisedHandNames.length > 1 ? 's' : ''} raised
-                    </Badge>
+          {/* Captions / transcript strip */}
+          {showTranscript && isMeetingActive && (
+            <div className="max-h-44 shrink-0 overflow-y-auto border-t border-white/10 bg-[#17181a] px-4 py-3">
+              <div className="mx-auto max-w-5xl">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-xs font-medium uppercase tracking-wide text-white/45">
+                    Captions
+                  </p>
+                  {recordingActive && (
+                    <span className="text-[11px] text-[#f28b82]">Listening…</span>
                   )}
                 </div>
-
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Button
-                    onClick={toggleAudio}
-                    size="lg"
-                    variant={isAudioOn ? 'default' : 'destructive'}
-                    className="rounded-full w-12 h-12 p-0"
-                    title={isAudioOn ? 'Mute microphone' : 'Unmute microphone'}
-                  >
-                    {isAudioOn ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
-                  </Button>
-
-                  <Button
-                    onClick={() => setSpeakerEnabled((prev) => !prev)}
-                    size="lg"
-                    variant={speakerEnabled ? 'default' : 'secondary'}
-                    className="rounded-full w-12 h-12 p-0"
-                    title={speakerEnabled ? 'Mute speakers' : 'Unmute speakers'}
-                  >
-                    {speakerEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
-                  </Button>
-
-                  <div className="hidden md:flex items-center gap-2 text-xs text-gray-300 px-2 py-1 border border-gray-700 rounded-md">
-                    <span>Vol</span>
-                    <input
-                      type="range"
-                      min={0}
-                      max={1}
-                      step={0.05}
-                      value={remoteVolume}
-                      onChange={(e) => setRemoteVolume(Number(e.target.value))}
-                    />
-                  </div>
-
-                  {meeting.meeting_type !== 'audio' && (
-                    <>
-                      <Button
-                        onClick={toggleVideo}
-                        size="lg"
-                        style={isVideoOn ? { backgroundColor: brandingColors?.primary || undefined } : {}}
-                        variant={isVideoOn ? 'default' : 'secondary'}
-                        className="rounded-full w-12 h-12 p-0"
-                      >
-                        {isVideoOn ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
-                      </Button>
-                      <Button
-                        onClick={toggleScreenShare}
-                        size="lg"
-                        style={isScreenSharing ? { backgroundColor: brandingColors?.primary || undefined } : {}}
-                        variant={isScreenSharing ? 'default' : 'secondary'}
-                        className="rounded-full w-12 h-12 p-0"
-                        title={isScreenSharing ? 'Stop sharing screen' : 'Share screen'}
-                      >
-                        {isScreenSharing ? <MonitorOff className="w-5 h-5" /> : <MonitorUp className="w-5 h-5" />}
-                      </Button>
-                    </>
-                  )}
-
-                  <Button
-                    onClick={handleToggleRaiseHand}
-                    size="lg"
-                    variant={isHandRaised ? 'secondary' : 'outline'}
-                    className="rounded-full w-12 h-12 p-0"
-                    title={isHandRaised ? 'Lower hand' : 'Raise hand'}
-                  >
-                    <Hand className="w-5 h-5" />
-                  </Button>
-
-                  <Button
-                    onClick={() => sendReaction('👏')}
-                    size="lg"
-                    variant="outline"
-                    className="rounded-full w-12 h-12 p-0"
-                    title="Clap"
-                  >
-                    👏
-                  </Button>
-
-                  <Button
-                    onClick={() => sendReaction('👍')}
-                    size="lg"
-                    variant="outline"
-                    className="rounded-full w-12 h-12 p-0"
-                    title="Thumbs up"
-                  >
-                    👍
-                  </Button>
-
-                  <Button
-                    onClick={() => sendReaction('🎉')}
-                    size="lg"
-                    variant="outline"
-                    className="rounded-full w-12 h-12 p-0"
-                    title="Celebrate"
-                  >
-                    🎉
-                  </Button>
-
-                  <Button
-                    onClick={isGuest ? handleLeaveMeeting : (isOrganizer ? handleEndMeeting : handleLeaveMeeting)}
-                    size="lg"
-                    variant="destructive"
-                    className="rounded-full w-12 h-12 p-0"
-                    title={isOrganizer && !isGuest ? 'End meeting' : 'Leave meeting'}
-                  >
-                    <PhoneOff className="w-5 h-5" />
-                  </Button>
-                </div>
-
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Button
-                    onClick={() => setAllowDelayedAudio((prev) => !prev)}
-                    variant="outline"
-                    size="sm"
-                    className="bg-white text-gray-900 border-gray-300 hover:bg-gray-100"
-                    title="Stabilize audio on slower connections"
-                  >
-                    {allowDelayedAudio ? 'Delayed Audio: On' : 'Delayed Audio: Off'}
-                  </Button>
-
-                  <Button
-                    onClick={() => setChatOpen((prev) => !prev)}
-                    variant="outline"
-                    size="sm"
-                    className="bg-white text-gray-900 border-gray-300 hover:bg-gray-100"
-                  >
-                    <Menu className="w-4 h-4 mr-1" />
-                    Chats
-                  </Button>
-
-                  <Button
-                    onClick={() => setShowTranscript((prev) => !prev)}
-                    variant="outline"
-                    size="sm"
-                    className="bg-white text-gray-900 border-gray-300 hover:bg-gray-100"
-                    title="Live transcript"
-                  >
-                    <MessageSquare className="w-4 h-4 mr-1" />
-                    Transcript
-                  </Button>
-
-                  <Button
-                    onClick={() => setIsMinimized(true)}
-                    variant="ghost"
-                    size="sm"
-                    className="text-gray-200 hover:text-white"
-                  >
-                    ↓
-                  </Button>
-                </div>
+                <Textarea
+                  value={transcript}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    transcriptFinalRef.current = value
+                    transcriptInterimRef.current = ''
+                    setTranscript(value)
+                  }}
+                  disabled={!isOrganizer}
+                  className="min-h-[88px] resize-none border-white/10 bg-transparent text-sm text-white/90 placeholder:text-white/35"
+                  placeholder={
+                    recordingActive ? 'Live captions will appear here…' : 'No captions yet'
+                  }
+                />
               </div>
-
-              <div className="max-w-7xl mx-auto mt-3 flex flex-wrap gap-2">
-                {joinedMemberNames.length > 0 ? (
-                  joinedMemberNames.map((name, index) => (
-                    <Badge
-                      key={`${name}-${index}`}
-                      variant="outline"
-                      className="text-white border-gray-500"
-                    >
-                      {name}
-                    </Badge>
-                  ))
-                ) : (
-                  <span className="text-xs text-gray-400">No joined members yet</span>
-                )}
-              </div>
-
-              {raisedHandNames.length > 0 && (
-                <div className="max-w-7xl mx-auto text-xs text-yellow-300">
-                  Raised hands: {raisedHandNames.join(', ')}
-                </div>
-              )}
-
             </div>
           )}
         </>
       )}
 
-      {isMeetingActive && !isMinimized && chatOpen && (
-        <>
-          <div
-            className="fixed inset-0 bg-black/40 z-40 lg:hidden"
-            onClick={() => setChatOpen(false)}
-          />
-          <aside className="fixed right-0 top-0 h-full w-full sm:w-[360px] bg-gray-900 border-l border-gray-700 z-50 flex flex-col shadow-2xl">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700">
-              <h3 className="text-white font-semibold flex items-center gap-2">
-                <MessageSquare className="w-4 h-4" />
-                Meeting Chats
-              </h3>
-              <Button
-                onClick={() => setChatOpen(false)}
-                variant="ghost"
-                size="sm"
-                className="text-gray-300 hover:text-white"
-              >
-                <X className="w-4 h-4" />
-              </Button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-4 space-y-2">
-              {chatMessages.length === 0 ? (
-                <p className="text-sm text-gray-400">No messages yet. Say hello 👋</p>
-              ) : (
-                chatMessages.slice(-100).map((message, index) => (
-                  <div
-                    key={`${message.userId}-${message.timestamp}-${index}`}
-                    className="bg-gray-800 border border-gray-700 rounded-md p-2"
-                  >
-                    <p className="text-xs text-blue-300 font-medium mb-1">{message.userName}</p>
-                    <p className="text-sm text-gray-200 break-words">{message.message}</p>
-                  </div>
-                ))
-              )}
-            </div>
-
-            <div className="p-4 border-t border-gray-700">
-              <div className="flex items-center gap-2">
-                <Input
-                  value={chatMessage}
-                  onChange={(e) => setChatMessage(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      handleSendChat()
-                    }
-                  }}
-                  placeholder="Type a message..."
-                  className="bg-gray-950 border-gray-700 text-white"
-                />
-                <Button onClick={handleSendChat} size="sm" className="bg-white text-gray-900 hover:bg-gray-100">
-                  <Send className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-          </aside>
-        </>
-      )}
-
-      {/* Live Transcript Panel */}
-      {showTranscript && isMeetingActive && !isMinimized && (
-        <div className="bg-gray-800 border-t border-gray-700 p-4 max-h-56 overflow-y-auto">
-          <div className="max-w-7xl mx-auto">
-            <div className="flex items-center justify-between gap-3 mb-2">
-              <h3 className="font-semibold text-white flex items-center gap-2">
-                <MessageSquare className="w-4 h-4" />
-                Live Transcript
-              </h3>
-              {isOrganizer && recordingActive && (
-                <Badge variant="outline" className="text-white border-gray-600">
-                  Capturing
-                </Badge>
-              )}
-            </div>
-
-            <Textarea
-              value={transcript}
-              onChange={(e) => {
-                const value = e.target.value
-                transcriptFinalRef.current = value
-                transcriptInterimRef.current = ''
-                setTranscript(value)
-              }}
-              disabled={!isOrganizer}
-              className="min-h-[110px] bg-gray-900 border-gray-700 text-white resize-none"
-              placeholder={
-                recordingActive ? 'Listening for speech...' : 'Transcript will appear here'
-              }
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Report Modal */}
       {showReport && (
         <Dialog open={showReport} onOpenChange={setShowReport}>
-          <DialogContent className="max-w-2xl max-h-96 overflow-y-auto">
+          <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Meeting Report</DialogTitle>
+              <DialogTitle>Meeting summary</DialogTitle>
               <DialogDescription>
-                AI-generated analysis of the meeting
+                Review what was discussed and any follow-up actions.
               </DialogDescription>
             </DialogHeader>
-
             <MeetingReport
               title={meeting.title}
               summary={reportState.summary}

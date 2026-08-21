@@ -243,8 +243,15 @@ export function MeetingList({
     }
   }
 
+  const primary = brandingColors?.primary || '#0f766e'
+  const secondary = brandingColors?.secondary || '#0ea5e9'
+  const textColor = brandingColors?.text || '#0f172a'
+
   const upcomingMeetings = meetings.filter(
-    (m) => new Date(m.scheduled_at) > new Date() && m.status !== 'cancelled'
+    (m) =>
+      (m.status === 'scheduled' || m.status === 'in-progress') &&
+      (m.status === 'in-progress' || new Date(m.scheduled_at) > new Date()) &&
+      m.status !== 'cancelled',
   )
 
   const completedMeetings = meetings.filter((m) => m.status === 'completed')
@@ -255,11 +262,20 @@ export function MeetingList({
   })
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" style={{ color: textColor }}>
       {/* Create Meeting Button */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
-        <h2 className="text-2xl font-bold">Meetings</h2>
-        <Button onClick={() => setIsCreateDialogOpen(true)} className="gap-2 w-full sm:w-auto">
+        <div>
+          <h2 className="text-xl font-bold">Your meetings</h2>
+          <p className="text-sm text-muted-foreground">
+            {upcomingMeetings.length} upcoming · {meetingHistory.length} in history
+          </p>
+        </div>
+        <Button
+          onClick={() => setIsCreateDialogOpen(true)}
+          className="gap-2 w-full sm:w-auto border-0 text-white hover:opacity-90"
+          style={{ backgroundColor: primary }}
+        >
           <Plus className="w-4 h-4" />
           Schedule Meeting
         </Button>
@@ -279,13 +295,20 @@ export function MeetingList({
         ) : (
           <div className="grid gap-4">
             {upcomingMeetings.map((meeting) => (
-              <Card key={meeting._id} className="p-5 hover:shadow-lg transition border-l-4 border-l-blue-500 bg-gradient-to-r from-blue-50/50 to-transparent">
+              <Card
+                key={meeting._id}
+                className="p-5 hover:shadow-lg transition border-l-4 bg-white"
+                style={{ borderLeftColor: primary }}
+              >
                 <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
                   <div className="flex-1">
                     {/* Title and Status */}
                     <div className="flex flex-wrap items-start gap-3 mb-3">
                       <div className="flex items-center gap-2">
-                        <div className="p-2 bg-blue-100 rounded-lg">
+                        <div
+                          className="p-2 rounded-lg"
+                          style={{ backgroundColor: `${primary}18`, color: primary }}
+                        >
                           {getMeetingTypeIcon(meeting.meeting_type)}
                         </div>
                         <div>
@@ -396,7 +419,8 @@ export function MeetingList({
                   <div className="w-full lg:w-auto flex flex-col gap-2">
                     <Button
                       onClick={() => onSelectMeeting(meeting)}
-                      className="w-full lg:w-auto gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800"
+                      className="w-full lg:w-auto gap-2 border-0 text-white hover:opacity-90"
+                      style={{ backgroundColor: primary }}
                     >
                       <ExternalLink className="w-4 h-4" />
                       {meeting.status === 'in-progress' ? 'Join Now' : 'View Details'}

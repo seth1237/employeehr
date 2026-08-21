@@ -53,6 +53,10 @@ interface MeetingReportProps {
   actual_end_time?: string
   meeting_type?: string
   organizer?: any
+  brandingColors?: {
+    primary?: string
+    secondary?: string
+  }
 }
 
 export function MeetingReport({
@@ -71,7 +75,9 @@ export function MeetingReport({
   actual_end_time,
   meeting_type = 'team',
   organizer,
+  brandingColors,
 }: MeetingReportProps) {
+  const primary = brandingColors?.primary || '#0f766e'
   const getPriorityColor = (priority?: string) => {
     switch (priority) {
       case 'urgent':
@@ -338,9 +344,16 @@ export function MeetingReport({
                       >
                         <td className="py-3 px-3 font-medium">
                           {attendee.display_name ||
-                            attendee.user?.firstName ||
-                            attendee.user?.first_name ||
-                            'Unknown'}
+                            `${attendee.user?.firstName || attendee.user?.first_name || ''} ${attendee.user?.lastName || attendee.user?.last_name || ''}`.trim() ||
+                            (attendee.is_guest || String(attendee.user_id || '').startsWith('guest_')
+                              ? 'Guest'
+                              : 'Unknown')}
+                          {(attendee.is_guest ||
+                            String(attendee.user_id || '').startsWith('guest_')) && (
+                            <Badge variant="outline" className="ml-2 text-[10px]">
+                              Guest
+                            </Badge>
+                          )}
                         </td>
                         <td className="py-3 px-3">
                           <Badge

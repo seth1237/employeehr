@@ -8,7 +8,7 @@ export class PayrollController {
     // Generate Payroll (Admin)
     static async generate(req: AuthenticatedRequest, res: Response) {
         try {
-            const { user_id, month, bonus = 0, other_bonus_items = [], deduction_items = [], base_salary, standard_deduction_overrides = {} } = req.body
+            const { user_id, month, bonus = 0, other_bonus_items = [], deduction_items = [], base_salary, standard_deduction_overrides = {}, deductions_disabled = false } = req.body
             const org_id = req.user?.org_id
 
             const user = await User.findById(user_id)
@@ -27,7 +27,8 @@ export class PayrollController {
             }
 
             const total_deductions = deduction_items.reduce((sum: number, item: any) => sum + Number(item.amount), 0)
-            const net_pay = salaryToUse + Number(bonus) - total_deductions
+            const bonusTotal = Number(bonus) + (other_bonus_items || []).reduce((sum: number, item: any) => sum + Number(item.amount || 0), 0)
+            const net_pay = salaryToUse + bonusTotal - total_deductions
 
             // Check if payroll already exists for this user/month
             const existing = await Payroll.findOne({ org_id, user_id, month })
@@ -44,6 +45,7 @@ export class PayrollController {
                 other_bonus_items,
                 deduction_items,
                 standard_deduction_overrides,
+                deductions_disabled: Boolean(deductions_disabled),
                 total_deductions,
                 net_pay,
                 status: 'processed'
@@ -61,7 +63,7 @@ export class PayrollController {
     static async update(req: AuthenticatedRequest, res: Response) {
         try {
             const { id } = req.params
-            const { base_salary, bonus, other_bonus_items, deduction_items, standard_deduction_overrides, status } = req.body
+            const { base_salary, bonus, other_bonus_items, deduction_items, standard_deduction_overrides, deductions_disabled, status } = req.body
 
             const payroll = await Payroll.findById(id)
             if (!payroll) {
@@ -73,14 +75,18 @@ export class PayrollController {
             if (bonus !== undefined) payroll.bonus = Number(bonus)
             if (other_bonus_items !== undefined) payroll.other_bonus_items = other_bonus_items
             if (standard_deduction_overrides !== undefined) payroll.standard_deduction_overrides = standard_deduction_overrides
+            if (deductions_disabled !== undefined) payroll.deductions_disabled = Boolean(deductions_disabled)
             if (deduction_items !== undefined) {
                 payroll.deduction_items = deduction_items
                 payroll.total_deductions = deduction_items.reduce((sum: number, item: any) => sum + Number(item.amount), 0)
             }
             if (status) payroll.status = status
 
-            // Recalculate net pay
-            payroll.net_pay = payroll.base_salary + payroll.bonus - payroll.total_deductions
+            const bonusTotal = Number(payroll.bonus || 0) + (payroll.other_bonus_items || []).reduce(
+                (sum: number, item: any) => sum + Number(item.amount || 0),
+                0,
+            )
+            payroll.net_pay = Number(payroll.base_salary || 0) + bonusTotal - Number(payroll.total_deductions || 0)
 
             await payroll.save()
 

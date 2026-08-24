@@ -17,6 +17,11 @@ import { StockCourier } from "../models/StockCourier";
 import { StockClient, DEFAULT_CONTACT_ROLES } from "../models/StockClient";
 import { StockClientGroup } from "../models/StockClientGroup";
 import { StockExpense } from "../models/StockExpense";
+import {
+  StockExpenseCategory,
+  DEFAULT_EXPENSE_CATEGORIES,
+} from "../models/StockExpenseCategory";
+import { StockExpenseClaim } from "../models/StockExpenseClaim";
 import { StockRepeatBill } from "../models/StockRepeatBill";
 import { StockInvoicePayment } from "../models/StockInvoicePayment";
 import { CreditNote } from "../models/CreditNote";
@@ -3349,6 +3354,874 @@ export class StockController {
     }
   }
 
+  static async getExpensesSummary(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id;
+      if (!org_id)
+        return res
+          .status(401)
+          .json({ success: false, message: "Unauthorized" });
+
+      const expenses = await StockExpense.find({ org_id }).lean();
+      const completed = expenses.filter((e) => e.status === "completed");
+
+      const byCategoryMap = new Map<string, { category: string; amount: number; count: number }>();
+      for (const expense of completed) {
+        const category = expense.category?.trim() || "Uncategorized";
+        const current = byCategoryMap.get(category) || {
+          category,
+          amount: 0,
+          count: 0,
+        };
+        current.amount += Number(expense.amount || 0);
+        current.count += 1;
+        byCategoryMap.set(category, current);
+      }
+
+      const byCategory = [...byCategoryMap.values()].sort(
+        (a, b) => b.amount - a.amount,
+      );
+      const transportExpenses = completed.filter(
+        (e) =>
+          e.category === "Transport" ||
+          e.source === "invoice_transport",
+      );
+      const transportTotal = transportExpenses.reduce(
+        (sum, e) => sum + Number(e.amount || 0),
+        0,
+      );
+      const totalSpend = completed.reduce(
+        (sum, e) => sum + Number(e.amount || 0),
+        0,
+      );
+      const pendingApproval = expenses.filter(
+        (e) => e.workflowStatus === "submitted",
+      ).length;
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          totalSpend,
+          transportTotal,
+          expenseCount: expenses.length,
+          completedCount: completed.length,
+          pendingApproval,
+          byCategory,
+          transportExpenses: transportExpenses
+            .sort(
+              (a, b) =>
+                new Date(b.createdAt || 0).getTime() -
+                new Date(a.createdAt || 0).getTime(),
+            )
+            .slice(0, 20),
+          recentExpenses: expenses.slice(0, 15),
+        },
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to fetch expenses summary",
+      });
+    }
+  }
+
+  private static async recordInvoiceTransportExpense(
+    org_id: string,
+    actorId: string,
+    params: {
+      invoiceId: string;
+      invoiceNumber: string;
+      quotationId?: string;
+      quotationNumber?: string;
+      clientName: string;
+      transportCost?: number;
+      transportNote?: string;
+    },
+  ) {
+    const cost = Number(params.transportCost || 0);
+    if (!Number.isFinite(cost) || cost <= 0) return null;
+
+    let category = await StockExpenseCategory.findOne({
+      org_id,
+      name: "Transport",
+      isActive: true,
+    });
+    if (!category) {
+      category = await StockExpenseCategory.create({
+        org_id,
+        name: "Transport",
+        isActive: true,
+      });
+    }
+
+    const expenseNumber = `EXP-${Date.now().toString().slice(-8)}`;
+    const quotationRef = params.quotationNumber
+      ? ` (${params.quotationNumber})`
+      : "";
+
+    return StockExpense.create({
+      org_id,
+      expenseNumber,
+      expenseType: "manual",
+      payerPhone: "Company",
+      payeePhone: params.clientName || "Transport",
+      amount: Number(cost.toFixed(2)),
+      purpose: `Transport for ${params.invoiceNumber}${quotationRef}`,
+      description: params.transportNote?.trim() || undefined,
+      category: "Transport",
+      categoryId: String(category._id),
+      invoiceId: params.invoiceId,
+      quotationId: params.quotationId,
+      source: "invoice_transport",
+      paymentMethod: "invoice",
+      workflowStatus: "approved",
+      status: "completed",
+      initiatedBy: String(actorId),
+    });
+  }
+
+  static async getExpenseCategories(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id;
+      if (!org_id)
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+
+      let categories = await StockExpenseCategory.find({ org_id, isActive: true })
+        .sort({ name: 1 })
+        .lean();
+
+      if (categories.length === 0) {
+        await StockExpenseCategory.insertMany(
+          DEFAULT_EXPENSE_CATEGORIES.map((name) => ({ org_id, name, isActive: true })),
+          { ordered: false },
+        ).catch(() => {});
+        categories = await StockExpenseCategory.find({ org_id, isActive: true })
+          .sort({ name: 1 })
+          .lean();
+      }
+
+      const expenses = await StockExpense.find({ org_id }).lean();
+      const breakdownByName = new Map<string, { amount: number; count: number }>();
+      for (const expense of expenses) {
+        if (expense.status !== "completed") continue;
+        const key = expense.category?.trim() || "Uncategorized";
+        const current = breakdownByName.get(key) || { amount: 0, count: 0 };
+        current.amount += Number(expense.amount || 0);
+        current.count += 1;
+        breakdownByName.set(key, current);
+      }
+
+      const data = categories.map((category) => {
+        const stats = breakdownByName.get(category.name) || { amount: 0, count: 0 };
+        return {
+          ...category,
+          expenseCount: stats.count,
+          totalAmount: stats.amount,
+        };
+      });
+
+      return res.status(200).json({ success: true, data });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to fetch expense categories",
+      });
+    }
+  }
+
+  static async createExpenseCategory(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id;
+      if (!org_id)
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+
+      const { name, code, description } = req.body || {};
+      if (!name?.trim()) {
+        return res.status(400).json({ success: false, message: "Category name is required" });
+      }
+
+      const category = await StockExpenseCategory.create({
+        org_id,
+        name: String(name).trim(),
+        code: code ? String(code).trim() : undefined,
+        description: description ? String(description).trim() : undefined,
+      });
+
+      return res.status(201).json({ success: true, data: category });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to create expense category",
+      });
+    }
+  }
+
+  static async getExpenseCategoryDetail(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id;
+      const { categoryId } = req.params;
+      if (!org_id)
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+
+      const category = await StockExpenseCategory.findOne({
+        _id: categoryId,
+        org_id,
+      }).lean();
+      if (!category) {
+        return res.status(404).json({ success: false, message: "Category not found" });
+      }
+
+      const expenses = await StockExpense.find({
+        org_id,
+        $or: [
+          { categoryId: String(category._id) },
+          { category: category.name },
+        ],
+      })
+        .sort({ expenseDate: -1, createdAt: -1 })
+        .lean();
+
+      const completed = expenses.filter((e) => e.status === "completed");
+      const totalAmount = completed.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+      const totalVat = completed.reduce((sum, e) => sum + Number(e.vat || 0), 0);
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          category,
+          expenses,
+          summary: {
+            expenseCount: expenses.length,
+            completedCount: completed.length,
+            totalAmount,
+            totalVat,
+          },
+        },
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to fetch category detail",
+      });
+    }
+  }
+
+  static async deleteExpenseCategory(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id;
+      const { categoryId } = req.params;
+      if (!org_id)
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+
+      const category = await StockExpenseCategory.findOne({
+        _id: categoryId,
+        org_id,
+      });
+      if (!category) {
+        return res.status(404).json({ success: false, message: "Category not found" });
+      }
+
+      category.isActive = false;
+      await category.save();
+
+      return res.status(200).json({
+        success: true,
+        message: "Category deleted",
+        data: category,
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to delete expense category",
+      });
+    }
+  }
+
+  static async createManualExpense(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id;
+      const actorId = req.user?.userId;
+      if (!org_id || !actorId)
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+
+      const {
+        payerPhone,
+        payeePhone,
+        amount,
+        purpose,
+        description,
+        category,
+        categoryId,
+        branch,
+        department,
+        vat,
+        paymentMethod,
+        workflowStatus,
+        expenseDate,
+        receiptNote,
+        isRecurring,
+        recurDate,
+        proofUrl,
+        proofFileName,
+        proofOriginalName,
+      } = req.body || {};
+
+      if (!payeePhone || !amount || !purpose) {
+        return res.status(400).json({
+          success: false,
+          message: "payee, amount and purpose are required",
+        });
+      }
+
+      const numericAmount = Number(amount);
+      if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+        return res.status(400).json({ success: false, message: "Invalid amount" });
+      }
+
+      const method = paymentMethod ? String(paymentMethod).toLowerCase() : "cash";
+      const payeeRaw = String(payeePhone).trim();
+      const payeeValue =
+        method === "mpesa" && mpesaService.normalizePhone(payeeRaw)
+          ? mpesaService.normalizePhone(payeeRaw)
+          : payeeRaw;
+      const payerValue = payerPhone
+        ? mpesaService.normalizePhone(String(payerPhone)) || String(payerPhone).trim()
+        : "N/A";
+
+      const parsedExpenseDate = expenseDate ? new Date(expenseDate) : new Date();
+      if (Number.isNaN(parsedExpenseDate.getTime())) {
+        return res.status(400).json({ success: false, message: "Invalid expense date" });
+      }
+
+      const recurring = Boolean(isRecurring);
+      let parsedRecurDate: Date | undefined;
+      if (recurring) {
+        if (!recurDate) {
+          return res.status(400).json({
+            success: false,
+            message: "Recur date is required when expense is recurring",
+          });
+        }
+        parsedRecurDate = new Date(recurDate);
+        if (Number.isNaN(parsedRecurDate.getTime())) {
+          return res.status(400).json({ success: false, message: "Invalid recur date" });
+        }
+      }
+
+      const expenseNumber = `EXP-${Date.now().toString().slice(-8)}`;
+      const expense = await StockExpense.create({
+        org_id,
+        expenseNumber,
+        expenseType: "manual",
+        payerPhone: payerValue || "N/A",
+        payeePhone: payeeValue,
+        amount: Number(numericAmount.toFixed(2)),
+        vat: Number(vat || 0),
+        purpose: String(purpose).trim(),
+        description: description ? String(description).trim() : undefined,
+        category: category ? String(category).trim() : undefined,
+        categoryId: categoryId ? String(categoryId) : undefined,
+        branch: branch ? String(branch).trim() : undefined,
+        department: department ? String(department).trim() : undefined,
+        paymentMethod: method,
+        expenseDate: parsedExpenseDate,
+        receiptNote: receiptNote ? String(receiptNote).trim() : undefined,
+        isRecurring: recurring,
+        recurDate: parsedRecurDate,
+        proofUrl: proofUrl ? String(proofUrl).trim() : undefined,
+        proofFileName: proofFileName ? String(proofFileName).trim() : undefined,
+        proofOriginalName: proofOriginalName
+          ? String(proofOriginalName).trim()
+          : undefined,
+        workflowStatus: workflowStatus || "submitted",
+        status: "completed",
+        source: "manual",
+        initiatedBy: String(actorId),
+        requestedByName: req.user?.email || String(actorId),
+      });
+
+      return res.status(201).json({ success: true, data: expense });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to create expense",
+      });
+    }
+  }
+
+  static async uploadExpenseProof(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id;
+      if (!org_id)
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+
+      if (!req.file) {
+        return res.status(400).json({
+          success: false,
+          message: "Proof file is required (PDF, image, or document)",
+        });
+      }
+
+      const proofUrl = `/uploads/expense-proofs/${req.file.filename}`;
+      return res.status(201).json({
+        success: true,
+        data: {
+          proofUrl,
+          proofFileName: req.file.filename,
+          proofOriginalName: req.file.originalname,
+          mimeType: req.file.mimetype,
+          size: req.file.size,
+        },
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to upload expense proof",
+      });
+    }
+  }
+
+  static async updateExpenseWorkflow(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id;
+      const actorId = req.user?.userId;
+      const { expenseId } = req.params;
+      const { workflowStatus } = req.body || {};
+
+      if (!org_id || !actorId)
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+
+      const allowed = ["draft", "submitted", "approved", "paid", "posted"];
+      if (!allowed.includes(workflowStatus)) {
+        return res.status(400).json({ success: false, message: "Invalid workflow status" });
+      }
+
+      const expense = await StockExpense.findOne({ _id: expenseId, org_id });
+      if (!expense)
+        return res.status(404).json({ success: false, message: "Expense not found" });
+
+      expense.workflowStatus = workflowStatus;
+      if (workflowStatus === "approved") {
+        expense.approvedBy = String(actorId);
+        expense.approvedAt = new Date();
+      }
+      await expense.save();
+
+      return res.status(200).json({ success: true, data: expense });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to update expense",
+      });
+    }
+  }
+
+  static async getExpenseClaims(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id;
+      if (!org_id)
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+
+      const claims = await StockExpenseClaim.find({ org_id })
+        .sort({ createdAt: -1 })
+        .lean();
+      return res.status(200).json({ success: true, data: claims });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to fetch expense claims",
+      });
+    }
+  }
+
+  static async createExpenseClaim(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id;
+      const actorId = req.user?.userId;
+      if (!org_id || !actorId)
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+
+      const { employeeId, employeeName, items, purpose, receiptNote, status } = req.body || {};
+      if (!employeeId || !employeeName || !Array.isArray(items) || !items.length || !purpose) {
+        return res.status(400).json({
+          success: false,
+          message: "employeeId, employeeName, items and purpose are required",
+        });
+      }
+
+      const totalAmount = items.reduce(
+        (sum: number, item: any) => sum + Number(item.amount || 0),
+        0,
+      );
+      const claimNumber = `CLM-${Date.now().toString().slice(-8)}`;
+      const claimStatus = status === "submitted" ? "submitted" : "draft";
+
+      const claim = await StockExpenseClaim.create({
+        org_id,
+        claimNumber,
+        employeeId: String(employeeId),
+        employeeName: String(employeeName).trim(),
+        items: items.map((item: any) => ({
+          description: String(item.description || "").trim(),
+          amount: Number(item.amount || 0),
+          category: item.category ? String(item.category) : undefined,
+        })),
+        totalAmount: Number(totalAmount.toFixed(2)),
+        purpose: String(purpose).trim(),
+        receiptNote: receiptNote ? String(receiptNote).trim() : undefined,
+        status: claimStatus,
+        submittedAt: claimStatus === "submitted" ? new Date() : undefined,
+      });
+
+      return res.status(201).json({ success: true, data: claim });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to create expense claim",
+      });
+    }
+  }
+
+  static async updateExpenseClaimStatus(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id;
+      const actorId = req.user?.userId;
+      const { claimId } = req.params;
+      const { status, rejectionReason } = req.body || {};
+
+      if (!org_id || !actorId)
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+
+      const claim = await StockExpenseClaim.findOne({ _id: claimId, org_id });
+      if (!claim)
+        return res.status(404).json({ success: false, message: "Claim not found" });
+
+      claim.status = status;
+      if (status === "approved") {
+        claim.approvedBy = String(actorId);
+        claim.approvedAt = new Date();
+      }
+      if (status === "rejected") {
+        claim.rejectionReason = rejectionReason ? String(rejectionReason) : "Rejected";
+      }
+      await claim.save();
+
+      if (status === "reimbursed") {
+        const alreadyPosted = await StockExpense.findOne({
+          org_id,
+          claimId: String(claim._id),
+        }).lean();
+        if (!alreadyPosted) {
+          const lineItems =
+            Array.isArray(claim.items) && claim.items.length > 0
+              ? claim.items
+              : [
+                  {
+                    description: claim.purpose,
+                    amount: claim.totalAmount,
+                    category: "Employee Claims",
+                  },
+                ];
+
+          for (const item of lineItems) {
+            const amount = Number(item.amount || 0);
+            if (!Number.isFinite(amount) || amount <= 0) continue;
+            await StockExpense.create({
+              org_id,
+              expenseNumber: `EXP-${Date.now().toString().slice(-8)}`,
+              expenseType: "claim",
+              payerPhone: "COMPANY",
+              payeePhone: claim.employeeName || claim.employeeId,
+              amount: Number(amount.toFixed(2)),
+              purpose: String(item.description || claim.purpose).trim(),
+              description: `Settled claim ${claim.claimNumber}${
+                claim.plannerDate ? ` · planner ${claim.plannerDate}` : ""
+              }`,
+              category: item.category || "Employee Claims",
+              expenseDate: new Date(),
+              workflowStatus: "paid",
+              status: "completed",
+              source: claim.source === "sales_planner" ? "claim" : "claim",
+              initiatedBy: String(actorId),
+              requestedByName: claim.employeeName,
+              claimId: String(claim._id),
+            });
+          }
+        }
+      }
+
+      return res.status(200).json({ success: true, data: claim });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to update claim",
+      });
+    }
+  }
+
+  static async getReceivablesSummary(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id;
+      if (!org_id)
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+
+      const invoices = await StockInvoice.find({
+        org_id,
+        status: { $ne: "cancelled" },
+      }).lean();
+      const invoiceIds = invoices.map((invoice: any) => String(invoice._id));
+      const payments = await StockInvoicePayment.find({
+        org_id,
+        invoiceId: { $in: invoiceIds },
+      }).lean();
+      const creditNotes = await CreditNote.find({
+        org_id,
+        status: { $in: ["issued", "applied"] },
+      }).lean();
+
+      const paymentsByInvoice = new Map<string, any[]>();
+      for (const payment of payments) {
+        const key = String(payment.invoiceId);
+        paymentsByInvoice.set(key, [...(paymentsByInvoice.get(key) || []), payment]);
+      }
+
+      const summaries = invoices.map((invoice: any) =>
+        buildInvoicePaymentSummary(invoice, paymentsByInvoice.get(String(invoice._id)) || []),
+      );
+
+      const totalInvoiced = summaries.reduce((sum, row) => sum + Number(row.subTotal || 0), 0);
+      const totalCollected = summaries.reduce((sum, row) => sum + Number(row.paidAmount || 0), 0);
+      const totalOutstanding = summaries.reduce(
+        (sum, row) => sum + Number(row.balanceRemaining || 0),
+        0,
+      );
+      const debtorCount = summaries.filter((row) => Number(row.balanceRemaining || 0) > 0).length;
+      const creditNoteTotal = creditNotes.reduce(
+        (sum, note) => sum + Number(note.subTotal || 0),
+        0,
+      );
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          totalInvoiced: Number(totalInvoiced.toFixed(2)),
+          totalCollected: Number(totalCollected.toFixed(2)),
+          totalOutstanding: Number(totalOutstanding.toFixed(2)),
+          debtorCount,
+          invoiceCount: summaries.length,
+          creditNoteTotal: Number(creditNoteTotal.toFixed(2)),
+          creditNoteCount: creditNotes.length,
+        },
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to fetch receivables summary",
+      });
+    }
+  }
+
+  static async getReceivablesClients(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id;
+      if (!org_id)
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+
+      const invoices = await StockInvoice.find({
+        org_id,
+        status: { $ne: "cancelled" },
+      }).lean();
+      const invoiceIds = invoices.map((invoice: any) => String(invoice._id));
+      const payments = await StockInvoicePayment.find({
+        org_id,
+        invoiceId: { $in: invoiceIds },
+      }).lean();
+
+      const paymentsByInvoice = new Map<string, any[]>();
+      for (const payment of payments) {
+        const key = String(payment.invoiceId);
+        paymentsByInvoice.set(key, [...(paymentsByInvoice.get(key) || []), payment]);
+      }
+
+      const clientMap = new Map<string, any>();
+      for (const invoice of invoices) {
+        const client = (invoice as any).client || {};
+        const key = `${client.name}|${client.number}|${client.location}`;
+        if (!client.name) continue;
+
+        const summary = buildInvoicePaymentSummary(
+          invoice,
+          paymentsByInvoice.get(String(invoice._id)) || [],
+        );
+
+        if (!clientMap.has(key)) {
+          clientMap.set(key, {
+            client,
+            invoiceCount: 0,
+            totalInvoiced: 0,
+            totalPaid: 0,
+            balanceRemaining: 0,
+          });
+        }
+
+        const row = clientMap.get(key);
+        row.invoiceCount += 1;
+        row.totalInvoiced += Number(summary.subTotal || 0);
+        row.totalPaid += Number(summary.paidAmount || 0);
+        row.balanceRemaining += Number(summary.balanceRemaining || 0);
+      }
+
+      const data = Array.from(clientMap.values())
+        .map((row) => ({
+          ...row,
+          totalInvoiced: Number(row.totalInvoiced.toFixed(2)),
+          totalPaid: Number(row.totalPaid.toFixed(2)),
+          balanceRemaining: Number(row.balanceRemaining.toFixed(2)),
+        }))
+        .sort((a, b) => b.balanceRemaining - a.balanceRemaining);
+
+      return res.status(200).json({ success: true, data });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to fetch receivables clients",
+      });
+    }
+  }
+
+  static async getCustomerStatement(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id;
+      if (!org_id)
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+
+      const { clientName, clientNumber, clientLocation, from, to } = req.query as Record<
+        string,
+        string
+      >;
+
+      if (!clientName || !clientNumber) {
+        return res.status(400).json({
+          success: false,
+          message: "clientName and clientNumber are required",
+        });
+      }
+
+      const fromDate = from ? new Date(from) : new Date(0);
+      const toDate = to ? new Date(`${to}T23:59:59.999Z`) : new Date();
+
+      const invoices = await StockInvoice.find({
+        org_id,
+        status: { $ne: "cancelled" },
+        "client.name": String(clientName).trim(),
+        "client.number": String(clientNumber).trim(),
+        ...(clientLocation ? { "client.location": String(clientLocation).trim() } : {}),
+      }).lean();
+
+      const invoiceIds = invoices.map((invoice: any) => String(invoice._id));
+      const [payments, creditNotes] = await Promise.all([
+        StockInvoicePayment.find({ org_id, invoiceId: { $in: invoiceIds } }).lean(),
+        CreditNote.find({
+          org_id,
+          status: { $in: ["issued", "applied"] },
+          "client.name": String(clientName).trim(),
+          "client.number": String(clientNumber).trim(),
+        }).lean(),
+      ]);
+
+      type StatementLine = {
+        date: string
+        reference: string
+        description: string
+        type: "invoice" | "payment" | "credit_note"
+        debit: number
+        credit: number
+      };
+
+      const lines: StatementLine[] = [];
+
+      for (const invoice of invoices) {
+        const createdAt = new Date((invoice as any).createdAt);
+        if (createdAt >= fromDate && createdAt <= toDate) {
+          lines.push({
+            date: createdAt.toISOString(),
+            reference: (invoice as any).invoiceNumber,
+            description: `Sales invoice — ${(invoice as any).client?.name || ""}`,
+            type: "invoice",
+            debit: Number((invoice as any).subTotal || 0),
+            credit: 0,
+          });
+        }
+      }
+
+      for (const payment of payments) {
+        const paidAt = new Date((payment as any).paidAt || (payment as any).createdAt);
+        if (paidAt >= fromDate && paidAt <= toDate) {
+          lines.push({
+            date: paidAt.toISOString(),
+            reference: (payment as any).reference || `PAY-${String(payment._id).slice(-6)}`,
+            description: `Payment (${String((payment as any).paymentMethod || "").toUpperCase()}) — ${(payment as any).invoiceNumber || ""}`,
+            type: "payment",
+            debit: 0,
+            credit: Number((payment as any).amount || 0),
+          });
+        }
+      }
+
+      for (const note of creditNotes) {
+        const createdAt = new Date((note as any).createdAt);
+        if (createdAt >= fromDate && createdAt <= toDate) {
+          lines.push({
+            date: createdAt.toISOString(),
+            reference: (note as any).creditNoteNumber,
+            description: `Credit note — ${(note as any).invoiceNumber}`,
+            type: "credit_note",
+            debit: 0,
+            credit: Number((note as any).subTotal || 0),
+          });
+        }
+      }
+
+      lines.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+      let runningBalance = 0;
+      const linesWithBalance = lines.map((line) => {
+        runningBalance = Number((runningBalance + line.debit - line.credit).toFixed(2));
+        return { ...line, balance: runningBalance };
+      });
+
+      const openingBalance = 0;
+      const closingBalance = linesWithBalance.length
+        ? linesWithBalance[linesWithBalance.length - 1].balance
+        : openingBalance;
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          client: {
+            name: String(clientName).trim(),
+            number: String(clientNumber).trim(),
+            location: clientLocation ? String(clientLocation).trim() : "",
+          },
+          period: {
+            from: fromDate.toISOString(),
+            to: toDate.toISOString(),
+          },
+          openingBalance,
+          closingBalance,
+          totalDebit: Number(lines.reduce((sum, line) => sum + line.debit, 0).toFixed(2)),
+          totalCredit: Number(lines.reduce((sum, line) => sum + line.credit, 0).toFixed(2)),
+          lines: linesWithBalance,
+        },
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to fetch customer statement",
+      });
+    }
+  }
+
   static async getAccountsPayments(req: AuthenticatedRequest, res: Response) {
     try {
       const org_id = req.user?.org_id;
@@ -4711,12 +5584,16 @@ export class StockController {
         transactionDesc,
       });
 
+      const expenseNumber = `EXP-${Date.now().toString().slice(-8)}`;
       const expense = await StockExpense.create({
         org_id,
+        expenseNumber,
+        expenseType: "mpesa_prompt",
         payerPhone: mpesaService.normalizePhone(String(payerPhone)),
         payeePhone: mpesaService.normalizePhone(String(payeePhone)),
         amount: Number(numericAmount.toFixed(2)),
         purpose: String(purpose).trim(),
+        workflowStatus: "submitted",
         status: stkResult.success ? "prompt_sent" : "failed",
         mpesaCheckoutRequestId: stkResult.checkoutRequestId,
         mpesaMerchantRequestId: stkResult.merchantRequestId,
@@ -5001,6 +5878,20 @@ export class StockController {
         }
       }
 
+      const transportCost = Number(req.body?.transportCost || 0);
+      const transportNote = req.body?.transportNote
+        ? String(req.body.transportNote).trim()
+        : undefined;
+      const transportFields =
+        Number.isFinite(transportCost) && transportCost > 0
+          ? {
+              transportCost: Number(transportCost.toFixed(2)),
+              ...(transportNote ? { transportNote } : {}),
+            }
+          : transportNote
+            ? { transportNote }
+            : {};
+
       if (role === "sales_rep") {
         if (String(quotation.createdBy || "") !== String(actorId)) {
           return res.status(403).json({
@@ -5029,6 +5920,7 @@ export class StockController {
             (quotation as any).grandTotal ||
               Number(quotation.subTotal || 0) + Number((quotation as any).taxTotal || 0),
           ),
+          ...transportFields,
           status: "pending_approval",
           dispatch: {
             status: "not_assigned",
@@ -5037,6 +5929,16 @@ export class StockController {
             inquiries: [],
           },
           createdBy: String(quotation.createdBy || actorId),
+        });
+
+        await StockController.recordInvoiceTransportExpense(org_id, actorId, {
+          invoiceId: String(invoice._id),
+          invoiceNumber: invoice.invoiceNumber,
+          quotationId: String(quotation._id),
+          quotationNumber: quotation.quotationNumber,
+          clientName: quotation.client?.name || "Client",
+          transportCost,
+          transportNote,
         });
 
         quotation.convertedInvoiceId = String(invoice._id);
@@ -5118,6 +6020,7 @@ export class StockController {
           (quotation as any).grandTotal ||
             Number(quotation.subTotal || 0) + Number((quotation as any).taxTotal || 0),
         ),
+        ...transportFields,
         status: "issued",
         dispatch: {
           status: "not_assigned",
@@ -5131,6 +6034,16 @@ export class StockController {
           inquiries: [],
         },
         createdBy: String(quotation.createdBy || actorId),
+      });
+
+      await StockController.recordInvoiceTransportExpense(org_id, actorId, {
+        invoiceId: String(invoice._id),
+        invoiceNumber: invoice.invoiceNumber,
+        quotationId: String(quotation._id),
+        quotationNumber: quotation.quotationNumber,
+        clientName: quotation.client?.name || "Client",
+        transportCost,
+        transportNote,
       });
 
       const receiptNumber = generateDocumentNumber("RCP");

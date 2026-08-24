@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { stockApi } from "@/lib/api"
 import { runDataLoad, type SilentLoadOptions } from "@/lib/silent-load"
 import { PageLoadingSkeleton } from "@/components/admin/ui/page-states"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { FinanceDocumentShell, FinanceTableCard } from "@/components/accounts/finance-document-shell"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -94,6 +94,12 @@ export default function AccountsPaymentsPage() {
     [rows, selectedInvoiceId],
   )
 
+  const stats = useMemo(() => ({
+    count: rows.length,
+    outstanding: rows.reduce((s, r) => s + Number(r.balanceRemaining || 0), 0),
+    collected: rows.reduce((s, r) => s + Number(r.paidAmount || 0), 0),
+  }), [rows])
+
   const submitPayment = async () => {
     if (!selectedInvoice) return
 
@@ -126,27 +132,31 @@ export default function AccountsPaymentsPage() {
   if (loading) return <PageLoadingSkeleton title="Loading payment management" rows={8} />
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Accounts · Payment Management</h1>
-        <p className="text-sm text-muted-foreground">
-          Record payments for outstanding sales invoices and track the latest payment and remaining balances.
-        </p>
-      </div>
-
+    <FinanceDocumentShell
+      eyebrow="Sales & Receivables"
+      title="Customer Payments"
+      description="Record payments against outstanding sales invoices with full payment history."
+      backHref="/admin/accounts/receivables"
+      onRefresh={() => loadData({ silent: true })}
+      refreshing={refreshing}
+      kpis={[
+        { label: "Open Invoices", value: stats.count },
+        { label: "Outstanding", value: stats.outstanding, prefix: "KES", accent: "danger" },
+        { label: "Collected (open set)", value: stats.collected, prefix: "KES", accent: "success" },
+        { label: "Selected Balance", value: selectedInvoice?.balanceRemaining || 0, prefix: "KES" },
+      ]}
+      toolbar={
+        <Input
+          placeholder="Search by invoice, client, number..."
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          className="h-9 max-w-md"
+        />
+      }
+    >
       <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Sales Invoices</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <Input
-              placeholder="Search by invoice/client/number"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
-
-            <div className="max-h-[560px] overflow-auto space-y-2">
+        <FinanceTableCard title="Sales Invoices">
+          <div className="max-h-[560px] overflow-auto space-y-2 p-3">
               {filteredRows.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No invoices found.</p>
               ) : (
@@ -173,14 +183,10 @@ export default function AccountsPaymentsPage() {
                 ))
               )}
             </div>
-          </CardContent>
-        </Card>
+        </FinanceTableCard>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Record Payment</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+        <FinanceTableCard title="Record Payment">
+          <div className="space-y-4 p-4">
             {!selectedInvoice ? (
               <p className="text-sm text-muted-foreground">Select an invoice to continue.</p>
             ) : (
@@ -288,9 +294,9 @@ export default function AccountsPaymentsPage() {
                 </div>
               </>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </FinanceTableCard>
       </div>
-    </div>
+    </FinanceDocumentShell>
   )
 }

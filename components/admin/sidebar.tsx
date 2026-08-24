@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -33,7 +34,7 @@ import {
   Clock3,
   Truck,
   Activity,
-  Star,
+  Wallet,
 } from "lucide-react";
 import { getUser, logout } from "@/lib/auth";
 import { getToken } from "@/lib/auth";
@@ -42,6 +43,10 @@ import { parseResponse } from "@/lib/fetchUtils";
 import { companyApi } from "@/lib/api";
 import { getFavoriteHrefs } from "@/lib/admin-personalization";
 import { resolveAdminAllowedSections } from "@/lib/admin-sections";
+import {
+  ACCOUNTS_NAV_GROUPS,
+  getAccountsPagesByGroup,
+} from "@/lib/accounts-nav";
 import { useEffect, useMemo, useState } from "react";
 
 interface SidebarProps {
@@ -52,6 +57,7 @@ interface SidebarProps {
 }
 
 const COLLAPSED_SECTIONS_KEY = "admin_sidebar_collapsed_sections";
+const COLLAPSED_ACCOUNTS_GROUPS_KEY = "admin_sidebar_collapsed_accounts_groups";
 
 const adminMenuItems = [
   // Core Management
@@ -276,46 +282,10 @@ const adminMenuItems = [
     section: "INVENTORY MANAGER",
   },
   {
-    label: "eTIMS posts",
-    icon: FileText,
-    href: "/admin/accounts/posts",
-    section: "ACCOUNTS",
-  },
-  {
     label: "Clients list",
     icon: Users,
     href: "/admin/clients/clients-list",
     section: "CLIENTS",
-  },
-  {
-    label: "Payments",
-    icon: Banknote,
-    href: "/admin/accounts/payments",
-    section: "ACCOUNTS",
-  },
-  {
-    label: "Debts",
-    icon: FileCheck,
-    href: "/admin/accounts/debts",
-    section: "ACCOUNTS",
-  },
-  {
-    label: "Expenses",
-    icon: Banknote,
-    href: "/admin/accounts/expenses",
-    section: "ACCOUNTS",
-  },
-  {
-    label: "Remuneration reports",
-    icon: BarChart3,
-    href: "/admin/accounts/remuneration-reports",
-    section: "ACCOUNTS",
-  },
-  {
-    label: "Financial breakdown",
-    icon: TrendingUp,
-    href: "/admin/accounts/financial-breakdown",
-    section: "ACCOUNTS",
   },
   {
     label: "Stamps",
@@ -428,6 +398,9 @@ export default function AdminSidebar({
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
     new Set(),
   );
+  const [collapsedAccountsGroups, setCollapsedAccountsGroups] = useState<Set<string>>(
+    new Set(),
+  );
 
   const currentUser = useMemo(() => getUser(), []);
 
@@ -437,8 +410,13 @@ export default function AdminSidebar({
       if (saved) {
         setCollapsedSections(new Set(JSON.parse(saved)));
       }
+      const savedAccounts = localStorage.getItem(COLLAPSED_ACCOUNTS_GROUPS_KEY);
+      if (savedAccounts) {
+        setCollapsedAccountsGroups(new Set(JSON.parse(savedAccounts)));
+      }
     } catch {
       setCollapsedSections(new Set());
+      setCollapsedAccountsGroups(new Set());
     }
   }, []);
 
@@ -521,6 +499,132 @@ export default function AdminSidebar({
     logout();
   };
 
+  const toggleAccountsGroup = (groupId: string) => {
+    setCollapsedAccountsGroups((current) => {
+      const next = new Set(current);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      try {
+        localStorage.setItem(
+          COLLAPSED_ACCOUNTS_GROUPS_KEY,
+          JSON.stringify(Array.from(next)),
+        );
+      } catch {}
+      return next;
+    });
+  };
+
+  const renderNavLink = (
+    href: string,
+    label: string,
+    Icon: typeof LayoutDashboard,
+    options?: { muted?: boolean },
+  ) => {
+    const isActive = pathname === href || pathname.startsWith(`${href}/`);
+    return (
+      <Link
+        key={href}
+        href={href}
+        title={isCollapsed ? label : undefined}
+        className={`
+          flex items-center rounded-lg transition text-sm
+          ${isCollapsed ? "justify-center px-2 py-2.5" : "gap-3 px-4 py-2.5"}
+          ${
+            isActive
+              ? "bg-primary text-primary-foreground font-medium"
+              : options?.muted
+                ? "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                : "text-foreground hover:bg-secondary"
+          }
+        `}
+      >
+        <Icon size={18} />
+        {!isCollapsed && <span className="truncate">{label}</span>}
+      </Link>
+    );
+  };
+
+  const renderAccountsSection = () => (
+    <div key="ACCOUNTS">
+      {!isCollapsed ? (
+        <button
+          type="button"
+          onClick={() => toggleSection("ACCOUNTS")}
+          className="mb-1 flex w-full items-center justify-between rounded-md px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground transition hover:bg-secondary hover:text-foreground"
+          aria-expanded={!collapsedSections.has("ACCOUNTS")}
+        >
+          <span>ACCOUNTS</span>
+          <ChevronDown
+            size={14}
+            className={`transition-transform ${collapsedSections.has("ACCOUNTS") ? "-rotate-90" : "rotate-0"}`}
+          />
+        </button>
+      ) : null}
+      <div className={`space-y-2 ${!isCollapsed && collapsedSections.has("ACCOUNTS") ? "hidden" : ""}`}>
+        {renderNavLink("/admin/accounts", "Dashboard", LayoutDashboard)}
+        {renderNavLink("/admin/accounts/expenses", "Expenses", Wallet)}
+        {!isCollapsed
+          ? ACCOUNTS_NAV_GROUPS.filter(
+              (group) => group.id !== "overview" && group.id !== "expenses",
+            ).map((group) => {
+              const pages = getAccountsPagesByGroup(group.id).filter(
+                (page) => page.id !== "dashboard",
+              );
+              if (pages.length === 0) return null;
+              const isGroupCollapsed = collapsedAccountsGroups.has(group.id);
+              return (
+                <div key={group.id} className="space-y-1">
+                  <button
+                    type="button"
+                    onClick={() => toggleAccountsGroup(group.id)}
+                    className="flex w-full items-center justify-between rounded-md px-4 py-1.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground hover:bg-secondary/60"
+                  >
+                    <span>{group.label}</span>
+                    <ChevronDown
+                      size={12}
+                      className={`transition-transform ${isGroupCollapsed ? "-rotate-90" : "rotate-0"}`}
+                    />
+                  </button>
+                  {!isGroupCollapsed ? (
+                    <div className="space-y-1">
+                      {pages.map((page) => {
+                        const href = page.redirectTo || page.href;
+                        const isActive =
+                          pathname === href ||
+                          pathname === page.href ||
+                          pathname.startsWith(`${page.href}/`);
+                        return (
+                          <Link
+                            key={page.id}
+                            href={href}
+                            title={page.label}
+                            className={`
+                              flex items-center rounded-lg transition text-sm
+                              gap-3 px-4 py-2 ml-1
+                              ${
+                                isActive
+                                  ? "bg-primary text-primary-foreground font-medium"
+                                  : page.status === "planned"
+                                    ? "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                                    : "text-foreground hover:bg-secondary"
+                              }
+                            `}
+                          >
+                            <FileText size={16} className="shrink-0 opacity-70" />
+                            <span className="truncate text-[13px]">{page.label}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })
+          : null}
+      </div>
+    </div>
+  );
+
   const toggleSection = (sectionName: string) => {
     setCollapsedSections((current) => {
       const next = new Set(current);
@@ -574,6 +678,8 @@ export default function AdminSidebar({
       }),
     [favoriteHrefs, allowedSections],
   );
+
+  const showAccountsSection = !allowedSections || allowedSections.has("ACCOUNTS");
 
   return (
     <>
@@ -661,36 +767,43 @@ export default function AdminSidebar({
               </div>
             </div>
           )}
-          {sectionEntries.map(([sectionName, items]) => (
-            <div key={sectionName}>
-              {!isCollapsed ? (
-                <button
-                  type="button"
-                  onClick={() => toggleSection(sectionName)}
-                  className="mb-1 flex w-full items-center justify-between rounded-md px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground transition hover:bg-secondary hover:text-foreground"
-                  aria-expanded={!collapsedSections.has(sectionName)}
+          {sectionEntries.flatMap(([sectionName, items]) => {
+            const blocks: React.ReactNode[] = [];
+
+            if (sectionName === "CLIENTS" && showAccountsSection) {
+              blocks.push(renderAccountsSection());
+            }
+
+            blocks.push(
+              <div key={sectionName}>
+                {!isCollapsed ? (
+                  <button
+                    type="button"
+                    onClick={() => toggleSection(sectionName)}
+                    className="mb-1 flex w-full items-center justify-between rounded-md px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground transition hover:bg-secondary hover:text-foreground"
+                    aria-expanded={!collapsedSections.has(sectionName)}
+                  >
+                    <span>{sectionName}</span>
+                    <ChevronDown
+                      size={14}
+                      className={`transition-transform ${collapsedSections.has(sectionName) ? "-rotate-90" : "rotate-0"}`}
+                    />
+                  </button>
+                ) : null}
+                <div
+                  className={`space-y-2 ${!isCollapsed && collapsedSections.has(sectionName) ? "hidden" : ""}`}
                 >
-                  <span>{sectionName}</span>
-                  <ChevronDown
-                    size={14}
-                    className={`transition-transform ${collapsedSections.has(sectionName) ? "-rotate-90" : "rotate-0"}`}
-                  />
-                </button>
-              ) : null}
-              <div
-                className={`space-y-2 ${!isCollapsed && collapsedSections.has(sectionName) ? "hidden" : ""}`}
-              >
-                {items.map((item) => {
-                  const Icon = item.icon;
-                  const isActive =
-                    pathname === item.href ||
-                    pathname.startsWith(item.href + "/");
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      title={isCollapsed ? item.label : undefined}
-                      className={`
+                  {items.map((item) => {
+                    const Icon = item.icon;
+                    const isActive =
+                      pathname === item.href ||
+                      pathname.startsWith(item.href + "/");
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        title={isCollapsed ? item.label : undefined}
+                        className={`
                         flex items-center rounded-lg transition text-sm
                         ${isCollapsed ? "justify-center px-2 py-2.5" : "gap-3 px-4 py-2.5"}
                         ${
@@ -699,47 +812,54 @@ export default function AdminSidebar({
                             : "text-foreground hover:bg-secondary"
                         }
                       `}
-                    >
-                      <div className="relative">
-                        <Icon size={18} />
-                        {item.href === "/admin/stock/quotations" &&
-                        pendingQuotationCount > 0 &&
-                        isCollapsed ? (
-                          <span className="absolute -right-2 -top-2 min-w-4 rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground text-center">
-                            {pendingQuotationCount > 99
-                              ? "99+"
-                              : pendingQuotationCount}
-                          </span>
-                        ) : null}
-                        {item.href === "/admin/stock/invoices" &&
-                        pendingInvoiceCount > 0 &&
-                        isCollapsed ? (
-                          <span className="absolute -right-2 -top-2 min-w-4 rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground text-center">
-                            {pendingInvoiceCount > 99
-                              ? "99+"
-                              : pendingInvoiceCount}
-                          </span>
-                        ) : null}
-                      </div>
-                      {!isCollapsed && (
-                        <span className="flex items-center gap-2">
-                          {item.label}
+                      >
+                        <div className="relative">
+                          <Icon size={18} />
                           {item.href === "/admin/stock/quotations" &&
-                          pendingQuotationCount > 0 ? (
-                            <span className="rounded-full bg-destructive px-2 py-0.5 text-[11px] font-semibold text-destructive-foreground">
+                          pendingQuotationCount > 0 &&
+                          isCollapsed ? (
+                            <span className="absolute -right-2 -top-2 min-w-4 rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground text-center">
                               {pendingQuotationCount > 99
                                 ? "99+"
                                 : pendingQuotationCount}
                             </span>
                           ) : null}
-                        </span>
-                      )}
-                    </Link>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+                          {item.href === "/admin/stock/invoices" &&
+                          pendingInvoiceCount > 0 &&
+                          isCollapsed ? (
+                            <span className="absolute -right-2 -top-2 min-w-4 rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground text-center">
+                              {pendingInvoiceCount > 99
+                                ? "99+"
+                                : pendingInvoiceCount}
+                            </span>
+                          ) : null}
+                        </div>
+                        {!isCollapsed && (
+                          <span className="flex items-center gap-2">
+                            {item.label}
+                            {item.href === "/admin/stock/quotations" &&
+                            pendingQuotationCount > 0 ? (
+                              <span className="rounded-full bg-destructive px-2 py-0.5 text-[11px] font-semibold text-destructive-foreground">
+                                {pendingQuotationCount > 99
+                                  ? "99+"
+                                  : pendingQuotationCount}
+                              </span>
+                            ) : null}
+                          </span>
+                        )}
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>,
+            );
+
+            return blocks;
+          })}
+          {showAccountsSection &&
+          !sectionEntries.some(([sectionName]) => sectionName === "CLIENTS")
+            ? renderAccountsSection()
+            : null}
         </nav>
 
         <div className="p-4 border-t border-border space-y-2">

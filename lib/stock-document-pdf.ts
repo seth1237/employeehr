@@ -2001,6 +2001,171 @@ export function generateInvoiceStyleSummaryPdf(params: {
   return doc;
 }
 
+export function generateExpenseStyleSummaryPdf(params: {
+  expenses: Array<{
+    expenseNumber?: string;
+    expenseDate?: string;
+    createdAt: string;
+    payeePhone: string;
+    category?: string;
+    purpose: string;
+    description?: string;
+    paymentMethod?: string;
+    status: string;
+    amount: number;
+    vat?: number;
+  }>;
+  branding?: TenantBranding;
+  periodStr?: string;
+  watermarkText?: string;
+  autoSave?: boolean;
+}) {
+  const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "landscape" });
+  if (params.watermarkText) {
+    doc.setTextColor(230, 230, 230);
+    doc.setFontSize(60);
+    doc.text(params.watermarkText.toUpperCase(), 148, 105, {
+      angle: 25,
+      align: "center",
+    });
+  }
+
+  const primary = params.branding?.primaryColor || DEFAULT_PRIMARY;
+  const columns = [
+    { header: "Date", width: 24 },
+    { header: "Expense #", width: 30 },
+    { header: "Payee", width: 38 },
+    { header: "Category", width: 32 },
+    { header: "Purpose", width: 70 },
+    { header: "Payment", width: 24 },
+    { header: "Status", width: 22 },
+    { header: "Amount", width: 33 },
+  ];
+  const startX = 12;
+  const pageBottomLimit = 195;
+  let y = drawLandscapeSummaryHeader(
+    doc,
+    "Expenses Summary",
+    params.branding,
+    params.periodStr,
+  );
+
+  const drawHeaderRow = (currentY: number) => {
+    setColorFromHex(doc, primary, "fill");
+    doc.rect(startX, currentY, 273, 9, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(255, 255, 255);
+    let currentX = startX;
+    columns.forEach((col, i) => {
+      const align = i === columns.length - 1 ? "right" : "left";
+      const xOffset = i === columns.length - 1 ? col.width - 3 : 3;
+      doc.text(col.header, currentX + xOffset, currentY + 6, { align });
+      currentX += col.width;
+    });
+    return currentY + 9;
+  };
+
+  y = drawHeaderRow(y);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.5);
+
+  let totalAmount = 0;
+  params.expenses.forEach((expense, rowIndex) => {
+    const dateSource = expense.expenseDate || expense.createdAt;
+    const purposeText = expense.description
+      ? `${expense.purpose} — ${expense.description}`
+      : expense.purpose;
+    const purposeLines = doc.splitTextToSize(purposeText, columns[4].width - 4);
+    const rowHeight = Math.max(8, purposeLines.length * 4 + 4);
+    totalAmount += Number(expense.amount || 0);
+
+    if (y + rowHeight > pageBottomLimit) {
+      doc.addPage();
+      y = drawLandscapeSummaryHeader(
+        doc,
+        "Expenses Summary",
+        params.branding,
+        params.periodStr,
+      );
+      y = drawHeaderRow(y);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.5);
+    }
+
+    if (rowIndex % 2 === 0) {
+      doc.setFillColor(248, 250, 252);
+      doc.rect(startX, y, 273, rowHeight, "F");
+    }
+    setColorFromHex(doc, primary, "draw");
+    doc.setLineWidth(0.2);
+    doc.line(startX, y, startX, y + rowHeight);
+    doc.line(startX + 273, y, startX + 273, y + rowHeight);
+    doc.line(startX, y + rowHeight, startX + 273, y + rowHeight);
+
+    setColorFromHex(doc, DEFAULT_TEXT, "text");
+    let currentX = startX;
+    const cells = [
+      new Date(dateSource).toLocaleDateString("en-GB"),
+      expense.expenseNumber || "—",
+      expense.payeePhone || "—",
+      expense.category || "Uncategorized",
+      purposeText,
+      (expense.paymentMethod || "—").toString(),
+      expense.status,
+      Number(expense.amount || 0).toLocaleString("en-KE", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }),
+    ];
+
+    cells.forEach((cell, i) => {
+      const col = columns[i];
+      if (i === 4) {
+        doc.text(purposeLines, currentX + 3, y + 5);
+      } else if (i === cells.length - 1) {
+        doc.text(cell, currentX + col.width - 3, y + 5, { align: "right" });
+      } else {
+        const lines = doc.splitTextToSize(String(cell), col.width - 4);
+        doc.text(lines, currentX + 3, y + 5);
+      }
+      currentX += col.width;
+    });
+    y += rowHeight;
+  });
+
+  if (y + 12 > pageBottomLimit) {
+    doc.addPage();
+    y = drawLandscapeSummaryHeader(
+      doc,
+      "Expenses Summary",
+      params.branding,
+      params.periodStr,
+    );
+  }
+  setColorFromHex(doc, primary, "fill");
+  doc.rect(startX, y + 2, 273, 10, "F");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.setTextColor(255, 255, 255);
+  doc.text(`TOTAL (${params.expenses.length} expenses)`, startX + 3, y + 9);
+  doc.text(
+    `KES ${totalAmount.toLocaleString("en-KE", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`,
+    startX + 270,
+    y + 9,
+    { align: "right" },
+  );
+
+  if (params.autoSave !== false) {
+    doc.save("expenses-summary.pdf");
+  }
+
+  return doc;
+}
+
 export function generateQuotationPdf(params: {
   quotationNumber: string;
   createdAt: string;

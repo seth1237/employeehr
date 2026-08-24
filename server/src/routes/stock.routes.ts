@@ -7,6 +7,7 @@ import {
   uploadApplicationFiles,
   uploadProductImage,
   uploadLogo,
+  uploadExpenseProof,
 } from "../middleware/upload.middleware";
 import WarehouseController from "../controllers/warehouseController";
 import { InstalledMachineController } from "../controllers/installedMachineController";
@@ -141,7 +142,31 @@ router.post("/accounts/payments/:invoiceId", StockController.addInvoicePayment);
 router.get("/accounts/debts", StockController.getDebtManagement);
 router.get("/accounts/debts/aging", StockController.getAgingDebtReport);
 router.get("/accounts/expenses", StockController.getExpenses);
+router.get("/accounts/expenses/summary", StockController.getExpensesSummary);
 router.post("/accounts/expenses/initiate", StockController.initiateExpense);
+router.post("/accounts/expenses/manual", StockController.createManualExpense);
+router.post(
+  "/accounts/expenses/proof",
+  uploadExpenseProof.single("file"),
+  StockController.uploadExpenseProof,
+);
+router.patch("/accounts/expenses/:expenseId/workflow", StockController.updateExpenseWorkflow);
+router.get("/accounts/expenses/categories", StockController.getExpenseCategories);
+router.post("/accounts/expenses/categories", StockController.createExpenseCategory);
+router.get(
+  "/accounts/expenses/categories/:categoryId",
+  StockController.getExpenseCategoryDetail,
+);
+router.delete(
+  "/accounts/expenses/categories/:categoryId",
+  StockController.deleteExpenseCategory,
+);
+router.get("/accounts/expenses/claims", StockController.getExpenseClaims);
+router.post("/accounts/expenses/claims", StockController.createExpenseClaim);
+router.patch("/accounts/expenses/claims/:claimId/status", StockController.updateExpenseClaimStatus);
+router.get("/accounts/receivables/summary", StockController.getReceivablesSummary);
+router.get("/accounts/receivables/clients", StockController.getReceivablesClients);
+router.get("/accounts/receivables/statement", StockController.getCustomerStatement);
 router.get("/accounts/repeat-bills", StockController.getRepeatBills);
 router.post("/accounts/repeat-bills", StockController.createRepeatBill);
 router.post(

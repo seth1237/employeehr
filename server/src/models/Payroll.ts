@@ -13,6 +13,7 @@ export interface IPayroll extends Document {
     status: 'draft' | 'processed' | 'paid'
     generated_at: Date
     standard_deduction_overrides: Record<string, any>
+    deductions_disabled?: boolean
     // createdAt and updatedAt are added by timestamps: true
     createdAt: Date
     updatedAt: Date
@@ -42,6 +43,7 @@ const payrollSchema = new Schema<IPayroll>(
         },
         generated_at: { type: Date, default: Date.now },
         standard_deduction_overrides: { type: Schema.Types.Mixed, default: {} },
+        deductions_disabled: { type: Boolean, default: false },
     },
     { timestamps: true },
 )

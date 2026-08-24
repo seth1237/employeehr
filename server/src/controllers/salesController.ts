@@ -20,6 +20,7 @@ import { Company } from "../models/Company"
 import { StockInvoice } from "../models/StockInvoice"
 import { SalesRepTarget } from "../models/SalesRepTarget"
 import { InstalledMachine } from "../models/InstalledMachine"
+import { StockExpenseClaim } from "../models/StockExpenseClaim"
 import {
   coverageByPeriod,
   computeCoverage,
@@ -2022,6 +2023,67 @@ export class SalesController {
       if (action === "approve") {
         planner.status = "approved"
         planner.adminNotes = note ? String(note) : undefined
+
+        // Create / refresh a sales-rep expense claim from the approved day budget
+        const transport = Math.max(0, Number(planner.budget?.transport || 0))
+        const nightOutAmount = planner.budget?.nightOut
+          ? Math.max(0, Number(planner.budget?.nightOutAmount || 0))
+          : 0
+        const items: Array<{ description: string; amount: number; category: string }> = []
+        if (transport > 0) {
+          items.push({
+            description: `Transport budget for planner ${planner.date}`,
+            amount: Number(transport.toFixed(2)),
+            category: "Transport",
+          })
+        }
+        if (nightOutAmount > 0) {
+          items.push({
+            description: `Night out allowance for planner ${planner.date}`,
+            amount: Number(nightOutAmount.toFixed(2)),
+            category: "Accommodation",
+          })
+        }
+
+        if (items.length > 0 && !planner.expenseClaimId) {
+          const existing = await StockExpenseClaim.findOne({
+            org_id,
+            plannerId: String(planner._id),
+          })
+          if (!existing) {
+            const rep = await User.findById(planner.userId)
+              .select("firstName lastName email")
+              .lean()
+            const employeeName = rep
+              ? `${rep.firstName || ""} ${rep.lastName || ""}`.trim() ||
+                rep.email ||
+                String(planner.userId)
+              : String(planner.userId)
+            const totalAmount = items.reduce((sum, item) => sum + item.amount, 0)
+            const claim = await StockExpenseClaim.create({
+              org_id,
+              claimNumber: `CLM-${Date.now().toString().slice(-8)}`,
+              employeeId: String(planner.userId),
+              employeeName,
+              items,
+              totalAmount: Number(totalAmount.toFixed(2)),
+              purpose: `Sales planner budget for ${planner.date}`,
+              receiptNote: note
+                ? `From approved planner. Admin note: ${note}`
+                : "From approved sales planner day budget",
+              status: "approved",
+              submittedAt: new Date(),
+              approvedBy: String(req.user?.userId || ""),
+              approvedAt: new Date(),
+              plannerId: String(planner._id),
+              plannerDate: planner.date,
+              source: "sales_planner",
+            })
+            planner.expenseClaimId = String(claim._id)
+          } else {
+            planner.expenseClaimId = String(existing._id)
+          }
+        }
       } else if (action === "reject") {
         planner.status = "rejected"
         planner.adminNotes = note ? String(note) : "Rejected by admin"

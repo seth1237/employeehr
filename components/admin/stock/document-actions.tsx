@@ -32,6 +32,10 @@ import {
   StockDocumentPreview,
   type StockDocumentData,
 } from "@/components/admin/stock/document-preview"
+import {
+  QuotationTransportDialog,
+  type QuotationTransportInput,
+} from "@/components/admin/stock/quotation-transport-dialog"
 
 type DocumentActionsProps = {
   kind: "invoice" | "quotation"
@@ -59,6 +63,7 @@ export function StockDocumentActions({
     useState<InvoiceDocumentSettings>({})
   const [previewOpen, setPreviewOpen] = useState(false)
   const [emailOpen, setEmailOpen] = useState(false)
+  const [transportOpen, setTransportOpen] = useState(false)
   const [emailTo, setEmailTo] = useState("")
   const [busy, setBusy] = useState<string | null>(null)
 
@@ -185,10 +190,10 @@ export function StockDocumentActions({
     }
   }
 
-  const convertToInvoice = async () => {
+  const convertToInvoice = async (transport?: QuotationTransportInput) => {
     setBusy("convert")
     try {
-      const res = await stockApi.convertQuotation(documentId)
+      const res = await stockApi.convertQuotation(documentId, transport)
       if (!res.success) throw new Error(res.message || "Convert failed")
       const invoiceId = (res.data as { _id?: string })?._id
       const invoiceNumber = (res.data as { invoiceNumber?: string })?.invoiceNumber
@@ -198,6 +203,7 @@ export function StockDocumentActions({
           ? `${invoiceNumber} is ready — open it to preview, print, or email.`
           : "Quotation converted successfully.",
       })
+      setTransportOpen(false)
       if (invoiceId) {
         onConverted?.(invoiceId)
         router.push(`/admin/stock/invoices/${invoiceId}`)
@@ -284,7 +290,7 @@ export function StockDocumentActions({
         {canConvert && (
           <Button
             size="sm"
-            onClick={convertToInvoice}
+            onClick={() => setTransportOpen(true)}
             disabled={busy === "convert"}
             data-tour="convert-invoice"
             aria-label="Convert quotation to invoice"
@@ -294,6 +300,14 @@ export function StockDocumentActions({
           </Button>
         )}
       </div>
+
+      <QuotationTransportDialog
+        open={transportOpen}
+        onOpenChange={setTransportOpen}
+        onConfirm={convertToInvoice}
+        loading={busy === "convert"}
+        clientName={document.client.name}
+      />
 
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto print:max-w-none print:overflow-visible">

@@ -10,6 +10,10 @@ import { Textarea } from "@/components/ui/textarea"
 import { StickyActionBar } from "@/components/admin/ui/mobile-list"
 import { StatusBadge } from "@/components/admin/ui/status-badge"
 import { PageLoadingSkeleton } from "@/components/admin/ui/page-states"
+import {
+  QuotationTransportDialog,
+  type QuotationTransportInput,
+} from "@/components/admin/stock/quotation-transport-dialog"
 
 const roomTemplates = [
   "Telesales",
@@ -49,6 +53,11 @@ export default function ClientCommunicationStandard({ docText }: { docText: stri
   const [selectedQuotation, setSelectedQuotation] = useState<any | null>(null)
   const [followUps, setFollowUps] = useState<any[]>([])
   const [quotationNote, setQuotationNote] = useState("")
+  const [transportTarget, setTransportTarget] = useState<{
+    id: string
+    clientName: string
+  } | null>(null)
+  const [convertingQuotation, setConvertingQuotation] = useState(false)
   const [activeSection, setActiveSection] = useState<"quotations" | "rooms" | "events" | "walk-ins" | "analytics">("rooms")
 
   const [selectedRoom, setSelectedRoom] = useState(roomTemplates[3])
@@ -330,15 +339,21 @@ export default function ClientCommunicationStandard({ docText }: { docText: stri
     })
   }
 
-  const convertQuotation = async (quotationId: string) => {
-    if (!confirm("Convert this quotation to an invoice?")) return
+  const convertQuotation = async (
+    quotationId: string,
+    transport?: QuotationTransportInput,
+  ) => {
+    setConvertingQuotation(true)
     try {
-      await stockApi.convertQuotation(quotationId)
+      await stockApi.convertQuotation(quotationId, transport)
       alert("Quotation converted to invoice")
       setQuotations((prev) => prev.filter((q) => q._id !== quotationId))
       if (selectedQuotation?._id === quotationId) setSelectedQuotation(null)
+      setTransportTarget(null)
     } catch (error: any) {
       alert(error?.message || "Failed to convert quotation")
+    } finally {
+      setConvertingQuotation(false)
     }
   }
 
@@ -456,7 +471,12 @@ export default function ClientCommunicationStandard({ docText }: { docText: stri
                       </div>
                       <Button
                         className="bg-slate-900 text-white hover:bg-slate-800"
-                        onClick={() => convertQuotation(selectedQuotation._id)}
+                        onClick={() =>
+                          setTransportTarget({
+                            id: selectedQuotation._id,
+                            clientName: selectedQuotation.client?.name || "",
+                          })
+                        }
                         aria-label={`Convert ${selectedQuotation.quotationNumber} to invoice`}
                       >
                         Convert to invoice
@@ -814,7 +834,12 @@ export default function ClientCommunicationStandard({ docText }: { docText: stri
             size="sm"
             variant="outline"
             className="flex-1"
-            onClick={() => convertQuotation(selectedQuotation._id)}
+            onClick={() =>
+              setTransportTarget({
+                id: selectedQuotation._id,
+                clientName: selectedQuotation.client?.name || "",
+              })
+            }
             aria-label={`Convert ${selectedQuotation.quotationNumber} to invoice`}
           >
             Convert
@@ -854,6 +879,19 @@ export default function ClientCommunicationStandard({ docText }: { docText: stri
           </Button>
         </StickyActionBar>
       )}
+
+      <QuotationTransportDialog
+        open={!!transportTarget}
+        onOpenChange={(open) => {
+          if (!open) setTransportTarget(null)
+        }}
+        clientName={transportTarget?.clientName}
+        loading={convertingQuotation}
+        onConfirm={async (transport) => {
+          if (!transportTarget) return
+          await convertQuotation(transportTarget.id, transport)
+        }}
+      />
     </div>
   )
 }

@@ -8,6 +8,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { PageLoadingSkeleton } from "@/components/admin/ui/page-states"
+import {
+  QuotationTransportDialog,
+  type QuotationTransportInput,
+} from "@/components/admin/stock/quotation-transport-dialog"
 
 const roomTemplates = [
   "Telesales",
@@ -53,6 +57,11 @@ export default function ClientCommunicationWorkspace({ docText }: { docText: str
   const [quotations, setQuotations] = useState<any[]>([])
   const [followUps, setFollowUps] = useState<any[]>([])
   const [quotationNote, setQuotationNote] = useState("")
+  const [transportTarget, setTransportTarget] = useState<{
+    id: string
+    clientName: string
+  } | null>(null)
+  const [convertingQuotation, setConvertingQuotation] = useState(false)
 
   const [selectedRoom, setSelectedRoom] = useState(roomTemplates[3])
   const [roomNote, setRoomNote] = useState("")
@@ -263,15 +272,21 @@ export default function ClientCommunicationWorkspace({ docText }: { docText: str
     })
   }
 
-  const convertQuotation = async (quotationId: string) => {
-    if (!confirm("Convert this quotation to an invoice?")) return
+  const convertQuotation = async (
+    quotationId: string,
+    transport?: QuotationTransportInput,
+  ) => {
+    setConvertingQuotation(true)
     try {
-      await stockApi.convertQuotation(quotationId)
+      await stockApi.convertQuotation(quotationId, transport)
       alert("Quotation converted to invoice")
       setQuotations((prev) => prev.filter((q) => q._id !== quotationId))
       if (selectedQuotation?._id === quotationId) setSelectedQuotation(null)
+      setTransportTarget(null)
     } catch (error: any) {
       alert(error?.message || "Failed to convert quotation")
+    } finally {
+      setConvertingQuotation(false)
     }
   }
 
@@ -563,7 +578,16 @@ export default function ClientCommunicationWorkspace({ docText }: { docText: str
                     <div className="text-sm text-muted-foreground">{selectedQuotation.client?.name} • {selectedQuotation.client?.number}</div>
                     <div className="text-sm text-muted-foreground">Follow-up status: {selectedQuotation.status}</div>
                   </div>
-                  <Button onClick={() => convertQuotation(selectedQuotation._id)}>Convert to invoice</Button>
+                  <Button
+                    onClick={() =>
+                      setTransportTarget({
+                        id: selectedQuotation._id,
+                        clientName: selectedQuotation.client?.name || "",
+                      })
+                    }
+                  >
+                    Convert to invoice
+                  </Button>
                 </div>
               </div>
 
@@ -647,6 +671,19 @@ export default function ClientCommunicationWorkspace({ docText }: { docText: str
           </div>
         </Card>
       </section>
+
+      <QuotationTransportDialog
+        open={!!transportTarget}
+        onOpenChange={(open) => {
+          if (!open) setTransportTarget(null)
+        }}
+        clientName={transportTarget?.clientName}
+        loading={convertingQuotation}
+        onConfirm={async (transport) => {
+          if (!transportTarget) return
+          await convertQuotation(transportTarget.id, transport)
+        }}
+      />
     </div>
   )
 }

@@ -1,9 +1,23 @@
+import { ACCOUNTS_NAV_PAGES } from "@/lib/accounts-nav"
+
 export type AdminNavItem = {
   label: string
   href: string
   section: string
   keywords?: string[]
 }
+
+const ACCOUNTS_CMDK_ITEMS: AdminNavItem[] = ACCOUNTS_NAV_PAGES.map((page) => ({
+  label: page.label,
+  href: page.redirectTo || page.href,
+  section: "ACCOUNTS",
+  keywords: [
+    ...(page.keywords || []),
+    page.groupId.replace(/-/g, " "),
+    page.status,
+    `phase ${page.phase}`,
+  ],
+}))
 
 /** Shared admin navigation for sidebar + Cmd-K */
 export const ADMIN_NAV_ITEMS: AdminNavItem[] = [
@@ -29,10 +43,7 @@ export const ADMIN_NAV_ITEMS: AdminNavItem[] = [
   { label: "Invoices", href: "/admin/stock/invoices", section: "INVENTORY MANAGER", keywords: ["billing"] },
   { label: "Credit Notes", href: "/admin/stock/credit-notes", section: "INVENTORY MANAGER" },
   { label: "Dispatch", href: "/admin/stock/dispatch", section: "INVENTORY MANAGER" },
-  { label: "eTIMS Posts", href: "/admin/accounts/posts", section: "ACCOUNTS", keywords: ["kra", "tax"] },
-  { label: "Payments", href: "/admin/accounts/payments", section: "ACCOUNTS" },
-  { label: "Debts", href: "/admin/accounts/debts", section: "ACCOUNTS" },
-  { label: "Expenses", href: "/admin/accounts/expenses", section: "ACCOUNTS" },
+  ...ACCOUNTS_CMDK_ITEMS,
   { label: "Clients Hub", href: "/admin/clients", section: "CLIENTS", keywords: ["customers", "crm"] },
   { label: "Client CRM", href: "/admin/clients/clients-list", section: "CLIENTS", keywords: ["customers", "crm", "contacts", "groups", "directory", "telesales", "calls"] },
   { label: "Sales Reports", href: "/admin/sales-reports", section: "CLIENTS", keywords: ["sales rep", "field", "quotes", "approval", "visits"] },

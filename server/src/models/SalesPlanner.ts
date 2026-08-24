@@ -33,6 +33,7 @@ const SalesPlannerSchema = new mongoose.Schema(
       default: "pending",
     },
     adminNotes: { type: String },
+    expenseClaimId: { type: String },
   },
   { timestamps: true }
 )

@@ -14,20 +14,17 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { format } from "date-fns"
 import { finishDataLoad, startDataLoad } from "@/lib/silent-load"
 import { TableSkeleton } from "@/components/admin/ui/page-states"
+import {
+    calculatePayroll,
+    DEFAULT_DEDUCTION_RULES,
+    roundCurrency,
+    type DeductionItem,
+    type DeductionRule,
+    type DeductionType,
+} from "@/lib/payroll-calculator"
+import { FinanceDocumentShell } from "@/components/accounts/finance-document-shell"
 
 type SalaryMode = "gross" | "net"
-type DeductionType = "percentage" | "fixed"
-
-type DeductionRule = {
-    id: string
-    name: string
-    type: DeductionType | "progressive"
-    value: number
-    enabled: boolean
-    note?: string
-}
-
-type DeductionItem = { name: string; amount: number }
 type PayrollEmployeeDetails = {
     shaId: string
     kraPin: string
@@ -38,23 +35,8 @@ type PayrollEmployeeDetails = {
     nssf: string
 }
 
-const PAYE_BANDS = [
-    { upTo: 24000, rate: 10 },
-    { upTo: 32333, rate: 25 },
-    { upTo: Number.POSITIVE_INFINITY, rate: 30 },
-]
-
-const DEFAULT_DEDUCTION_RULES: DeductionRule[] = [
-    { id: "paye", name: "PAYE", type: "progressive", value: 0, enabled: true, note: "10% – 30% progressive" },
-    { id: "sha", name: "SHA", type: "percentage", value: 2.75, enabled: true, note: "~2.75%" },
-    { id: "nssf", name: "NSSF", type: "percentage", value: 3, enabled: true, note: "~3% employee (6% total)" },
-    { id: "housing", name: "Housing Levy", type: "percentage", value: 1.5, enabled: true, note: "1.5% employee" },
-]
-
 const SAVED_DEDUCTIONS_KEY = "elevate_payroll_saved_deductions"
 const HELB_DEDUCTION_KEY = "elevate_payroll_helb_enabled"
-
-const roundCurrency = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100
 
 const loadSavedDeductions = (): DeductionRule[] => {
     if (typeof window === "undefined") return []
@@ -66,29 +48,6 @@ const loadSavedDeductions = (): DeductionRule[] => {
     } catch {
         return []
     }
-}
-
-const computePaye = (gross: number) => {
-    let remaining = gross
-    let previousLimit = 0
-    let total = 0
-
-    for (const band of PAYE_BANDS) {
-        const taxable = Math.min(remaining, band.upTo - previousLimit)
-        if (taxable <= 0) break
-        total += taxable * (band.rate / 100)
-        remaining -= taxable
-        previousLimit = band.upTo
-    }
-
-    return total
-}
-
-const getRuleAmount = (rule: DeductionRule, gross: number) => {
-    if (!rule.enabled) return 0
-    if (rule.type === "progressive") return computePaye(gross)
-    if (rule.type === "percentage") return gross * (rule.value / 100)
-    return rule.value
 }
 
 const getPreviousMonthKey = (month: string) => {
@@ -153,6 +112,7 @@ export default function AdminPayrollPage() {
     const [customRuleType, setCustomRuleType] = useState<DeductionType>("percentage")
     const [customRuleValue, setCustomRuleValue] = useState("")
 
+    const [deductionsDisabled, setDeductionsDisabled] = useState(false)
     const [generating, setGenerating] = useState(false)
     const [editId, setEditId] = useState<string | null>(null)
 
@@ -273,69 +233,19 @@ export default function AdminPayrollPage() {
     }, [calculatorRules])
 
     const calculatorResult = useMemo(() => {
-        const inputAmount = Number(salaryInput || 0)
-        const bonusAmount = Number(genBonus || 0)
-        const otherBonusTotal = roundCurrency(otherBonusItems.reduce((sum, item) => sum + Number(item.amount || 0), 0))
-
-        const buildItems = (gross: number) => {
-            const standardItems = calculatorRules
-                .filter((rule) => rule.enabled)
-                .map((rule) => ({
-                    name: rule.name,
-                    amount: roundCurrency(
-                        standardDeductionOverrides[rule.id] !== undefined && standardDeductionOverrides[rule.id] !== ""
-                            ? Number(standardDeductionOverrides[rule.id])
-                            : getRuleAmount(rule, gross)
-                    ),
-                }))
-
-            const helbItems = deductHelb && helbAmount
-                ? [{ name: "HELB", amount: roundCurrency(Number(helbAmount)) }]
-                : []
-
-            const customOtherItems = otherDeductionItems.map((item) => ({
-                name: item.name,
-                amount: roundCurrency(Number(item.amount || 0)),
-            }))
-
-            return [...standardItems, ...helbItems, ...customOtherItems]
-        }
-
-        const computeFromGross = (gross: number) => {
-            const items = buildItems(gross)
-            const totalDeductions = roundCurrency(items.reduce((sum, item) => sum + item.amount, 0))
-            const net = roundCurrency(gross + bonusAmount + otherBonusTotal - totalDeductions)
-            return { gross: roundCurrency(gross), net, totalDeductions, items }
-        }
-
-        if (!inputAmount) {
-            return { gross: 0, net: 0, totalDeductions: 0, items: [] as DeductionItem[] }
-        }
-
-        if (salaryMode === "gross") {
-            return computeFromGross(inputAmount)
-        }
-
-        const targetNet = inputAmount
-        let low = 0
-        let high = Math.max(targetNet * 2, 50000)
-
-        while (computeFromGross(high).net < targetNet && high < targetNet * 20 + 100000) {
-            high *= 2
-        }
-
-        for (let i = 0; i < 50; i++) {
-            const mid = (low + high) / 2
-            const midNet = computeFromGross(mid).net
-            if (midNet > targetNet) {
-                high = mid
-            } else {
-                low = mid
-            }
-        }
-
-        return computeFromGross(high)
-    }, [salaryInput, salaryMode, genBonus, calculatorRules, deductHelb, helbAmount, otherDeductionItems, otherBonusItems, standardDeductionOverrides])
+        return calculatePayroll({
+            salaryInput: Number(salaryInput || 0),
+            salaryMode,
+            bonusAmount: Number(genBonus || 0),
+            otherBonusItems,
+            otherDeductionItems,
+            calculatorRules: [...DEFAULT_DEDUCTION_RULES, ...customRules],
+            standardDeductionOverrides,
+            deductHelb,
+            helbAmount: Number(helbAmount || 0),
+            deductionsDisabled,
+        })
+    }, [salaryInput, salaryMode, genBonus, customRules, deductHelb, helbAmount, otherDeductionItems, otherBonusItems, standardDeductionOverrides, deductionsDisabled])
 
     const applyCalculatorToPayrollForm = () => {
         if (!salaryInput) return
@@ -415,6 +325,7 @@ export default function AdminPayrollPage() {
         setGenBonus(payroll.bonus.toString())
         setOtherDeductionItems(payroll.deduction_items || [])
         setOtherBonusItems(payroll.other_bonus_items || [])
+        setDeductionsDisabled(Boolean(payroll.deductions_disabled))
         setSidebarOpen(true)
     }
 
@@ -434,6 +345,7 @@ export default function AdminPayrollPage() {
             setNewOtherBonusName("")
             setNewOtherBonusAmount("")
             setStandardDeductionOverrides({})
+            setDeductionsDisabled(false)
             setEmployeeDetails({
                 shaId: "",
                 kraPin: "",
@@ -494,6 +406,7 @@ export default function AdminPayrollPage() {
                 other_bonus_items: otherBonusItems,
                 deduction_items: calculatorResult.items,
                 standard_deduction_overrides: standardDeductionOverrides,
+                deductions_disabled: deductionsDisabled,
             }
 
             if (editId) {
@@ -667,27 +580,46 @@ export default function AdminPayrollPage() {
     }
 
     return (
-        <div className="p-6 space-y-6">
-            <div className="flex justify-between items-center">
-                <div>
-                    <h1 className="text-3xl font-bold">Payroll Management</h1>
-                    <p className="text-muted-foreground">Generate and view monthly payrolls.</p>
-                </div>
-                <div className="flex gap-4">
+        <FinanceDocumentShell
+            eyebrow="Accounts · Payroll"
+            title="Payroll Management"
+            description="Generate monthly payroll, manage statutory deductions, or create entries without tax deductions."
+            backHref="/admin/accounts"
+            kpis={[
+                {
+                    label: "Employees",
+                    value: employees.length,
+                },
+                {
+                    label: "This Month Entries",
+                    value: payrolls.length,
+                },
+                {
+                    label: "Net Pay Total",
+                    value: payrolls.reduce((sum, p) => sum + Number(p.net_pay || 0), 0),
+                    prefix: "KES",
+                },
+                {
+                    label: "Deductions Total",
+                    value: payrolls.reduce((sum, p) => sum + Number(p.total_deductions || 0), 0),
+                    prefix: "KES",
+                    accent: "danger",
+                },
+            ]}
+            toolbar={
+                <div className="flex flex-wrap items-center gap-3">
                     <Input
                         type="month"
                         value={selectedMonth}
                         onChange={(e) => setSelectedMonth(e.target.value)}
-                        className="w-40"
+                        className="w-40 h-9"
                     />
-
-                    <Button variant="outline" className="gap-2" onClick={launchEmployeeDetails}>
+                    <Button variant="outline" className="gap-2 h-9" onClick={launchEmployeeDetails}>
                         <Calculator className="w-4 h-4" /> Employee Details
                     </Button>
-
                     <Dialog open={batchPayrollOpen} onOpenChange={setBatchPayrollOpen}>
                         <DialogTrigger asChild>
-                            <Button variant="outline" className="gap-2">
+                            <Button variant="outline" className="gap-2 h-9">
                                 <Plus className="w-4 h-4" /> Next Month Salaries
                             </Button>
                         </DialogTrigger>
@@ -917,6 +849,13 @@ export default function AdminPayrollPage() {
 
                                     {/* Deductions */}
                                     <div className="space-y-4">
+                                        <div className="rounded-lg border bg-amber-50/80 p-3 flex items-start justify-between gap-3">
+                                            <div>
+                                                <p className="text-sm font-semibold">Disable tax & statutory deductions</p>
+                                                <p className="text-xs text-muted-foreground">Create payroll without PAYE, SHA, NSSF, Housing Levy or HELB.</p>
+                                            </div>
+                                            <Checkbox checked={deductionsDisabled} onCheckedChange={(v) => setDeductionsDisabled(Boolean(v))} />
+                                        </div>
                                         <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Other Deductions</h3>
                                         <div className="space-y-2">
                                             <div className="flex items-center justify-between text-sm py-2 border-b">
@@ -978,7 +917,8 @@ export default function AdminPayrollPage() {
                         </DialogContent>
                     </Dialog>
                 </div>
-            </div>
+            }
+        >
 
             <Dialog open={Boolean(editingEmployeeId)} onOpenChange={(open) => {
                     if (!open) {
@@ -1114,11 +1054,28 @@ export default function AdminPayrollPage() {
                                     </div>
                                 </div>
 
+                                <div className="rounded-lg border bg-amber-50/80 p-4 flex items-start justify-between gap-4">
+                                    <div className="space-y-1">
+                                        <p className="text-sm font-semibold">Disable tax & statutory deductions</p>
+                                        <p className="text-xs text-muted-foreground">
+                                            Skip PAYE, SHA, NSSF, Housing Levy and HELB when calculating net pay. Manual other deductions can still apply.
+                                        </p>
+                                    </div>
+                                    <Checkbox
+                                        checked={deductionsDisabled}
+                                        onCheckedChange={(value) => setDeductionsDisabled(Boolean(value))}
+                                    />
+                                </div>
+
                                 <div className="rounded-lg border bg-white p-5 space-y-4">
                                     <div className="flex flex-wrap items-center justify-between gap-3">
                                         <div>
                                             <p className="text-sm font-semibold">Standard deductions</p>
-                                            <p className="text-xs text-muted-foreground">PAYE, SHA, NSSF and Housing Levy are applied automatically.</p>
+                                            <p className="text-xs text-muted-foreground">
+                                                {deductionsDisabled
+                                                    ? "Statutory deductions are disabled for this entry."
+                                                    : "PAYE, SHA, NSSF and Housing Levy are applied automatically."}
+                                            </p>
                                         </div>
                                         <Button type="button" variant="outline" onClick={saveCurrentRuleSet}>Save deduction set</Button>
                                     </div>
@@ -1384,6 +1341,11 @@ export default function AdminPayrollPage() {
                                                     <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-semibold">
                                                         {p.status.toUpperCase()}
                                                     </span>
+                                                    {p.deductions_disabled ? (
+                                                        <span className="ml-2 px-2 py-1 bg-amber-100 text-amber-800 rounded text-xs font-semibold">
+                                                            NO TAX
+                                                        </span>
+                                                    ) : null}
                                                 </td>
                                             </tr>
                                         )
@@ -1394,6 +1356,6 @@ export default function AdminPayrollPage() {
                     )}
                 </CardContent>
             </Card>
-        </div >
+        </FinanceDocumentShell>
     )
 }

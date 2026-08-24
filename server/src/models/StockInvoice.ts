@@ -36,6 +36,8 @@ export interface IStockInvoice {
   subTotal: number
   taxTotal?: number
   grandTotal?: number
+  transportCost?: number
+  transportNote?: string
   etims?: {
     status: "not_posted" | "posted" | "failed"
     kraInvoiceId?: string
@@ -126,6 +128,8 @@ const stockInvoiceSchema = new Schema<IStockInvoice>(
     subTotal: { type: Number, required: true, min: 0 },
     taxTotal: { type: Number, min: 0, default: 0 },
     grandTotal: { type: Number, min: 0 },
+    transportCost: { type: Number, min: 0 },
+    transportNote: { type: String },
     etims: {
       status: {
         type: String,

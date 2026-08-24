@@ -689,8 +689,11 @@ export const payrollApi = {
     user_id: string;
     month: string;
     bonus?: number;
+    other_bonus_items?: { name: string; amount: number }[];
     deduction_items?: { name: string; amount: number }[];
     base_salary?: number;
+    standard_deduction_overrides?: Record<string, string | number>;
+    deductions_disabled?: boolean;
   }) => client.post<any>("/api/payroll/generate", data),
 
   update: (id: string, data: any) =>
@@ -965,8 +968,11 @@ export const stockApi = {
   getProductLocationsByProduct: (productId: string) =>
     client.get<any[]>(`/api/stock/products/${productId}/locations`),
 
-  convertQuotation: (quotationId: string) =>
-    client.post<any>(`/api/stock/quotations/${quotationId}/convert`, {}),
+  convertQuotation: (
+    quotationId: string,
+    data?: { transportCost?: number; transportNote?: string },
+  ) =>
+    client.post<any>(`/api/stock/quotations/${quotationId}/convert`, data || {}),
   approveInvoice: (invoiceId: string) =>
     client.post<any>(`/api/stock/invoices/${invoiceId}/approve`, {}),
   rejectInvoice: (invoiceId: string) =>
@@ -1065,6 +1071,17 @@ export const stockApi = {
   },
 
   getExpenses: () => client.get<any[]>("/api/stock/accounts/expenses"),
+  getExpensesSummary: () =>
+    client.get<{
+      totalSpend: number
+      transportTotal: number
+      expenseCount: number
+      completedCount: number
+      pendingApproval: number
+      byCategory: Array<{ category: string; amount: number; count: number }>
+      transportExpenses: any[]
+      recentExpenses: any[]
+    }>("/api/stock/accounts/expenses/summary"),
 
   initiateExpense: (data: {
     payerPhone: string;
@@ -1072,6 +1089,122 @@ export const stockApi = {
     amount: number;
     purpose: string;
   }) => client.post<any>("/api/stock/accounts/expenses/initiate", data),
+
+  createManualExpense: (data: {
+    payerPhone?: string;
+    payeePhone: string;
+    amount: number;
+    purpose: string;
+    description?: string;
+    category?: string;
+    categoryId?: string;
+    branch?: string;
+    department?: string;
+    vat?: number;
+    paymentMethod?: string;
+    workflowStatus?: string;
+    expenseDate?: string;
+    receiptNote?: string;
+    isRecurring?: boolean;
+    recurDate?: string;
+    proofUrl?: string;
+    proofFileName?: string;
+    proofOriginalName?: string;
+  }) => client.post<any>("/api/stock/accounts/expenses/manual", data),
+
+  uploadExpenseProof: (file: File) => {
+    const token = getToken();
+    const headers: Record<string, string> = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const form = new FormData();
+    form.append("file", file);
+    return fetch(`${API_URL}/api/stock/accounts/expenses/proof`, {
+      method: "POST",
+      headers,
+      body: form,
+    }).then(async (res) => {
+      const text = await res.text();
+      let parsed: any = null;
+      try {
+        parsed = text ? JSON.parse(text) : null;
+      } catch {
+        parsed = null;
+      }
+      if (!res.ok) {
+        throw new Error(parsed?.message || `Upload failed (${res.status})`);
+      }
+      return parsed;
+    });
+  },
+
+  updateExpenseWorkflow: (expenseId: string, workflowStatus: string) =>
+    client.patch<any>(`/api/stock/accounts/expenses/${expenseId}/workflow`, {
+      workflowStatus,
+    }),
+
+  getExpenseCategories: () =>
+    client.get<
+      Array<{
+        _id: string
+        name: string
+        description?: string
+        expenseCount?: number
+        totalAmount?: number
+      }>
+    >("/api/stock/accounts/expenses/categories"),
+
+  getExpenseCategoryDetail: (categoryId: string) =>
+    client.get<{
+      category: any
+      expenses: any[]
+      summary: {
+        expenseCount: number
+        completedCount: number
+        totalAmount: number
+        totalVat: number
+      }
+    }>(`/api/stock/accounts/expenses/categories/${categoryId}`),
+
+  createExpenseCategory: (data: { name: string; code?: string; description?: string }) =>
+    client.post<any>("/api/stock/accounts/expenses/categories", data),
+
+  deleteExpenseCategory: (categoryId: string) =>
+    client.delete<any>(`/api/stock/accounts/expenses/categories/${categoryId}`),
+
+  getExpenseClaims: () =>
+    client.get<any[]>("/api/stock/accounts/expenses/claims"),
+
+  createExpenseClaim: (data: {
+    employeeId: string;
+    employeeName: string;
+    items: { description: string; amount: number; category?: string }[];
+    purpose: string;
+    receiptNote?: string;
+    status?: string;
+  }) => client.post<any>("/api/stock/accounts/expenses/claims", data),
+
+  updateExpenseClaimStatus: (
+    claimId: string,
+    data: { status: string; rejectionReason?: string },
+  ) =>
+    client.patch<any>(`/api/stock/accounts/expenses/claims/${claimId}/status`, data),
+
+  getReceivablesSummary: () =>
+    client.get<any>("/api/stock/accounts/receivables/summary"),
+
+  getReceivablesClients: () =>
+    client.get<any[]>("/api/stock/accounts/receivables/clients"),
+
+  getCustomerStatement: (params: {
+    clientName: string;
+    clientNumber: string;
+    clientLocation?: string;
+    from?: string;
+    to?: string;
+  }) => {
+    const query = new URLSearchParams(params as Record<string, string>).toString();
+    return client.get<any>(`/api/stock/accounts/receivables/statement?${query}`);
+  },
 
   getRepeatBills: () => client.get<any[]>("/api/stock/accounts/repeat-bills"),
 

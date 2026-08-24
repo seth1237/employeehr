@@ -57,6 +57,10 @@ import {
   type InvoiceDocumentSettings,
   type TenantBranding,
 } from "@/lib/stock-document-pdf";
+import {
+  QuotationTransportDialog,
+  type QuotationTransportInput,
+} from "@/components/admin/stock/quotation-transport-dialog";
 
 interface Product {
   _id: string;
@@ -277,6 +281,11 @@ export default function QuotationsPage() {
   const [exportType, setExportType] = useState<"pdf" | "excel" | null>(null);
   const [exportStartDate, setExportStartDate] = useState("");
   const [exportEndDate, setExportEndDate] = useState("");
+  const [transportTarget, setTransportTarget] = useState<{
+    id: string;
+    clientName: string;
+  } | null>(null);
+  const [convertingQuotation, setConvertingQuotation] = useState(false);
   const [editingQuotationId, setEditingQuotationId] = useState<string | null>(
     null,
   );
@@ -1297,15 +1306,21 @@ export default function QuotationsPage() {
     loadData({ silent: true });
   };
 
-  const convertToInvoice = async (quotationId: string) => {
+  const convertToInvoice = async (
+    quotationId: string,
+    transport?: QuotationTransportInput,
+  ) => {
+    setConvertingQuotation(true);
     const response = await fetch(
       `${API_URL}/api/stock/quotations/${quotationId}/convert`,
       {
         method: "POST",
         headers: getAuthHeaders(),
+        body: JSON.stringify(transport || {}),
       },
     );
     const result = await response.json();
+    setConvertingQuotation(false);
     if (!response.ok) {
       toast({
         title: "Error",
@@ -1323,6 +1338,7 @@ export default function QuotationsPage() {
         ? `Invoice ${invoice.invoiceNumber} is now issued.`
         : `Invoice ${invoice?.invoiceNumber} created with delivery note ${invoice?.deliveryNoteNumber}. Open it to preview, print, or email.`,
     });
+    setTransportTarget(null);
     if (result.data?._id) {
       window.location.href = `/admin/stock/invoices/${result.data._id}`;
       return;
@@ -2869,7 +2885,12 @@ export default function QuotationsPage() {
                         ) : quotation.status === "draft" ? (
                           <Button
                             size="sm"
-                            onClick={() => convertToInvoice(quotation._id)}
+                            onClick={() =>
+                              setTransportTarget({
+                                id: quotation._id,
+                                clientName: quotation.client?.name || "",
+                              })
+                            }
                             aria-label={`Convert ${quotation.quotationNumber} to invoice`}
                           >
                             Convert
@@ -2946,7 +2967,12 @@ export default function QuotationsPage() {
                       size="sm"
                       variant="outline"
                       className="flex-1"
-                      onClick={() => convertToInvoice(quotation._id)}
+                      onClick={() =>
+                        setTransportTarget({
+                          id: quotation._id,
+                          clientName: quotation.client?.name || "",
+                        })
+                      }
                       aria-label={`Convert ${quotation.quotationNumber} to invoice`}
                     >
                       Convert
@@ -3085,6 +3111,19 @@ export default function QuotationsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <QuotationTransportDialog
+        open={!!transportTarget}
+        onOpenChange={(open) => {
+          if (!open) setTransportTarget(null);
+        }}
+        clientName={transportTarget?.clientName}
+        loading={convertingQuotation}
+        onConfirm={async (transport) => {
+          if (!transportTarget) return;
+          await convertToInvoice(transportTarget.id, transport);
+        }}
+      />
     </div>
   );
 }

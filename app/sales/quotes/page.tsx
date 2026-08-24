@@ -14,6 +14,10 @@ import {
 } from "@/lib/sales-quote-pdf"
 import { SalesClientPicker } from "@/components/sales/client-picker"
 import { SalesEmpty, SalesHeader, SalesPage, SalesStatusBadge } from "@/components/sales/sales-ui"
+import {
+  QuotationTransportDialog,
+  type QuotationTransportInput,
+} from "@/components/admin/stock/quotation-transport-dialog"
 import { useSalesBranding } from "@/hooks/use-sales-branding"
 import {
   Sheet,
@@ -118,6 +122,7 @@ export default function SalesQuotesPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [convertingId, setConvertingId] = useState<string | null>(null)
+  const [transportTarget, setTransportTarget] = useState<StockQuote | null>(null)
   const [statusFilter, setStatusFilter] = useState("all")
   const [filtersOpen, setFiltersOpen] = useState(false)
 
@@ -268,11 +273,15 @@ export default function SalesQuotesPage() {
     }
   }
 
-  const convertToInvoice = async (quote: StockQuote) => {
+  const convertToInvoice = async (
+    quote: StockQuote,
+    transport?: QuotationTransportInput,
+  ) => {
     setConvertingId(quote._id)
     try {
-      await stockApi.convertQuotation(quote._id)
+      await stockApi.convertQuotation(quote._id, transport)
       toast({ title: "Invoice sent for admin approval" })
+      setTransportTarget(null)
       void load()
     } catch (error: any) {
       toast({ title: "Convert failed", description: error?.message, variant: "destructive" })
@@ -618,7 +627,7 @@ export default function SalesQuotesPage() {
                           size="sm"
                           className="min-h-10 text-white hover:opacity-90"
                           style={{ backgroundColor: primaryColor }}
-                          onClick={() => void convertToInvoice(quote)}
+                          onClick={() => setTransportTarget(quote)}
                           disabled={convertingId === quote._id}
                         >
                           {convertingId === quote._id ? (
@@ -674,6 +683,19 @@ export default function SalesQuotesPage() {
           <div className="px-4 pb-4">{statusButtons}</div>
         </SheetContent>
       </Sheet>
+
+      <QuotationTransportDialog
+        open={!!transportTarget}
+        onOpenChange={(open) => {
+          if (!open) setTransportTarget(null)
+        }}
+        clientName={transportTarget?.client?.name}
+        loading={!!transportTarget && convertingId === transportTarget._id}
+        onConfirm={async (transport) => {
+          if (!transportTarget) return
+          await convertToInvoice(transportTarget, transport)
+        }}
+      />
     </SalesPage>
   )
 }

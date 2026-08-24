@@ -1456,6 +1456,117 @@ const creditNoteApi = {
   delete: (id: string) => client.delete<any>(`/api/stock/credit-notes/${id}`),
 };
 
+const debitNoteApi = {
+  getInvoicesForDebitNote: () =>
+    client.get<any[]>("/api/stock/debit-notes/invoices-for-debit-note"),
+
+  getReasons: () =>
+    client.get<Record<string, string>>("/api/stock/debit-notes/reasons"),
+
+  create: (data: {
+    invoiceId: string;
+    items: Array<{
+      productId?: string;
+      productName: string;
+      quantity: number;
+      unitPrice: number;
+      description?: string;
+    }>;
+    reason: string;
+    reasonDetails?: string;
+  }) => client.post<any>("/api/stock/debit-notes", data),
+
+  getAll: (filters?: { status?: string }) => {
+    const query = new URLSearchParams();
+    if (filters?.status) query.append("status", filters.status);
+    const queryStr = query.toString();
+    return client.get<any[]>(
+      `/api/stock/debit-notes${queryStr ? "?" + queryStr : ""}`,
+    );
+  },
+
+  issue: (id: string) =>
+    client.post<any>(`/api/stock/debit-notes/${id}/issue`, {}),
+
+  downloadPdf: async (id: string, numberHint?: string) => {
+    const token = getToken();
+    const response = await fetch(`${API_URL}/api/stock/debit-notes/${id}/pdf`, {
+      method: "GET",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!response.ok) throw new Error("Failed to download debit note PDF");
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `debit-note-${numberHint || id}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+    return { success: true };
+  },
+
+  delete: (id: string) => client.delete<any>(`/api/stock/debit-notes/${id}`),
+};
+
+const cashBankingApi = {
+  getOverview: (params?: { from?: string; to?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.from) q.set("from", params.from);
+    if (params?.to) q.set("to", params.to);
+    const qs = q.toString();
+    return client.get<any>(`/api/accounts/cash-banking/overview${qs ? `?${qs}` : ""}`);
+  },
+
+  listAccounts: (params?: { type?: string; status?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.type) q.set("type", params.type);
+    if (params?.status) q.set("status", params.status);
+    const qs = q.toString();
+    return client.get<any[]>(
+      `/api/accounts/cash-banking/accounts${qs ? `?${qs}` : ""}`,
+    );
+  },
+
+  createAccount: (data: Record<string, unknown>) =>
+    client.post<any>("/api/accounts/cash-banking/accounts", data),
+
+  updateAccount: (id: string, data: Record<string, unknown>) =>
+    client.patch<any>(`/api/accounts/cash-banking/accounts/${id}`, data),
+
+  listTransactions: (params?: Record<string, string | undefined>) => {
+    const q = new URLSearchParams();
+    Object.entries(params || {}).forEach(([key, value]) => {
+      if (value) q.set(key, value);
+    });
+    const qs = q.toString();
+    return client.get<any>(
+      `/api/accounts/cash-banking/transactions${qs ? `?${qs}` : ""}`,
+    );
+  },
+
+  createTransaction: (data: Record<string, unknown>) =>
+    client.post<any>("/api/accounts/cash-banking/transactions", data),
+
+  listTransfers: () => client.get<any[]>("/api/accounts/cash-banking/transfers"),
+
+  createTransfer: (data: {
+    fromAccountId: string;
+    toAccountId: string;
+    amount: number;
+    occurredAt?: string;
+    note?: string;
+    reference?: string;
+  }) => client.post<any>("/api/accounts/cash-banking/transfers", data),
+
+  reconcile: (data: { transactionIds: string[]; reconciled?: boolean }) =>
+    client.post<any>("/api/accounts/cash-banking/reconcile", data),
+
+  syncFromOperations: () =>
+    client.post<any>("/api/accounts/cash-banking/sync", {}),
+};
+
 export type AiChatTurn = {
   role: "user" | "assistant";
   content: string;
@@ -1663,6 +1774,8 @@ export const api = {
   meetings: meetingsApi,
   stock: stockApi,
   creditNotes: creditNoteApi,
+  debitNotes: debitNoteApi,
+  cashBanking: cashBankingApi,
   setup: setupApi,
   stamps: stampsApi,
   complaints: complaintsApi,

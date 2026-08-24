@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react"
 import { api, companyApi } from "@/lib/api"
+import { AccountsModuleNav } from "@/components/accounts/accounts-module-nav"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -219,6 +220,7 @@ export default function FinancialBreakdownPage() {
 
   return (
     <div className="space-y-4">
+      <AccountsModuleNav groupId="reports" />
       {/* Header & Advanced Filters */}
       <div className="rounded-2xl border px-4 py-3 shadow-sm" style={{ borderColor: primaryBorderColor, background: `linear-gradient(to right, ${primarySoftColor}, ${secondarySoftColor})` }}>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">

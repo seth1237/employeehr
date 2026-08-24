@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast"
 import { Loader2, Download } from "lucide-react"
 import { generateRemunerationReport, exportToExcel, calculateReportSummaries, getReportColumns } from "@/lib/remuneration-reports"
 import { TableSkeleton } from "@/components/admin/ui/page-states"
+import { AccountsModuleNav } from "@/components/accounts/accounts-module-nav"
 
 export default function RemunerationReportsPage() {
     const { toast } = useToast()
@@ -120,6 +121,7 @@ export default function RemunerationReportsPage() {
 
     return (
         <div className="space-y-8 p-6">
+            <AccountsModuleNav groupId="payroll" />
             <div>
                 <h1 className="text-3xl font-bold tracking-tight">Remuneration Reports</h1>
                 <p className="text-muted-foreground mt-2">View and export detailed payroll breakdowns by deduction type</p>

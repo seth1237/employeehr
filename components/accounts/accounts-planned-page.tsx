@@ -38,6 +38,7 @@ export function AccountsPlannedPage({ page }: AccountsPlannedPageProps) {
         eyebrow={group?.label || "Accounts"}
         title={page.label}
         description={page.description}
+        moduleNavGroupId={page.groupId}
       />
 
       <div className="grid gap-4 lg:grid-cols-3">

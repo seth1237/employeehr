@@ -2166,6 +2166,129 @@ export function generateExpenseStyleSummaryPdf(params: {
   return doc;
 }
 
+export function generateAgingReceivablesPdf(params: {
+  rows: Array<{
+    invoiceNumber: string;
+    invoiceDate: string;
+    clientName: string;
+    ageDays: number;
+    bucket: string;
+    subTotal: number;
+    paidAmount: number;
+    balanceRemaining: number;
+  }>;
+  branding?: TenantBranding;
+  periodStr?: string;
+  autoSave?: boolean;
+}) {
+  const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "landscape" });
+  const primary = params.branding?.primaryColor || DEFAULT_PRIMARY;
+  const columns = [
+    { header: "Date", width: 26 },
+    { header: "Invoice #", width: 34 },
+    { header: "Customer", width: 48 },
+    { header: "Age", width: 18 },
+    { header: "Bucket", width: 28 },
+    { header: "Total", width: 32 },
+    { header: "Paid", width: 32 },
+    { header: "Balance", width: 55 },
+  ];
+  const startX = 12;
+  const pageBottomLimit = 195;
+  let y = drawLandscapeSummaryHeader(
+    doc,
+    "Receivables Aging",
+    params.branding,
+    params.periodStr,
+  );
+
+  const drawHeaderRow = (currentY: number) => {
+    setColorFromHex(doc, primary, "fill");
+    doc.rect(startX, currentY, 273, 9, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(255, 255, 255);
+    let currentX = startX;
+    columns.forEach((col, i) => {
+      const align = i >= 5 ? "right" : "left";
+      const xOffset = i >= 5 ? col.width - 3 : 3;
+      doc.text(col.header, currentX + xOffset, currentY + 6, { align });
+      currentX += col.width;
+    });
+    return currentY + 9;
+  };
+
+  y = drawHeaderRow(y);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.5);
+
+  let totalBalance = 0;
+  params.rows.forEach((row, rowIndex) => {
+    const rowHeight = 8;
+    totalBalance += Number(row.balanceRemaining || 0);
+    if (y + rowHeight > pageBottomLimit) {
+      doc.addPage();
+      y = drawLandscapeSummaryHeader(
+        doc,
+        "Receivables Aging",
+        params.branding,
+        params.periodStr,
+      );
+      y = drawHeaderRow(y);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.5);
+    }
+    if (rowIndex % 2 === 0) {
+      doc.setFillColor(248, 250, 252);
+      doc.rect(startX, y, 273, rowHeight, "F");
+    }
+    setColorFromHex(doc, DEFAULT_TEXT, "text");
+    const cells = [
+      new Date(row.invoiceDate).toLocaleDateString("en-GB"),
+      row.invoiceNumber,
+      row.clientName,
+      `${row.ageDays}d`,
+      row.bucket,
+      Number(row.subTotal || 0).toFixed(2),
+      Number(row.paidAmount || 0).toFixed(2),
+      Number(row.balanceRemaining || 0).toFixed(2),
+    ];
+    let currentX = startX;
+    cells.forEach((cell, i) => {
+      const col = columns[i];
+      if (i >= 5) {
+        doc.text(cell, currentX + col.width - 3, y + 5, { align: "right" });
+      } else {
+        const lines = doc.splitTextToSize(String(cell), col.width - 4);
+        doc.text(lines, currentX + 3, y + 5);
+      }
+      currentX += col.width;
+    });
+    y += rowHeight;
+  });
+
+  setColorFromHex(doc, primary, "fill");
+  doc.rect(startX, y + 2, 273, 10, "F");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.setTextColor(255, 255, 255);
+  doc.text(`TOTAL OUTSTANDING (${params.rows.length})`, startX + 3, y + 9);
+  doc.text(
+    `KES ${totalBalance.toLocaleString("en-KE", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`,
+    startX + 270,
+    y + 9,
+    { align: "right" },
+  );
+
+  if (params.autoSave !== false) {
+    doc.save("receivables-aging.pdf");
+  }
+  return doc;
+}
+
 export function generateQuotationPdf(params: {
   quotationNumber: string;
   createdAt: string;
@@ -2559,6 +2682,109 @@ export function generateCreditNotePdf(params: {
 
   if (params.autoSave !== false) {
     doc.save(`credit-note-${params.creditNoteNumber}.pdf`);
+  }
+
+  return doc;
+}
+
+export function generateDebitNotePdf(params: {
+  debitNoteNumber: string;
+  invoiceNumber: string;
+  createdAt: string;
+  client: DocumentClient;
+  items: DocumentItem[];
+  subTotal: number;
+  reason: string;
+  reasonDetails?: string;
+  branding?: TenantBranding;
+  invoiceSettings?: InvoiceDocumentSettings;
+  preparedBy?: string;
+  watermarkText?: string;
+  autoSave?: boolean;
+}) {
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+
+  drawWatermark(doc, params.watermarkText || "DEBIT NOTE");
+
+  drawModernHeader(doc, {
+    title: "Debit Note",
+    numberLabel: "Debit Note No",
+    numberValue: params.debitNoteNumber,
+    createdAt: params.createdAt,
+    branding: {
+      ...params.branding,
+      invoiceEmail:
+        params.invoiceSettings?.invoiceEmail || params.branding?.invoiceEmail,
+    },
+  });
+
+  const contactBottom = drawContactSlotBelowLogo(
+    doc,
+    params.branding,
+    params.invoiceSettings,
+  );
+
+  let tableY = drawPartiesSection(
+    doc,
+    params.client,
+    params.preparedBy,
+    {
+      ...params.branding,
+      invoiceEmail:
+        params.invoiceSettings?.invoiceEmail || params.branding?.invoiceEmail,
+    },
+    "Debit Note Info",
+    contactBottom + 1,
+  );
+
+  // Same outline as invoice refs / credit note: reference line + reason block
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  setColorFromHex(doc, DEFAULT_GRAY, "text");
+  doc.text(`Reference Invoice: ${params.invoiceNumber}`, 12, tableY + 1);
+
+  const reasonY = tableY + 8;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  setColorFromHex(doc, DEFAULT_TEXT, "text");
+  doc.text("Reason for Debit:", 12, reasonY);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.5);
+  setColorFromHex(doc, DEFAULT_GRAY, "text");
+  doc.text(params.reason, 15, reasonY + 5);
+
+  if (params.reasonDetails) {
+    const detailsLines = doc.splitTextToSize(params.reasonDetails, 180);
+    doc.text("Details: " + detailsLines[0], 15, reasonY + 9);
+    if (detailsLines.length > 1) {
+      detailsLines.slice(1).forEach((line: string, idx: number) => {
+        doc.text(line, 15, reasonY + 13 + idx * 4);
+      });
+    }
+  }
+
+  tableY = reasonY + (params.reasonDetails ? 20 : 12);
+
+  const endY = drawItemsTable(doc, tableY, params.items, params.branding);
+
+  drawTotalsSection(
+    doc,
+    params.subTotal,
+    endY,
+    params.branding,
+    params.invoiceSettings,
+  );
+
+  drawBottomFooter(
+    doc,
+    params.branding,
+    params.invoiceSettings,
+    params.preparedBy,
+  );
+
+  if (params.autoSave !== false) {
+    doc.save(`debit-note-${params.debitNoteNumber}.pdf`);
   }
 
   return doc;

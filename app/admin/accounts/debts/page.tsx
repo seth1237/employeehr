@@ -6,7 +6,9 @@ import { FinanceDocumentShell, FinanceTableCard } from "@/components/accounts/fi
 import { PageLoadingSkeleton } from "@/components/admin/ui/page-states"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
 import { stockApi } from "@/lib/api"
+import { ExternalLink, FilePlus2, Wallet } from "lucide-react"
 
 interface DebtPayment {
   _id: string
@@ -22,7 +24,9 @@ interface DebtRow {
   invoiceNumber: string
   createdAt: string
   subTotal: number
-  status: "issued" | "paid" | "cancelled"
+  debitTotal?: number
+  creditTotal?: number
+  status: "issued" | "paid" | "cancelled" | "pending_approval"
   client: { name: string; number: string; location: string }
   paidAmount: number
   balanceRemaining: number
@@ -64,11 +68,15 @@ export default function AccountsDebtManagementPage() {
     )
   }, [rows, search])
 
-  const stats = useMemo(() => ({
-    count: rows.length,
-    outstanding: rows.reduce((s, r) => s + Number(r.balanceRemaining || 0), 0),
-    invoiced: rows.reduce((s, r) => s + Number(r.subTotal || 0), 0),
-  }), [rows])
+  const stats = useMemo(
+    () => ({
+      count: rows.length,
+      outstanding: rows.reduce((s, r) => s + Number(r.balanceRemaining || 0), 0),
+      invoiced: rows.reduce((s, r) => s + Number(r.subTotal || 0), 0),
+      debits: rows.reduce((s, r) => s + Number(r.debitTotal || 0), 0),
+    }),
+    [rows],
+  )
 
   if (loading) return <PageLoadingSkeleton title="Loading debt management" rows={8} />
 
@@ -76,20 +84,40 @@ export default function AccountsDebtManagementPage() {
     <FinanceDocumentShell
       eyebrow="Sales & Receivables"
       title="Debtors"
-      description="Unsettled sales invoices with paid amounts, balances, and latest payment details."
-      backHref="/admin/accounts/receivables"
+      description="Unsettled stock invoices including payments, credit notes, and issued debit notes. Linked to stock invoice and payment workflows."
+
       onRefresh={() => loadData(true)}
       refreshing={refreshing}
       kpis={[
         { label: "Debtor Invoices", value: stats.count },
         { label: "Total Outstanding", value: stats.outstanding, prefix: "KES", accent: "danger" },
         { label: "Invoice Value", value: stats.invoiced, prefix: "KES" },
-        { label: "Avg Balance", value: stats.count ? Math.round(stats.outstanding / stats.count) : 0, prefix: "KES" },
+        { label: "Debit Notes Added", value: stats.debits, prefix: "KES", accent: "secondary" },
       ]}
       actions={
-        <Button size="sm" asChild>
-          <Link href="/admin/accounts/payments">Record Payment</Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="outline" asChild>
+            <Link href="/admin/stock/invoices">
+              <ExternalLink className="h-4 w-4 mr-1" />
+              Stock invoices
+            </Link>
+          </Button>
+          <Button size="sm" variant="outline" asChild>
+            <Link href="/admin/accounts/receivables/aging">Aging</Link>
+          </Button>
+          <Button size="sm" variant="outline" asChild>
+            <Link href="/admin/accounts/receivables/debit-notes">
+              <FilePlus2 className="h-4 w-4 mr-1" />
+              Debit notes
+            </Link>
+          </Button>
+          <Button size="sm" asChild>
+            <Link href="/admin/accounts/payments">
+              <Wallet className="h-4 w-4 mr-1" />
+              Record payment
+            </Link>
+          </Button>
+        </div>
       }
       toolbar={
         <Input
@@ -100,24 +128,25 @@ export default function AccountsDebtManagementPage() {
         />
       }
     >
-      <FinanceTableCard title="Unsettled Payments">
+      <FinanceTableCard title="Unsettled receivables">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-muted/80 backdrop-blur sticky top-0">
               <tr className="text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                 <th className="py-2 px-3">Invoice</th>
                 <th className="py-2 px-3">Client</th>
-                <th className="py-2 px-3 text-right">Total</th>
+                <th className="py-2 px-3 text-right">Invoice</th>
+                <th className="py-2 px-3 text-right">Debits</th>
                 <th className="py-2 px-3 text-right">Paid</th>
                 <th className="py-2 px-3 text-right">Balance</th>
                 <th className="py-2 px-3">Latest Payment</th>
-                <th className="py-2 px-3">Status</th>
+                <th className="py-2 px-3">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredRows.length === 0 ? (
                 <tr>
-                  <td className="py-8 text-center text-muted-foreground" colSpan={7}>
+                  <td className="py-8 text-center text-muted-foreground" colSpan={8}>
                     No unsettled invoices.
                   </td>
                 </tr>
@@ -125,7 +154,12 @@ export default function AccountsDebtManagementPage() {
                 filteredRows.map((row, idx) => (
                   <tr key={row._id} className={`border-b ${idx % 2 ? "bg-muted/20" : "bg-white"}`}>
                     <td className="py-2 px-3">
-                      <div className="font-medium">{row.invoiceNumber}</div>
+                      <Link
+                        href={`/admin/stock/invoices/${row._id}`}
+                        className="font-medium text-primary hover:underline"
+                      >
+                        {row.invoiceNumber}
+                      </Link>
                       <div className="text-xs text-muted-foreground">
                         {new Date(row.createdAt).toLocaleDateString()}
                       </div>
@@ -134,17 +168,38 @@ export default function AccountsDebtManagementPage() {
                       <div>{row.client?.name}</div>
                       <div className="text-xs text-muted-foreground">{row.client?.number}</div>
                     </td>
-                    <td className="py-2 px-3 text-right tabular-nums">{row.subTotal.toFixed(2)}</td>
-                    <td className="py-2 px-3 text-right tabular-nums">{row.paidAmount.toFixed(2)}</td>
+                    <td className="py-2 px-3 text-right tabular-nums">{Number(row.subTotal).toFixed(2)}</td>
+                    <td className="py-2 px-3 text-right tabular-nums">
+                      {Number(row.debitTotal || 0) > 0 ? (
+                        <span className="text-amber-700">{Number(row.debitTotal || 0).toFixed(2)}</span>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td className="py-2 px-3 text-right tabular-nums">{Number(row.paidAmount).toFixed(2)}</td>
                     <td className="py-2 px-3 text-right tabular-nums font-medium text-primary">
-                      {row.balanceRemaining.toFixed(2)}
+                      {Number(row.balanceRemaining).toFixed(2)}
                     </td>
                     <td className="py-2 px-3 text-xs">
                       {row.lastPayment
                         ? `${new Date(row.lastPayment.paidAt || row.lastPayment.createdAt).toLocaleString()} · ${Number(row.lastPayment.amount || 0).toFixed(2)}`
                         : "No payments yet"}
                     </td>
-                    <td className="py-2 px-3 capitalize">{row.status}</td>
+                    <td className="py-2 px-3">
+                      <div className="flex flex-wrap gap-1">
+                        <Button size="sm" variant="outline" asChild>
+                          <Link href={`/admin/accounts/payments?invoiceId=${row._id}`}>Pay</Link>
+                        </Button>
+                        <Button size="sm" variant="ghost" asChild>
+                          <Link href={`/admin/accounts/receivables/debit-notes?invoiceId=${row._id}`}>
+                            Debit
+                          </Link>
+                        </Button>
+                        <Badge variant="outline" className="capitalize">
+                          {row.status}
+                        </Badge>
+                      </div>
+                    </td>
                   </tr>
                 ))
               )}

@@ -99,7 +99,6 @@ export default function ExpenseCategoriesPage() {
       eyebrow="Accounts · Expenses"
       title="Expense Categories"
       description="Create categories, review spend breakdown by category, and open a category for full expense detail."
-      backHref="/admin/accounts/expenses"
       onRefresh={() => loadAll({ silent: true })}
       refreshing={refreshing}
       kpis={[

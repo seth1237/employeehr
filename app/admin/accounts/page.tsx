@@ -1,5 +1,5 @@
-import { AccountsDashboard } from "@/components/accounts/accounts-dashboard"
+import { redirect } from "next/navigation"
 
 export default function AccountsIndexPage() {
-  return <AccountsDashboard />
+  redirect("/admin/accounts/expenses")
 }

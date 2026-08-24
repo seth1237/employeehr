@@ -17,6 +17,7 @@ import { TableSkeleton } from "@/components/admin/ui/page-states"
 import {
     calculatePayroll,
     DEFAULT_DEDUCTION_RULES,
+    getRuleAmount,
     roundCurrency,
     type DeductionItem,
     type DeductionRule,
@@ -431,6 +432,22 @@ export default function AdminPayrollPage() {
             }
         } finally {
             setGenerating(false)
+        }
+    }
+
+    const markPayrollPaid = async (payrollId: string, e: React.MouseEvent) => {
+        e.stopPropagation()
+        try {
+            await api.payroll.update(payrollId, { status: "paid" })
+            toast({
+                description: "Marked paid — net salary posted to Cashflow & Banking (bank account).",
+            })
+            fetchData(true)
+        } catch (error: any) {
+            toast({
+                variant: "destructive",
+                description: error.message || "Failed to mark payroll as paid",
+            })
         }
     }
 
@@ -1321,6 +1338,7 @@ export default function AdminPayrollPage() {
                                         <th className="px-4 py-3">Net Pay</th>
                                         <th className="px-4 py-3">Generated At</th>
                                         <th className="px-4 py-3">Status</th>
+                                        <th className="px-4 py-3">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100">
@@ -1338,7 +1356,11 @@ export default function AdminPayrollPage() {
                                                 <td className="px-4 py-3 font-bold">{p.net_pay.toLocaleString()}</td>
                                                 <td className="px-4 py-3 text-muted-foreground">{format(new Date(p.generated_at), 'MMM d, HH:mm')}</td>
                                                 <td className="px-4 py-3">
-                                                    <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-semibold">
+                                                    <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                                                        p.status === "paid"
+                                                            ? "bg-emerald-100 text-emerald-700"
+                                                            : "bg-green-100 text-green-700"
+                                                    }`}>
                                                         {p.status.toUpperCase()}
                                                     </span>
                                                     {p.deductions_disabled ? (
@@ -1346,6 +1368,20 @@ export default function AdminPayrollPage() {
                                                             NO TAX
                                                         </span>
                                                     ) : null}
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    {p.status !== "paid" ? (
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            className="h-7 text-xs"
+                                                            onClick={(e) => void markPayrollPaid(p._id, e)}
+                                                        >
+                                                            Mark paid
+                                                        </Button>
+                                                    ) : (
+                                                        <span className="text-xs text-muted-foreground">In cashbook</span>
+                                                    )}
                                                 </td>
                                             </tr>
                                         )

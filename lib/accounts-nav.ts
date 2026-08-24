@@ -48,9 +48,9 @@ export const ACCOUNTS_NAV_GROUPS: AccountsNavGroup[] = [
   },
   {
     id: "cash-banking",
-    label: "Cash & Banking",
+    label: "Cashflow & Banking",
     phase: 4,
-    description: "Cash accounts, bank accounts, M-Pesa, cashbook, reconciliation",
+    description: "Track cash, bank, and M-Pesa — linked to invoices, expenses, and salaries",
   },
   {
     id: "expenses",
@@ -66,7 +66,7 @@ export const ACCOUNTS_NAV_GROUPS: AccountsNavGroup[] = [
   },
   {
     id: "payroll",
-    label: "Payroll",
+    label: "Payroll & Statutory Deductions",
     phase: 7,
     description: "Payroll summary, statutory deductions, payroll journal",
   },
@@ -99,18 +99,6 @@ export const ACCOUNTS_NAV_GROUPS: AccountsNavGroup[] = [
 const ACCOUNTS_BASE = "/admin/accounts"
 
 export const ACCOUNTS_NAV_PAGES: AccountsNavPage[] = [
-  // Overview
-  {
-    id: "dashboard",
-    label: "Dashboard",
-    href: ACCOUNTS_BASE,
-    groupId: "overview",
-    status: "live",
-    phase: 0,
-    description: "Cash position, receivables, alerts, and module navigation",
-    keywords: ["home", "overview", "accounting"],
-  },
-
   // General Ledger — Phase 1 (planned)
   {
     id: "chart-of-accounts",
@@ -160,20 +148,20 @@ export const ACCOUNTS_NAV_PAGES: AccountsNavPage[] = [
     description: "Reconcile GL balances with subledgers",
   },
 
-  // Sales & Receivables
+  // Sales & Receivables (one hub + sibling pages via top module nav)
   {
     id: "receivables-hub",
-    label: "Receivables Hub",
+    label: "Overview",
     href: `${ACCOUNTS_BASE}/receivables`,
     groupId: "receivables",
     status: "live",
     phase: 2,
-    description: "Central hub for invoices, payments, debtors, aging, and statements",
-    keywords: ["receivables", "ar"],
+    description: "Sales & receivables hub — payments, debtors, aging, and notes",
+    keywords: ["receivables", "ar", "sales"],
   },
   {
     id: "customer-payments",
-    label: "Customer Payments",
+    label: "Payments",
     href: `${ACCOUNTS_BASE}/payments`,
     groupId: "receivables",
     status: "live",
@@ -197,13 +185,14 @@ export const ACCOUNTS_NAV_PAGES: AccountsNavPage[] = [
     label: "Debit Notes",
     href: `${ACCOUNTS_BASE}/receivables/debit-notes`,
     groupId: "receivables",
-    status: "planned",
+    status: "live",
     phase: 2,
-    description: "Additional charges and price corrections on customer accounts",
+    description: "Additional charges and price corrections on customer invoices",
+    keywords: ["debit", "additional charge"],
   },
   {
     id: "customer-statements",
-    label: "Customer Statements",
+    label: "Statements",
     href: `${ACCOUNTS_BASE}/receivables/statements`,
     groupId: "receivables",
     status: "live",
@@ -222,7 +211,7 @@ export const ACCOUNTS_NAV_PAGES: AccountsNavPage[] = [
   },
   {
     id: "aging-report",
-    label: "Aging Report",
+    label: "Aging",
     href: `${ACCOUNTS_BASE}/receivables/aging`,
     groupId: "receivables",
     status: "live",
@@ -298,66 +287,76 @@ export const ACCOUNTS_NAV_PAGES: AccountsNavPage[] = [
     keywords: ["vendor", "supplier"],
   },
 
-  // Cash & Banking — Phase 4
+  // Cash & Banking — Phase 4 (live)
+  {
+    id: "cash-banking-hub",
+    label: "Overview",
+    href: `${ACCOUNTS_BASE}/cash-banking`,
+    groupId: "cash-banking",
+    status: "live",
+    phase: 4,
+    description: "Cashflow hub — balances and movements from invoices, expenses, and salaries",
+    keywords: ["cash", "banking", "liquidity", "cashflow"],
+  },
   {
     id: "cash-accounts",
-    label: "Cash Accounts",
+    label: "Cash",
     href: `${ACCOUNTS_BASE}/cash-banking/cash`,
     groupId: "cash-banking",
-    status: "planned",
+    status: "live",
     phase: 4,
     description: "Petty cash and branch cash accounts",
   },
   {
     id: "bank-accounts",
-    label: "Bank Accounts",
+    label: "Banks",
     href: `${ACCOUNTS_BASE}/cash-banking/bank`,
     groupId: "cash-banking",
-    status: "planned",
+    status: "live",
     phase: 4,
-    description: "Bank account register with opening balances",
+    description: "Bank account register with live balances",
   },
   {
     id: "mpesa-accounts",
     label: "M-Pesa",
     href: `${ACCOUNTS_BASE}/cash-banking/mpesa`,
     groupId: "cash-banking",
-    status: "planned",
+    status: "live",
     phase: 4,
-    description: "Formal M-Pesa ledger accounts linked to prompts and payments",
+    description: "M-Pesa till, paybill, and phone accounts",
   },
   {
     id: "cashbook",
     label: "Cashbook",
     href: `${ACCOUNTS_BASE}/cash-banking/cashbook`,
     groupId: "cash-banking",
-    status: "planned",
+    status: "live",
     phase: 4,
-    description: "Daily cash in/out register across accounts",
-  },
-  {
-    id: "bank-reconciliation",
-    label: "Bank Reconciliation",
-    href: `${ACCOUNTS_BASE}/cash-banking/reconciliation`,
-    groupId: "cash-banking",
-    status: "planned",
-    phase: 4,
-    description: "Match bank statements to ERP transactions",
+    description: "Every cash in/out across all accounts",
   },
   {
     id: "transfers",
     label: "Transfers",
     href: `${ACCOUNTS_BASE}/cash-banking/transfers`,
     groupId: "cash-banking",
-    status: "planned",
+    status: "live",
     phase: 4,
-    description: "Inter-account transfers between cash, bank, and M-Pesa",
+    description: "Move money between cash, bank, and M-Pesa",
+  },
+  {
+    id: "bank-reconciliation",
+    label: "Reconcile",
+    href: `${ACCOUNTS_BASE}/cash-banking/reconciliation`,
+    groupId: "cash-banking",
+    status: "live",
+    phase: 4,
+    description: "Mark bank and M-Pesa lines as reconciled",
   },
 
   // Expenses
   {
     id: "expenses",
-    label: "Expenses",
+    label: "Summary",
     href: `${ACCOUNTS_BASE}/expenses`,
     groupId: "expenses",
     status: "live",
@@ -367,7 +366,7 @@ export const ACCOUNTS_NAV_PAGES: AccountsNavPage[] = [
   },
   {
     id: "expenses-export",
-    label: "Export Expenses",
+    label: "Export",
     href: `${ACCOUNTS_BASE}/expenses/export`,
     groupId: "expenses",
     status: "live",
@@ -385,7 +384,7 @@ export const ACCOUNTS_NAV_PAGES: AccountsNavPage[] = [
   },
   {
     id: "expense-categories",
-    label: "Expense Categories",
+    label: "Categories",
     href: `${ACCOUNTS_BASE}/expenses/categories`,
     groupId: "expenses",
     status: "live",
@@ -394,7 +393,7 @@ export const ACCOUNTS_NAV_PAGES: AccountsNavPage[] = [
   },
   {
     id: "expense-claims",
-    label: "Expense Claims",
+    label: "Claims",
     href: `${ACCOUNTS_BASE}/expenses/claims`,
     groupId: "expenses",
     status: "live",
@@ -781,6 +780,15 @@ export const ACCOUNTS_EXPLICIT_PATHS = new Set([
   "/admin/accounts/receivables/aging",
   "/admin/accounts/receivables",
   "/admin/accounts/receivables/statements",
+  "/admin/accounts/receivables/debit-notes",
+  "/admin/accounts/receivables/credit-notes",
+  "/admin/accounts/cash-banking",
+  "/admin/accounts/cash-banking/cash",
+  "/admin/accounts/cash-banking/bank",
+  "/admin/accounts/cash-banking/mpesa",
+  "/admin/accounts/cash-banking/cashbook",
+  "/admin/accounts/cash-banking/transfers",
+  "/admin/accounts/cash-banking/reconciliation",
   // Legacy client redirects
   "/admin/accounts/clients",
   "/admin/accounts/bulk-sms",
@@ -806,4 +814,138 @@ export function getAccountsNavStats() {
   const linked = ACCOUNTS_NAV_PAGES.filter((p) => p.status === "linked").length
   const planned = ACCOUNTS_NAV_PAGES.filter((p) => p.status === "planned").length
   return { live, linked, planned, total: ACCOUNTS_NAV_PAGES.length }
+}
+
+/** Resolve which accounts nav page matches the current path (longest href wins). */
+export function resolveAccountsPageFromPathname(
+  pathname: string,
+): AccountsNavPage | undefined {
+  const normalized = pathname.replace(/\/$/, "") || pathname
+  let best: AccountsNavPage | undefined
+  let bestLen = -1
+
+  for (const page of ACCOUNTS_NAV_PAGES) {
+    const candidates = [page.href, page.redirectTo].filter(Boolean) as string[]
+    for (const candidate of candidates) {
+      const base = candidate.replace(/\/$/, "")
+      if (
+        normalized === base ||
+        normalized.startsWith(`${base}/`) ||
+        // category detail under expenses/categories
+        (base.endsWith("/categories") &&
+          normalized.startsWith(`${ACCOUNTS_BASE}/expenses/categories/`))
+      ) {
+        if (base.length > bestLen) {
+          best = page
+          bestLen = base.length
+        }
+      }
+    }
+  }
+
+  return best
+}
+
+/** Pages shown as top buttons within a module (definition order; planned last). */
+export function getAccountsModuleNavPages(groupId: string): AccountsNavPage[] {
+  const pages = getAccountsPagesByGroup(groupId).filter(
+    (page) => page.id !== "dashboard",
+  )
+  const active = pages.filter((page) => page.status !== "planned")
+  const planned = pages.filter((page) => page.status === "planned")
+  return [...active, ...planned]
+}
+
+/** Sidebar / hub entry for a module group. */
+export function getAccountsModuleEntryHref(groupId: string): string {
+  const pages = getAccountsPagesByGroup(groupId)
+  if (groupId === "receivables") {
+    return `${ACCOUNTS_BASE}/receivables`
+  }
+  if (groupId === "expenses") {
+    return `${ACCOUNTS_BASE}/expenses`
+  }
+  if (groupId === "cash-banking") {
+    return `${ACCOUNTS_BASE}/cash-banking`
+  }
+  if (groupId === "payroll") {
+    return `${ACCOUNTS_BASE}/remuneration-reports`
+  }
+  if (groupId === "inventory-accounting") {
+    return `${ACCOUNTS_BASE}/financial-breakdown`
+  }
+  if (groupId === "payables") {
+    return `${ACCOUNTS_BASE}/payables/bills`
+  }
+  const preferred =
+    pages.find((p) => p.status === "live" && !p.redirectTo) ||
+    pages.find((p) => p.status === "live") ||
+    pages.find((p) => p.status === "linked") ||
+    pages[0]
+  return preferred?.redirectTo || preferred?.href || ACCOUNTS_BASE
+}
+
+export type AccountsSidebarModule = {
+  groupId: string
+  label: string
+  href: string
+  description: string
+}
+
+/** Sidebar modules — keep this list short and intentional. */
+const ACCOUNTS_SIDEBAR_MODULE_IDS = [
+  "expenses",
+  "receivables",
+  "cash-banking",
+  "payroll",
+  "inventory-accounting",
+  "payables",
+] as const
+
+const ACCOUNTS_SIDEBAR_LABELS: Record<string, string> = {
+  expenses: "Expenses",
+  receivables: "Sales & Receivables",
+  "cash-banking": "Cashflow & Banking",
+  payroll: "Payroll & Statutory Deductions",
+  "inventory-accounting": "Inventory Accounting",
+  payables: "Purchases & Payables",
+}
+
+/** Flat module list for the Accounts sidebar (one row per allowed module). */
+export function getAccountsSidebarModules(): AccountsSidebarModule[] {
+  return ACCOUNTS_SIDEBAR_MODULE_IDS.map((groupId) => {
+    const group = getAccountsGroup(groupId)
+    return {
+      groupId,
+      label: ACCOUNTS_SIDEBAR_LABELS[groupId] || group?.label || groupId,
+      href: getAccountsModuleEntryHref(groupId),
+      description: group?.description || "",
+    }
+  })
+}
+
+/**
+ * Back target for nested accounts pages (module hub).
+ * Returns null on the hub itself so the back control can be hidden.
+ */
+export function getAccountsNestedBackTarget(pathname: string): {
+  href: string
+  label: string
+  groupId: string
+} | null {
+  const page = resolveAccountsPageFromPathname(pathname)
+  if (!page || page.groupId === "overview") return null
+
+  const hub = getAccountsModuleEntryHref(page.groupId)
+  const normalized = (pathname || "").replace(/\/$/, "") || pathname
+  const hubNorm = hub.replace(/\/$/, "")
+  if (normalized === hubNorm) return null
+
+  const group = getAccountsGroup(page.groupId)
+  const label = ACCOUNTS_SIDEBAR_LABELS[page.groupId] || group?.label || "module"
+  return {
+    href: hub,
+    label: `Back to ${label}`,
+    groupId: page.groupId,
+  }
 }

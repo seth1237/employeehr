@@ -56,6 +56,8 @@ import branchRoutes from "./routes/branch.routes"
 import aiAssistantRoutes from "./routes/aiAssistant.routes"
 import vehicleRoutes from "./routes/vehicle.routes"
 import creditNoteRoutes from "./routes/creditNote.routes"
+import debitNoteRoutes from "./routes/debitNote.routes"
+import cashBankingRoutes from "./routes/cashBanking.routes"
 import resourcesRoutes from "./routes/resources.routes"
 import crmRoutes from "./routes/crm.routes"
 import salesRoutes from "./routes/sales.routes"
@@ -195,6 +197,8 @@ app.get("/api/stock/public/invoices/:invoiceId/pdf", StockController.downloadPub
 app.post("/api/stock/public/quotations/:quotationId/request-invoice", StockController.requestWebsiteInvoice)
 app.use("/api/stock", stockRoutes)
 app.use("/api/stock/credit-notes", creditNoteRoutes)
+app.use("/api/stock/debit-notes", debitNoteRoutes)
+app.use("/api/accounts/cash-banking", cashBankingRoutes)
 app.use("/api/stamps", stampRoutes)
 app.use("/api/resources", resourcesRoutes)
 app.use("/api/crm", crmRoutes)

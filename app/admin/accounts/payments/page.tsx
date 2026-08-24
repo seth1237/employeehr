@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { stockApi } from "@/lib/api"
 import { runDataLoad, type SilentLoadOptions } from "@/lib/silent-load"
 import { PageLoadingSkeleton } from "@/components/admin/ui/page-states"
@@ -38,12 +39,14 @@ interface PaymentInvoiceRow {
 const PAYMENT_METHODS = ["cash", "mpesa", "bank", "cheque", "card", "other"]
 
 export default function AccountsPaymentsPage() {
+  const searchParams = useSearchParams()
+  const queryInvoiceId = searchParams.get("invoiceId") || ""
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [search, setSearch] = useState("")
   const [rows, setRows] = useState<PaymentInvoiceRow[]>([])
-  const [selectedInvoiceId, setSelectedInvoiceId] = useState("")
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState(queryInvoiceId)
   const [form, setForm] = useState({
     amount: "",
     paymentMethod: "mpesa",
@@ -60,7 +63,13 @@ export default function AccountsPaymentsPage() {
           const response = await stockApi.getAccountsPayments()
           const data = response.data || []
           setRows(data)
-          if (!selectedInvoiceId && data.length > 0) setSelectedInvoiceId(data[0]._id)
+          setSelectedInvoiceId((current) => {
+            if (queryInvoiceId && data.some((row: any) => String(row._id) === queryInvoiceId)) {
+              return queryInvoiceId
+            }
+            if (current && data.some((row: any) => String(row._id) === current)) return current
+            return data[0]?._id || ""
+          })
         },
         opts,
         setRefreshing,
@@ -72,7 +81,7 @@ export default function AccountsPaymentsPage() {
 
   useEffect(() => {
     loadData()
-  }, [])
+  }, [queryInvoiceId])
 
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -136,7 +145,7 @@ export default function AccountsPaymentsPage() {
       eyebrow="Sales & Receivables"
       title="Customer Payments"
       description="Record payments against outstanding sales invoices with full payment history."
-      backHref="/admin/accounts/receivables"
+
       onRefresh={() => loadData({ silent: true })}
       refreshing={refreshing}
       kpis={[

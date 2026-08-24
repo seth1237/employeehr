@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { stockApi, api } from "@/lib/api"
 import { runDataLoad, type SilentLoadOptions } from "@/lib/silent-load"
 import { PageLoadingSkeleton } from "@/components/admin/ui/page-states"
+import { AccountsModuleNav } from "@/components/accounts/accounts-module-nav"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -241,6 +242,7 @@ export default function AccountsPostsPage() {
 
   return (
     <div className="space-y-6">
+      <AccountsModuleNav groupId="tax" />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">eTIMS OSCU Integration</h1>

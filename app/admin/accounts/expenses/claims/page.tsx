@@ -140,7 +140,6 @@ export default function ExpenseClaimsPage() {
       eyebrow="Accounts · Expenses"
       title="Expense Claims"
       description="Employee expense claims and sales planner budgets. Settling a claim posts it as a company expense."
-      backHref="/admin/accounts/expenses"
       onRefresh={() => loadAll({ silent: true })}
       refreshing={refreshing}
       kpis={[

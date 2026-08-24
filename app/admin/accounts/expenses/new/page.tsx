@@ -130,7 +130,6 @@ export default function AddExpensePage() {
       eyebrow="Accounts · Expenses"
       title="Add Expense"
       description="Record a company expense. Mark it as recurring if it repeats on a set date."
-      backHref="/admin/accounts/expenses"
       actions={
         <Button onClick={() => void submit()} disabled={submitting}>
           <Save className="h-4 w-4 mr-1" />

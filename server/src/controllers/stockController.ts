@@ -25,6 +25,7 @@ import { StockExpenseClaim } from "../models/StockExpenseClaim";
 import { StockRepeatBill } from "../models/StockRepeatBill";
 import { StockInvoicePayment } from "../models/StockInvoicePayment";
 import { CreditNote } from "../models/CreditNote";
+import { DebitNote } from "../models/DebitNote";
 import { InstalledMachine } from "../models/InstalledMachine";
 import { DispatchNotification } from "../models/DispatchNotification";
 import { BulkSmsCampaign } from "../models/BulkSmsCampaign";
@@ -42,6 +43,10 @@ import {
 } from "../lib/email-templates";
 import { smsService } from "../services/sms.service";
 import { mpesaService } from "../services/mpesa.service";
+import {
+  postExpenseToCashbook,
+  postInvoicePaymentToCashbook,
+} from "../services/cashBankingPosting.service";
 import { createOrUpdateStockClient } from "../services/stockClientSave.service";
 import {
   buildInvoicePdfBuffer,
@@ -868,7 +873,11 @@ async function upsertPackagingDutyTask(params: {
   return task;
 }
 
-function buildInvoicePaymentSummary(invoice: any, invoicePayments: any[]) {
+function buildInvoicePaymentSummary(
+  invoice: any,
+  invoicePayments: any[],
+  extras?: { debitTotal?: number; creditTotal?: number },
+) {
   const sortedPayments = [...invoicePayments].sort(
     (a, b) =>
       new Date(b.paidAt || b.createdAt || 0).getTime() -
@@ -878,27 +887,32 @@ function buildInvoicePaymentSummary(invoice: any, invoicePayments: any[]) {
     (sum, payment) => sum + Number(payment.amount || 0),
     0,
   );
-  const subTotal = Number(invoice?.subTotal || 0);
+  const subTotal = Number(
+    invoice?.grandTotal ?? invoice?.subTotal ?? 0,
+  );
+  const debitTotal = Number(extras?.debitTotal || 0);
+  const creditTotal = Number(extras?.creditTotal || 0);
   const balanceRemaining = Math.max(
     0,
-    Number((subTotal - paidAmount).toFixed(2)),
+    Number((subTotal + debitTotal - creditTotal - paidAmount).toFixed(2)),
   );
   const lastPayment = sortedPayments[0] || null;
 
-  // Compute a suggested next payment / debt-claiming date when there is still a balance.
-  // Default policy: schedule next claim 30 days after the latest payment (or invoice creation if no payments).
   let nextPaymentDate: string | undefined = undefined;
   if (balanceRemaining > 0) {
     const base = lastPayment
       ? new Date(lastPayment.paidAt || lastPayment.createdAt || Date.now())
       : new Date(invoice.createdAt || Date.now());
-    const next = new Date(base.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days after base
+    const next = new Date(base.getTime() + 30 * 24 * 60 * 60 * 1000);
     nextPaymentDate = next.toISOString();
   }
 
   return {
     ...invoice,
+    subTotal,
     paidAmount: Number(paidAmount.toFixed(2)),
+    debitTotal: Number(debitTotal.toFixed(2)),
+    creditTotal: Number(creditTotal.toFixed(2)),
     balanceRemaining,
     paymentCount: sortedPayments.length,
     lastPayment,
@@ -3740,6 +3754,12 @@ export class StockController {
         requestedByName: req.user?.email || String(actorId),
       });
 
+      await postExpenseToCashbook({
+        orgId: org_id,
+        userId: String(actorId),
+        expense,
+      });
+
       return res.status(201).json({ success: true, data: expense });
     } catch (error: any) {
       return res.status(500).json({
@@ -4245,6 +4265,19 @@ export class StockController {
         .sort({ paidAt: -1, createdAt: -1 })
         .lean();
 
+      const [debitNotes, creditNotes] = await Promise.all([
+        DebitNote.find({
+          org_id,
+          invoiceId: { $in: invoiceIds },
+          status: "issued",
+        }).lean(),
+        CreditNote.find({
+          org_id,
+          invoiceId: { $in: invoiceIds },
+          status: { $in: ["issued", "applied"] },
+        }).lean(),
+      ]);
+
       const paymentsByInvoice = new Map<string, any[]>();
       for (const payment of payments) {
         const key = String(payment.invoiceId);
@@ -4253,11 +4286,31 @@ export class StockController {
         paymentsByInvoice.set(key, existing);
       }
 
+      const debitByInvoice = new Map<string, number>();
+      for (const note of debitNotes) {
+        const key = String(note.invoiceId);
+        debitByInvoice.set(
+          key,
+          Number(((debitByInvoice.get(key) || 0) + Number(note.subTotal || 0)).toFixed(2)),
+        );
+      }
+      const creditByInvoice = new Map<string, number>();
+      for (const note of creditNotes) {
+        const key = String(note.invoiceId);
+        creditByInvoice.set(
+          key,
+          Number(((creditByInvoice.get(key) || 0) + Number(note.subTotal || 0)).toFixed(2)),
+        );
+      }
+
       const data = invoices
         .map((invoice: any) => {
           const invoicePayments =
             paymentsByInvoice.get(String(invoice._id)) || [];
-          return buildInvoicePaymentSummary(invoice, invoicePayments);
+          return buildInvoicePaymentSummary(invoice, invoicePayments, {
+            debitTotal: debitByInvoice.get(String(invoice._id)) || 0,
+            creditTotal: creditByInvoice.get(String(invoice._id)) || 0,
+          });
         })
         .filter((invoice: any) => Number(invoice.balanceRemaining || 0) > 0);
 
@@ -4898,6 +4951,12 @@ export class StockController {
         receivedBy: String(actorId),
       });
 
+      await postInvoicePaymentToCashbook({
+        orgId: org_id,
+        userId: String(actorId),
+        payment,
+      });
+
       const newPaidAmount = alreadyPaid + Number(payment.amount || 0);
       const isFullyPaid = newPaidAmount >= subTotal;
       await StockInvoice.updateOne(
@@ -4943,6 +5002,19 @@ export class StockController {
         .sort({ paidAt: -1, createdAt: -1 })
         .lean();
 
+      const [debitNotes, creditNotes] = await Promise.all([
+        DebitNote.find({
+          org_id,
+          invoiceId: { $in: invoiceIds },
+          status: "issued",
+        }).lean(),
+        CreditNote.find({
+          org_id,
+          invoiceId: { $in: invoiceIds },
+          status: { $in: ["issued", "applied"] },
+        }).lean(),
+      ]);
+
       const paymentsByInvoice = new Map<string, any[]>();
       for (const payment of payments) {
         const key = String(payment.invoiceId);
@@ -4951,11 +5023,31 @@ export class StockController {
         paymentsByInvoice.set(key, existing);
       }
 
+      const debitByInvoice = new Map<string, number>();
+      for (const note of debitNotes) {
+        const key = String(note.invoiceId);
+        debitByInvoice.set(
+          key,
+          Number(((debitByInvoice.get(key) || 0) + Number(note.subTotal || 0)).toFixed(2)),
+        );
+      }
+      const creditByInvoice = new Map<string, number>();
+      for (const note of creditNotes) {
+        const key = String(note.invoiceId);
+        creditByInvoice.set(
+          key,
+          Number(((creditByInvoice.get(key) || 0) + Number(note.subTotal || 0)).toFixed(2)),
+        );
+      }
+
       const data = invoices
         .map((invoice: any) => {
           const invoicePayments =
             paymentsByInvoice.get(String(invoice._id)) || [];
-          return buildInvoicePaymentSummary(invoice, invoicePayments);
+          return buildInvoicePaymentSummary(invoice, invoicePayments, {
+            debitTotal: debitByInvoice.get(String(invoice._id)) || 0,
+            creditTotal: creditByInvoice.get(String(invoice._id)) || 0,
+          });
         })
         .filter((invoice: any) => Number(invoice.balanceRemaining || 0) > 0);
 
@@ -4988,6 +5080,19 @@ export class StockController {
         invoiceId: { $in: invoiceIds },
       }).lean();
 
+      const [debitNotes, creditNotes] = await Promise.all([
+        DebitNote.find({
+          org_id,
+          invoiceId: { $in: invoiceIds },
+          status: "issued",
+        }).lean(),
+        CreditNote.find({
+          org_id,
+          invoiceId: { $in: invoiceIds },
+          status: { $in: ["issued", "applied"] },
+        }).lean(),
+      ]);
+
       const paymentsByInvoice = new Map<string, any[]>();
       for (const payment of payments) {
         const key = String(payment.invoiceId);
@@ -4995,6 +5100,23 @@ export class StockController {
           ...(paymentsByInvoice.get(key) || []),
           payment,
         ]);
+      }
+
+      const debitByInvoice = new Map<string, number>();
+      for (const note of debitNotes) {
+        const key = String(note.invoiceId);
+        debitByInvoice.set(
+          key,
+          Number(((debitByInvoice.get(key) || 0) + Number(note.subTotal || 0)).toFixed(2)),
+        );
+      }
+      const creditByInvoice = new Map<string, number>();
+      for (const note of creditNotes) {
+        const key = String(note.invoiceId);
+        creditByInvoice.set(
+          key,
+          Number(((creditByInvoice.get(key) || 0) + Number(note.subTotal || 0)).toFixed(2)),
+        );
       }
 
       const buckets = {
@@ -5009,6 +5131,10 @@ export class StockController {
           buildInvoicePaymentSummary(
             invoice,
             paymentsByInvoice.get(String(invoice._id)) || [],
+            {
+              debitTotal: debitByInvoice.get(String(invoice._id)) || 0,
+              creditTotal: creditByInvoice.get(String(invoice._id)) || 0,
+            },
           ),
         )
         .filter((invoice: any) => Number(invoice.balanceRemaining || 0) > 0)
@@ -5045,6 +5171,8 @@ export class StockController {
             bucket: buckets[bucketKey].label,
             subTotal: invoice.subTotal,
             paidAmount: invoice.paidAmount,
+            debitTotal: invoice.debitTotal,
+            creditTotal: invoice.creditTotal,
             balanceRemaining: invoice.balanceRemaining,
             nextPaymentDate: invoice.nextPaymentDate,
           };
@@ -6505,6 +6633,11 @@ export class StockController {
           reference: receiptNumber,
           paidAt: new Date(),
           receivedBy: String(actorId),
+        });
+        await postInvoicePaymentToCashbook({
+          orgId: org_id,
+          userId: String(actorId),
+          payment,
         });
         await StockInvoice.updateOne(
           { _id: invoice._id, org_id },

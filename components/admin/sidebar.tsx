@@ -35,6 +35,7 @@ import {
   Truck,
   Activity,
   Wallet,
+  Star,
 } from "lucide-react";
 import { getUser, logout } from "@/lib/auth";
 import { getToken } from "@/lib/auth";
@@ -44,8 +45,8 @@ import { companyApi } from "@/lib/api";
 import { getFavoriteHrefs } from "@/lib/admin-personalization";
 import { resolveAdminAllowedSections } from "@/lib/admin-sections";
 import {
-  ACCOUNTS_NAV_GROUPS,
-  getAccountsPagesByGroup,
+  getAccountsSidebarModules,
+  resolveAccountsPageFromPathname,
 } from "@/lib/accounts-nav";
 import { useEffect, useMemo, useState } from "react";
 
@@ -57,7 +58,6 @@ interface SidebarProps {
 }
 
 const COLLAPSED_SECTIONS_KEY = "admin_sidebar_collapsed_sections";
-const COLLAPSED_ACCOUNTS_GROUPS_KEY = "admin_sidebar_collapsed_accounts_groups";
 
 const adminMenuItems = [
   // Core Management
@@ -246,6 +246,12 @@ const adminMenuItems = [
     section: "INVENTORY MANAGER",
   },
   {
+    label: "Debit Notes",
+    icon: FileText,
+    href: "/admin/accounts/receivables/debit-notes",
+    section: "INVENTORY MANAGER",
+  },
+  {
     label: "Dispatch",
     icon: Package,
     href: "/admin/stock/dispatch",
@@ -398,9 +404,6 @@ export default function AdminSidebar({
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
     new Set(),
   );
-  const [collapsedAccountsGroups, setCollapsedAccountsGroups] = useState<Set<string>>(
-    new Set(),
-  );
 
   const currentUser = useMemo(() => getUser(), []);
 
@@ -410,13 +413,8 @@ export default function AdminSidebar({
       if (saved) {
         setCollapsedSections(new Set(JSON.parse(saved)));
       }
-      const savedAccounts = localStorage.getItem(COLLAPSED_ACCOUNTS_GROUPS_KEY);
-      if (savedAccounts) {
-        setCollapsedAccountsGroups(new Set(JSON.parse(savedAccounts)));
-      }
     } catch {
       setCollapsedSections(new Set());
-      setCollapsedAccountsGroups(new Set());
     }
   }, []);
 
@@ -499,21 +497,6 @@ export default function AdminSidebar({
     logout();
   };
 
-  const toggleAccountsGroup = (groupId: string) => {
-    setCollapsedAccountsGroups((current) => {
-      const next = new Set(current);
-      if (next.has(groupId)) next.delete(groupId);
-      else next.add(groupId);
-      try {
-        localStorage.setItem(
-          COLLAPSED_ACCOUNTS_GROUPS_KEY,
-          JSON.stringify(Array.from(next)),
-        );
-      } catch {}
-      return next;
-    });
-  };
-
   const renderNavLink = (
     href: string,
     label: string,
@@ -544,86 +527,71 @@ export default function AdminSidebar({
     );
   };
 
-  const renderAccountsSection = () => (
-    <div key="ACCOUNTS">
-      {!isCollapsed ? (
-        <button
-          type="button"
-          onClick={() => toggleSection("ACCOUNTS")}
-          className="mb-1 flex w-full items-center justify-between rounded-md px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground transition hover:bg-secondary hover:text-foreground"
-          aria-expanded={!collapsedSections.has("ACCOUNTS")}
+  const renderAccountsSection = () => {
+    const modules = getAccountsSidebarModules();
+    const activeAccountsPage = resolveAccountsPageFromPathname(pathname || "");
+
+    return (
+      <div key="ACCOUNTS">
+        {!isCollapsed ? (
+          <button
+            type="button"
+            onClick={() => toggleSection("ACCOUNTS")}
+            className="mb-1 flex w-full items-center justify-between rounded-md px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground transition hover:bg-secondary hover:text-foreground"
+            aria-expanded={!collapsedSections.has("ACCOUNTS")}
+          >
+            <span>ACCOUNTS</span>
+            <ChevronDown
+              size={14}
+              className={`transition-transform ${collapsedSections.has("ACCOUNTS") ? "-rotate-90" : "rotate-0"}`}
+            />
+          </button>
+        ) : null}
+        <div
+          className={`space-y-1 ${!isCollapsed && collapsedSections.has("ACCOUNTS") ? "hidden" : ""}`}
         >
-          <span>ACCOUNTS</span>
-          <ChevronDown
-            size={14}
-            className={`transition-transform ${collapsedSections.has("ACCOUNTS") ? "-rotate-90" : "rotate-0"}`}
-          />
-        </button>
-      ) : null}
-      <div className={`space-y-2 ${!isCollapsed && collapsedSections.has("ACCOUNTS") ? "hidden" : ""}`}>
-        {renderNavLink("/admin/accounts", "Dashboard", LayoutDashboard)}
-        {renderNavLink("/admin/accounts/expenses", "Expenses", Wallet)}
-        {!isCollapsed
-          ? ACCOUNTS_NAV_GROUPS.filter(
-              (group) => group.id !== "overview" && group.id !== "expenses",
-            ).map((group) => {
-              const pages = getAccountsPagesByGroup(group.id).filter(
-                (page) => page.id !== "dashboard",
-              );
-              if (pages.length === 0) return null;
-              const isGroupCollapsed = collapsedAccountsGroups.has(group.id);
-              return (
-                <div key={group.id} className="space-y-1">
-                  <button
-                    type="button"
-                    onClick={() => toggleAccountsGroup(group.id)}
-                    className="flex w-full items-center justify-between rounded-md px-4 py-1.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground hover:bg-secondary/60"
-                  >
-                    <span>{group.label}</span>
-                    <ChevronDown
-                      size={12}
-                      className={`transition-transform ${isGroupCollapsed ? "-rotate-90" : "rotate-0"}`}
-                    />
-                  </button>
-                  {!isGroupCollapsed ? (
-                    <div className="space-y-1">
-                      {pages.map((page) => {
-                        const href = page.redirectTo || page.href;
-                        const isActive =
-                          pathname === href ||
-                          pathname === page.href ||
-                          pathname.startsWith(`${page.href}/`);
-                        return (
-                          <Link
-                            key={page.id}
-                            href={href}
-                            title={page.label}
-                            className={`
-                              flex items-center rounded-lg transition text-sm
-                              gap-3 px-4 py-2 ml-1
-                              ${
-                                isActive
-                                  ? "bg-primary text-primary-foreground font-medium"
-                                  : page.status === "planned"
-                                    ? "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                                    : "text-foreground hover:bg-secondary"
-                              }
-                            `}
-                          >
-                            <FileText size={16} className="shrink-0 opacity-70" />
-                            <span className="truncate text-[13px]">{page.label}</span>
-                          </Link>
-                        );
-                      })}
-                    </div>
-                  ) : null}
-                </div>
-              );
-            })
-          : null}
+          {modules.map((mod) => {
+            const isActive =
+              activeAccountsPage?.groupId === mod.groupId ||
+              pathname === mod.href ||
+              (pathname || "").startsWith(`${mod.href}/`);
+            const Icon =
+              mod.groupId === "expenses"
+                ? Wallet
+                : mod.groupId === "receivables"
+                  ? Banknote
+                  : mod.groupId === "cash-banking"
+                    ? Building2
+                    : mod.groupId === "payroll"
+                      ? Users
+                      : mod.groupId === "inventory-accounting"
+                        ? Package
+                        : FileText;
+
+            return (
+              <Link
+                key={mod.groupId}
+                href={mod.href}
+                title={isCollapsed ? mod.label : mod.description}
+                className={`
+                  flex items-center rounded-lg transition text-sm
+                  ${isCollapsed ? "justify-center px-2 py-2.5" : "gap-3 px-4 py-2.5"}
+                  ${
+                    isActive
+                      ? "bg-primary text-primary-foreground font-medium"
+                      : "text-foreground hover:bg-secondary"
+                  }
+                `}
+              >
+                <Icon size={18} className="shrink-0" />
+                {!isCollapsed && <span className="truncate">{mod.label}</span>}
+              </Link>
+            );
+          })}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const toggleSection = (sectionName: string) => {
     setCollapsedSections((current) => {

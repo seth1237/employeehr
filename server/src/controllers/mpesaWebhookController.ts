@@ -1,5 +1,6 @@
 import type { Request, Response } from "express"
 import { StockExpense } from "../models/StockExpense"
+import { postExpenseToCashbook } from "../services/cashBankingPosting.service"
 
 function parseStkCallback(body: any) {
   const stkCallback = body?.Body?.stkCallback
@@ -66,6 +67,14 @@ export class MpesaWebhookController {
       }
 
       await expense.save()
+
+      if (isSuccess) {
+        await postExpenseToCashbook({
+          orgId: String(expense.org_id),
+          userId: String(expense.initiatedBy || "mpesa-webhook"),
+          expense,
+        })
+      }
 
       console.log("[mpesa-callback] Processed", {
         expenseId: String(expense._id),

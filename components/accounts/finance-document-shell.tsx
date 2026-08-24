@@ -1,10 +1,13 @@
 "use client"
 
 import Link from "next/link"
+import { usePathname } from "next/navigation"
 import { ArrowLeft, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { AccountsModuleNav } from "@/components/accounts/accounts-module-nav"
 import { hexToRgba, useAccountsBranding } from "@/components/accounts/use-accounts-branding"
+import { getAccountsNestedBackTarget } from "@/lib/accounts-nav"
 
 export type FinanceKpi = {
   label: string
@@ -18,31 +21,50 @@ type FinanceDocumentShellProps = {
   eyebrow?: string
   title: string
   description?: string
-  backHref?: string
+  /** Explicit back URL. Omit to auto-link nested pages to their module hub. Pass null to hide. */
+  backHref?: string | null
+  backLabel?: string
   kpis?: FinanceKpi[]
   actions?: React.ReactNode
   toolbar?: React.ReactNode
   children: React.ReactNode
   onRefresh?: () => void
   refreshing?: boolean
+  /** Accounts module group for top page buttons. Auto-detected from path when omitted. */
+  moduleNavGroupId?: string
+  /** Hide module nav (rare). Default shows when group has 2+ pages. */
+  hideModuleNav?: boolean
 }
 
 export function FinanceDocumentShell({
   eyebrow = "Accounts",
   title,
   description,
-  backHref = "/admin/accounts",
+  backHref,
+  backLabel,
   kpis = [],
   actions,
   toolbar,
   children,
   onRefresh,
   refreshing,
+  moduleNavGroupId,
+  hideModuleNav = false,
 }: FinanceDocumentShellProps) {
+  const pathname = usePathname() || ""
   const branding = useAccountsBranding()
   const primarySoftColor = hexToRgba(branding.primaryColor, 0.08)
   const secondarySoftColor = hexToRgba(branding.secondaryColor, 0.08)
   const primaryBorderColor = hexToRgba(branding.primaryColor, 0.18)
+
+  const autoBack = backHref === undefined ? getAccountsNestedBackTarget(pathname) : null
+  const resolvedBackHref =
+    backHref === null ? null : backHref !== undefined ? backHref : autoBack?.href || null
+  const resolvedBackLabel =
+    backLabel ||
+    (backHref !== undefined && backHref !== null
+      ? "Back"
+      : autoBack?.label || "Back")
 
   const kpiColor = (accent?: FinanceKpi["accent"]) => {
     if (accent === "success") return "#059669"
@@ -53,6 +75,10 @@ export function FinanceDocumentShell({
 
   return (
     <div className="space-y-4">
+      {!hideModuleNav ? (
+        <AccountsModuleNav groupId={moduleNavGroupId} />
+      ) : null}
+
       <div
         className="rounded-2xl border px-4 py-3 shadow-sm"
         style={{
@@ -62,11 +88,16 @@ export function FinanceDocumentShell({
       >
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-1">
-            {backHref ? (
-              <Button variant="ghost" size="sm" asChild className="h-7 px-2 -ml-2 mb-1 text-muted-foreground">
-                <Link href={backHref}>
+            {resolvedBackHref ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                asChild
+                className="h-7 px-2 -ml-2 mb-1 text-muted-foreground"
+              >
+                <Link href={resolvedBackHref}>
                   <ArrowLeft className="h-3.5 w-3.5 mr-1" />
-                  Back
+                  {resolvedBackLabel}
                 </Link>
               </Button>
             ) : null}

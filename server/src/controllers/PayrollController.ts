@@ -3,6 +3,7 @@ import type { AuthenticatedRequest } from "../middleware/auth"
 import { Payroll } from "../models/Payroll"
 import { User } from "../models/User"
 import { Company } from "../models/Company"
+import { postPayrollToCashbook } from "../services/cashBankingPosting.service"
 
 export class PayrollController {
     // Generate Payroll (Admin)
@@ -64,11 +65,14 @@ export class PayrollController {
         try {
             const { id } = req.params
             const { base_salary, bonus, other_bonus_items, deduction_items, standard_deduction_overrides, deductions_disabled, status } = req.body
+            const actorId = req.user?.userId
 
             const payroll = await Payroll.findById(id)
             if (!payroll) {
                 return res.status(404).json({ success: false, message: "Payroll record not found" })
             }
+
+            const previousStatus = payroll.status
 
             // Update fields if provided
             if (base_salary !== undefined) payroll.base_salary = Number(base_salary)
@@ -89,6 +93,33 @@ export class PayrollController {
             payroll.net_pay = Number(payroll.base_salary || 0) + bonusTotal - Number(payroll.total_deductions || 0)
 
             await payroll.save()
+
+            // When a payslip is marked paid, cash leaves bank (default) and can be reconciled later
+            if (
+                payroll.org_id &&
+                actorId &&
+                payroll.status === "paid" &&
+                previousStatus !== "paid"
+            ) {
+                const employee = await User.findById(payroll.user_id).select("firstName lastName")
+                const employeeName = employee
+                    ? [employee.firstName, employee.lastName].filter(Boolean).join(" ")
+                    : String(payroll.user_id)
+
+                await postPayrollToCashbook({
+                    orgId: String(payroll.org_id),
+                    userId: String(actorId),
+                    payroll: {
+                        _id: payroll._id,
+                        net_pay: payroll.net_pay,
+                        month: payroll.month,
+                        user_id: String(payroll.user_id),
+                        status: payroll.status,
+                        paymentMethod: "bank",
+                        employeeName,
+                    },
+                })
+            }
 
             res.status(200).json({ success: true, data: payroll })
             return

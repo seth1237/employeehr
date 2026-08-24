@@ -116,7 +116,6 @@ export default function ExpensesExportPage() {
       eyebrow="Accounts · Expenses"
       title="Export Expenses"
       description="Select a period and download a branded PDF summary similar to the sales invoices export."
-      backHref="/admin/accounts/expenses"
       onRefresh={() => loadAll({ silent: true })}
       refreshing={refreshing}
       actions={

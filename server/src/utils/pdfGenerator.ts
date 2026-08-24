@@ -306,7 +306,13 @@ function drawItemsTable(doc: jsPDF, startY: number, items: DocumentItem[], brand
   return y + 2
 }
 
-function drawTotalsSection(doc: jsPDF, subTotal: number, startY: number, branding?: { primaryColor?: string }) {
+function drawTotalsSection(
+  doc: jsPDF,
+  subTotal: number,
+  startY: number,
+  branding?: { primaryColor?: string },
+  totalLabel = "Total Credit",
+) {
   const rightX = 12 + 186 - 60
   let y = startY + 3
 
@@ -327,16 +333,18 @@ function drawTotalsSection(doc: jsPDF, subTotal: number, startY: number, brandin
   doc.setFont("helvetica", "bold")
   doc.setFontSize(11)
   setColorFromHex(doc, primary, "text")
-  doc.text("Total Credit", rightX, y + 5)
+  doc.text(totalLabel, rightX, y + 5)
   doc.text(`KSh ${Number(subTotal).toLocaleString()}`, 198, y + 5, { align: "right" })
 
   return y + 12
 }
 
-function drawCreditNoteMetaSection(
+function drawAdjustmentMetaSection(
   doc: jsPDF,
   params: {
-    creditNoteNumber: string
+    title: string
+    numberLabel: string
+    numberValue: string
     invoiceNumber: string
     createdAt: Date | string
     reason: string
@@ -361,7 +369,7 @@ function drawCreditNoteMetaSection(
   doc.setFont("helvetica", "bold")
   doc.setFontSize(9.5)
   setColorFromHex(doc, DEFAULT_TEXT, "text")
-  doc.text("Credit Note Details", boxX + 3, boxY + 4.4)
+  doc.text(params.title, boxX + 3, boxY + 4.4)
 
   doc.setFont("helvetica", "normal")
   doc.setFontSize(8.5)
@@ -372,7 +380,7 @@ function drawCreditNoteMetaSection(
   const line1Y = boxY + 11
   const line2Y = boxY + 16
 
-  doc.text(`Credit Note No: ${params.creditNoteNumber}`, leftColX, line1Y)
+  doc.text(`${params.numberLabel}: ${params.numberValue}`, leftColX, line1Y)
   doc.text(`Reference Invoice: ${params.invoiceNumber}`, rightColX, line1Y)
   doc.text(`Issued: ${new Date(params.createdAt).toLocaleDateString("en-KE")}`, leftColX, line2Y)
   doc.text(`Reason: ${params.reason}`, rightColX, line2Y)
@@ -421,10 +429,12 @@ export function generateCreditNotePdf(params: {
   const contactBottom = drawContactSlotBelowLogo(doc, params.branding)
 
   const partiesBottom = drawPartiesSection(doc, params.client, contactBottom + 1, params.branding)
-  const metaBottom = drawCreditNoteMetaSection(
+  const metaBottom = drawAdjustmentMetaSection(
     doc,
     {
-      creditNoteNumber: params.creditNoteNumber,
+      title: "Credit Note Details",
+      numberLabel: "Credit Note No",
+      numberValue: params.creditNoteNumber,
       invoiceNumber: params.invoiceNumber,
       createdAt: params.createdAt,
       reason: params.reason,
@@ -436,8 +446,63 @@ export function generateCreditNotePdf(params: {
 
   const endY = drawItemsTable(doc, metaBottom, params.items, params.branding)
 
-  drawTotalsSection(doc, params.subTotal, endY, params.branding)
+  drawTotalsSection(doc, params.subTotal, endY, params.branding, "Total Credit")
 
-  // Convert to buffer
+  return Buffer.from(doc.output("arraybuffer"))
+}
+
+export function generateDebitNotePdf(params: {
+  debitNoteNumber: string
+  invoiceNumber: string
+  createdAt: Date | string
+  client: DocumentClient
+  items: DocumentItem[]
+  subTotal: number
+  reason: string
+  reasonDetails?: string
+  branding?: TenantBranding
+  preparedBy?: string
+  watermarkText?: string
+}): Buffer {
+  const doc = new jsPDF({ unit: "mm", format: "a4" })
+
+  drawWatermark(doc, params.watermarkText || "DEBIT NOTE")
+
+  drawModernHeader(
+    doc,
+    "Debit Note",
+    "Debit Note No",
+    params.debitNoteNumber,
+    String(params.createdAt),
+    params.branding,
+  )
+
+  const contactBottom = drawContactSlotBelowLogo(doc, params.branding)
+  const partiesBottom = drawPartiesSection(doc, params.client, contactBottom + 1, params.branding)
+  const metaBottom = drawAdjustmentMetaSection(
+    doc,
+    {
+      title: "Debit Note Details",
+      numberLabel: "Debit Note No",
+      numberValue: params.debitNoteNumber,
+      invoiceNumber: params.invoiceNumber,
+      createdAt: params.createdAt,
+      reason: params.reason,
+      reasonDetails: params.reasonDetails,
+    },
+    partiesBottom,
+    params.branding,
+  )
+
+  const endY = drawItemsTable(doc, metaBottom, params.items, params.branding)
+  drawTotalsSection(doc, params.subTotal, endY, params.branding, "Total Debit")
+
+  if (params.preparedBy) {
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(8)
+    setColorFromHex(doc, DEFAULT_GRAY, "text")
+    doc.text(`Prepared by: ${params.preparedBy}`, 12, 285)
+  }
+
   return Buffer.from(doc.output("arraybuffer"))
 }

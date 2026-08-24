@@ -77,7 +77,7 @@ export default function CustomerStatementsPage() {
       eyebrow="Sales & Receivables"
       title="Customer Statements"
       description="View customer account activity — invoices, payments, credit notes, and running balance."
-      backHref="/admin/accounts/receivables"
+
       kpis={[
         { label: "Customers", value: clients.length },
         {

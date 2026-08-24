@@ -81,7 +81,8 @@ export default function AccountsExpensesPage() {
       eyebrow="Accounts · Expenses"
       title="Company Expenses Summary"
       description="Overview of company spend by category. Transport from converted quotations is tracked under Transport."
-      backHref="/admin/accounts"
+      backHref={null}
+      moduleNavGroupId="expenses"
       onRefresh={() => loadAll({ silent: true })}
       refreshing={refreshing}
       actions={

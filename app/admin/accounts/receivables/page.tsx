@@ -41,7 +41,6 @@ export default function SalesReceivablesHubPage() {
       eyebrow="Accounts · Sales & Receivables"
       title="Sales & Receivables"
       description="Customer receivables cycle — payments, debtors, aging, statements, credit notes, and debit notes."
-      backHref={null}
       moduleNavGroupId="receivables"
       kpis={[
         {

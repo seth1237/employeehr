@@ -106,7 +106,6 @@ export default function CashBankingHubPage() {
       eyebrow="Accounts · Cash & Banking"
       title="Cashflow & Banking"
       description="Money in and out across cash, bank, and M-Pesa. Invoice payments, expenses, and paid salaries post here automatically — reconcile against statements when ready."
-      backHref={null}
       moduleNavGroupId="cash-banking"
       onRefresh={() => void load(true)}
       refreshing={refreshing}

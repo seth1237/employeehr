@@ -926,20 +926,34 @@ export function getAccountsSidebarModules(): AccountsSidebarModule[] {
 
 /**
  * Back target for nested accounts pages (module hub).
- * Returns null on the hub itself so the back control can be hidden.
+ * On a module hub, return Accounts home. On deeper pages, return the module hub.
  */
 export function getAccountsNestedBackTarget(pathname: string): {
   href: string
   label: string
   groupId: string
 } | null {
+  const normalized = (pathname || "").replace(/\/$/, "") || pathname
+  if (normalized === ACCOUNTS_BASE) return null
+
   const page = resolveAccountsPageFromPathname(pathname)
-  if (!page || page.groupId === "overview") return null
+  if (!page || page.groupId === "overview") {
+    return {
+      href: ACCOUNTS_BASE,
+      label: "Back to Accounts",
+      groupId: "overview",
+    }
+  }
 
   const hub = getAccountsModuleEntryHref(page.groupId)
-  const normalized = (pathname || "").replace(/\/$/, "") || pathname
   const hubNorm = hub.replace(/\/$/, "")
-  if (normalized === hubNorm) return null
+  if (normalized === hubNorm) {
+    return {
+      href: ACCOUNTS_BASE,
+      label: "Back to Accounts",
+      groupId: page.groupId,
+    }
+  }
 
   const group = getAccountsGroup(page.groupId)
   const label = ACCOUNTS_SIDEBAR_LABELS[page.groupId] || group?.label || "module"

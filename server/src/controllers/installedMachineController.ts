@@ -328,13 +328,24 @@ export class InstalledMachineController {
         });
       }
 
-      // Validate product type - only machines allowed
-      const product = await StockProduct.findOne({
-        _id: productId,
-        org_id,
-      }).lean();
-      if (product && product.productType && product.productType === "service") {
-        // productType in StockProduct is "physical" | "service". We allow "physical" but also check incoming item productType later in invoice.
+      // Manual entries use synthetic ids like "manual-<timestamp>" — skip ObjectId lookup
+      const productIdStr = String(productId).trim();
+      const isObjectId = /^[0-9a-fA-F]{24}$/.test(productIdStr);
+      if (isObjectId) {
+        const product = await StockProduct.findOne({
+          _id: productIdStr,
+          org_id,
+        }).lean();
+        if (
+          product &&
+          product.productType &&
+          product.productType === "service"
+        ) {
+          return res.status(400).json({
+            success: false,
+            message: "Services cannot be logged as installed machines",
+          });
+        }
       }
 
       const allowedStatus = [
@@ -355,7 +366,7 @@ export class InstalledMachineController {
           location: client.location,
           contactPerson: client.contactPerson,
         },
-        productId,
+        productId: productIdStr,
         productName,
         category,
         serialNumber,

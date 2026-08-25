@@ -2344,7 +2344,7 @@ export default function InstalledMachinesPage() {
 
       toast({
         title: "Machine added",
-        description: `${product.name} registered at ${clientPayload.name}.`,
+        description: `${manualAddForm.machineName.trim()} registered at ${clientPayload.name}.`,
       });
       setShowManualAddDialog(false);
       setManualAddForm(EMPTY_MANUAL_ADD_FORM);

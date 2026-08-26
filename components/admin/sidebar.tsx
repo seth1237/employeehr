@@ -222,6 +222,12 @@ const adminMenuItems = [
     section: "CLIENTS",
   },
   {
+    label: "Exhibitions & Events",
+    icon: Calendar,
+    href: "/admin/clients/exhibitions",
+    section: "CLIENTS",
+  },
+  {
     label: "Planner",
     icon: Calendar,
     href: "/admin/field-management/planner",

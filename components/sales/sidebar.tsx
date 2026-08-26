@@ -15,6 +15,7 @@ import {
   Palmtree,
   Video,
   X,
+  MapPin,
 } from "lucide-react"
 import { logout } from "@/lib/auth"
 
@@ -26,6 +27,7 @@ const navigation = [
   { name: "Meetings", href: "/sales/meetings", icon: Video },
   { name: "Clients", href: "/sales/clients", icon: BookUser },
   { name: "Quotes", href: "/sales/quotes", icon: FileText },
+  { name: "Exhibitions", href: "/sales/exhibitions", icon: MapPin },
   { name: "Leave", href: "/sales/leave", icon: Palmtree },
   { name: "History", href: "/sales/history", icon: History },
 ]

@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils"
 import {
   LayoutDashboard,
   ClipboardList,
+  ClipboardCheck,
   FileText,
   History,
   BookUser,
@@ -19,8 +20,9 @@ import { logout } from "@/lib/auth"
 
 const navigation = [
   { name: "Today", href: "/sales", icon: LayoutDashboard },
-  { name: "Planner", href: "/sales/planner", icon: CalendarDays },
-  { name: "Visit reports", href: "/sales/report", icon: ClipboardList },
+  { name: "Planner", href: "/sales/planner", icon: ClipboardList },
+  { name: "Calendar", href: "/sales/calendar", icon: CalendarDays },
+  { name: "Visit reports", href: "/sales/report", icon: ClipboardCheck },
   { name: "Meetings", href: "/sales/meetings", icon: Video },
   { name: "Clients", href: "/sales/clients", icon: BookUser },
   { name: "Quotes", href: "/sales/quotes", icon: FileText },

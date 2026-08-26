@@ -5,6 +5,7 @@ import Job from "../models/Job"
 import JobAnalytics from "../models/JobAnalytics"
 import { User } from "../models/User"
 import EmailService from "../services/email.service"
+import { AuthService } from "../services/authService"
 import path from "path"
 import fs from "fs"
 
@@ -258,6 +259,177 @@ export class JobApplicationController {
       res.status(500).json({
         success: false,
         message: "Failed to update application status",
+        error: error instanceof Error ? error.message : "Unknown error",
+      })
+    }
+  }
+
+  /** Hire applicant → create employee user + optional onboarding checklist */
+  static async hireApplicant(req: AuthenticatedRequest, res: Response) {
+    try {
+      if (!req.org_id || !req.user) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Organization context required" })
+      }
+
+      const { applicationId } = req.params
+      const {
+        department,
+        position,
+        role,
+        manager_id,
+        salary,
+        dateOfJoining,
+        employmentType,
+        createOnboarding,
+        probationDays,
+      } = req.body || {}
+
+      const application = await JobApplication.findOne({
+        _id: applicationId,
+        org_id: req.org_id,
+      })
+      if (!application) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Application not found" })
+      }
+
+      const email = String(application.applicant_email || "")
+        .trim()
+        .toLowerCase()
+      if (!email) {
+        return res.status(400).json({
+          success: false,
+          message: "Application has no applicant email",
+        })
+      }
+
+      const nameParts = String(application.applicant_name || "New Hire")
+        .trim()
+        .split(/\s+/)
+      const firstName = nameParts[0] || "New"
+      const lastName = nameParts.slice(1).join(" ") || "Hire"
+
+      const job = await Job.findById(application.job_id)
+      const inviterUser = await User.findById(req.user.userId)
+      const inviterName = inviterUser
+        ? `${inviterUser.firstName} ${inviterUser.lastName}`
+        : "HR"
+
+      const startDate = dateOfJoining ? new Date(dateOfJoining) : new Date()
+      const probationEnd =
+        Number(probationDays) > 0
+          ? new Date(
+              startDate.getTime() +
+                Number(probationDays) * 24 * 60 * 60 * 1000,
+            )
+          : new Date(startDate.getTime() + 90 * 24 * 60 * 60 * 1000)
+
+      const createResult = await AuthService.createEmployee(req.org_id, {
+        email,
+        firstName,
+        lastName,
+        role: role || "employee",
+        department: department || undefined,
+        position: position || job?.title || undefined,
+        manager_id: manager_id || undefined,
+        salary: salary != null ? Number(salary) : undefined,
+        dateOfJoining: startDate,
+        employmentType: employmentType || "permanent",
+        probationEndDate: probationEnd,
+        status: "preboarding",
+        phone: (application as any).applicant_phone || undefined,
+        inviter_name: inviterName,
+      } as any)
+
+      if (!createResult.success || !createResult.data) {
+        // If user already exists, still mark hired and link
+        if (
+          String(createResult.message || "")
+            .toLowerCase()
+            .includes("already exists")
+        ) {
+          const existing = await User.findOne({
+            org_id: req.org_id,
+            email,
+          }).select("-password")
+          application.status = "hired"
+          application.timeline.push({
+            status: "hired",
+            changed_by: req.user.userId,
+            changed_at: new Date(),
+            comment: `Linked to existing employee ${email}`,
+          })
+          await application.save()
+          return res.status(200).json({
+            success: true,
+            message: "Applicant already has an account; marked hired",
+            data: { application, user: existing },
+          })
+        }
+        return res.status(400).json(createResult)
+      }
+
+      application.status = "hired"
+      application.timeline.push({
+        status: "hired",
+        changed_by: req.user.userId,
+        changed_at: new Date(),
+        comment: `Hired as employee ${createResult.data._id}`,
+      })
+      await application.save()
+
+      let onboarding = null
+      if (createOnboarding !== false) {
+        const { OnboardingChecklist, DEFAULT_ONBOARDING_TASKS } = await import(
+          "../models/OnboardingChecklist"
+        )
+        onboarding = await OnboardingChecklist.findOneAndUpdate(
+          { org_id: req.org_id, user_id: String(createResult.data._id) },
+          {
+            $setOnInsert: {
+              org_id: req.org_id,
+              user_id: String(createResult.data._id),
+              templateName: "Hire from application",
+              status: "in_progress",
+              startDate,
+              dueDate: new Date(startDate.getTime() + 14 * 24 * 60 * 60 * 1000),
+              tasks: DEFAULT_ONBOARDING_TASKS.map((t) => ({
+                ...t,
+                completed: false,
+              })),
+              createdBy: req.user.userId,
+            },
+          },
+          { upsert: true, new: true },
+        )
+      }
+
+      EmailService.sendStatusUpdateEmail(
+        application.applicant_email,
+        application.applicant_name,
+        job?.title || "Position",
+        "hired",
+        "Congratulations — you have been hired. Check your email for login details.",
+        req.org_id,
+      ).catch(console.error)
+
+      return res.status(201).json({
+        success: true,
+        message: "Applicant hired and employee account created",
+        data: {
+          application,
+          user: createResult.data,
+          onboarding,
+        },
+      })
+    } catch (error) {
+      console.error("Hire applicant error:", error)
+      return res.status(500).json({
+        success: false,
+        message: "Failed to hire applicant",
         error: error instanceof Error ? error.message : "Unknown error",
       })
     }

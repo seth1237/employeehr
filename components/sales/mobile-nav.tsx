@@ -7,10 +7,10 @@ import { cn } from "@/lib/utils"
 
 const ITEMS = [
   { href: "/sales", label: "Today", icon: LayoutDashboard, exact: true },
-  { href: "/sales/planner", label: "Plan", icon: CalendarDays },
-  { href: "/sales/report", label: "Report", icon: ClipboardList },
+  { href: "/sales/calendar", label: "Calendar", icon: CalendarDays },
+  { href: "/sales/planner", label: "Plan", icon: ClipboardList },
+  { href: "/sales/report", label: "Report", icon: FileText },
   { href: "/sales/clients", label: "Clients", icon: BookUser },
-  { href: "/sales/quotes", label: "Quotes", icon: FileText },
 ]
 
 export function SalesMobileNav() {

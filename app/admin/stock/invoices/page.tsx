@@ -74,7 +74,7 @@ interface Invoice {
     balanceRemaining: number;
     paymentCount?: number;
   };
-  status: "pending_approval" | "issued" | "paid" | "cancelled";
+  status: "draft" | "pending_approval" | "issued" | "paid" | "cancelled";
   createdBy: string;
   createdAt: string;
   dispatch?: {
@@ -705,11 +705,12 @@ export default function InvoicesPage() {
         acc.amount += Number(invoice.subTotal || 0);
         if (invoice.status === "paid") acc.paid += 1;
         if (invoice.status === "issued") acc.issued += 1;
+        if (invoice.status === "draft") acc.draft += 1;
         if (invoice.status === "pending_approval") acc.pending += 1;
         if (invoice.status === "cancelled") acc.cancelled += 1;
         return acc;
       },
-      { total: 0, amount: 0, paid: 0, issued: 0, pending: 0, cancelled: 0 },
+      { total: 0, amount: 0, paid: 0, issued: 0, draft: 0, pending: 0, cancelled: 0 },
     );
   }, [invoices]);
 
@@ -732,13 +733,6 @@ export default function InvoicesPage() {
       { readyToDispatch: 0, active: 0, completed: 0, delivered: 0 },
     );
   }, [invoices]);
-
-  const activeUserCount = useMemo(
-    () =>
-      new Set(invoices.map((invoice) => invoice.createdBy).filter(Boolean))
-        .size,
-    [invoices],
-  );
 
   const totalPages = Math.max(1, Math.ceil(sortedInvoices.length / pageSize));
 
@@ -908,7 +902,7 @@ export default function InvoicesPage() {
 
         <div className="mt-3 grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px] xl:items-start">
           <div className="space-y-3">
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
               <Card className="shadow-sm">
                 <CardContent className="p-3">
                   <div className="text-xs uppercase tracking-wide text-muted-foreground">
@@ -942,6 +936,16 @@ export default function InvoicesPage() {
               <Card className="shadow-sm">
                 <CardContent className="p-3">
                   <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Drafts
+                  </div>
+                  <div className="mt-1 text-xl font-semibold text-slate-700">
+                    {totals.draft}
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="shadow-sm">
+                <CardContent className="p-3">
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground">
                     Pending approval
                   </div>
                   <div className="mt-1 text-xl font-semibold text-amber-700">
@@ -952,20 +956,10 @@ export default function InvoicesPage() {
               <Card className="shadow-sm">
                 <CardContent className="p-3">
                   <div className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Issued
+                    Posted
                   </div>
                   <div className="mt-1 text-xl font-semibold">
                     {totals.issued}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="shadow-sm">
-                <CardContent className="p-3">
-                  <div className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Active sellers
-                  </div>
-                  <div className="mt-1 text-xl font-semibold">
-                    {activeUserCount}
                   </div>
                 </CardContent>
               </Card>
@@ -1262,7 +1256,9 @@ export default function InvoicesPage() {
                                 </span>
                               )}
                             </div>
-                            {!isDelivered && invoice.status !== "pending_approval" && (
+                            {!isDelivered &&
+                              invoice.status !== "pending_approval" &&
+                              invoice.status !== "draft" && (
                               <div className="flex flex-wrap items-center gap-2">
                                 <Select
                                   value={
@@ -1326,6 +1322,17 @@ export default function InvoicesPage() {
                         </td>
                         <td className="px-3 py-2 align-top">
                           <div className="flex flex-col gap-2">
+                            {invoice.status === "draft" && canApprove ? (
+                              <Button
+                                size="sm"
+                                className="h-8 w-full"
+                                asChild
+                              >
+                                <Link href={`/admin/stock/invoices/${invoice._id}`}>
+                                  Review & post
+                                </Link>
+                              </Button>
+                            ) : null}
                             {invoice.status === "pending_approval" && canApprove ? (
                               <div className="flex gap-1">
                                 <Button
@@ -1444,7 +1451,13 @@ export default function InvoicesPage() {
                           Open
                         </Link>
                       </Button>
-                      {invoice.status === "pending_approval" && canApprove ? (
+                      {invoice.status === "draft" && canApprove ? (
+                        <Button asChild size="sm" className="flex-1">
+                          <Link href={`/admin/stock/invoices/${invoice._id}`}>
+                            Review & post
+                          </Link>
+                        </Button>
+                      ) : invoice.status === "pending_approval" && canApprove ? (
                         <>
                           <Button
                             size="sm"
@@ -1464,13 +1477,13 @@ export default function InvoicesPage() {
                             Reject
                           </Button>
                         </>
-                      ) : (
+                      ) : invoice.status === "issued" || invoice.status === "paid" ? (
                         <Button asChild size="sm" variant="outline" className="flex-1">
                           <Link href={`/admin/stock/dispatch/${invoice._id}`}>
                             Dispatch
                           </Link>
                         </Button>
-                      )}
+                      ) : null}
                     </div>
                   </MobileCard>
                 );

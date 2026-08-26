@@ -24,6 +24,13 @@ router.get("/:applicationId", roleMiddleware("company_admin", "hr"), JobApplicat
 // Update application status
 router.patch("/:applicationId/status", roleMiddleware("company_admin", "hr"), JobApplicationController.updateApplicationStatus)
 
+// Hire applicant → employee + onboarding
+router.post(
+  "/:applicationId/hire",
+  roleMiddleware("company_admin", "hr", "admin"),
+  JobApplicationController.hireApplicant,
+)
+
 // Add note to application
 router.post("/:applicationId/notes", roleMiddleware("company_admin", "hr"), JobApplicationController.addNote)
 

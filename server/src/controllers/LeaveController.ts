@@ -200,4 +200,149 @@ export class LeaveController {
             return
         }
     }
+
+    /** Org-wide leave balances for the current (or queried) year */
+    static async getAllBalances(req: AuthenticatedRequest, res: Response) {
+        try {
+            const org_id = req.user?.org_id || req.org_id
+            if (!org_id) {
+                return res.status(401).json({ success: false, message: "Unauthorized" })
+            }
+            const year = Number(req.query.year) || new Date().getFullYear()
+            const users = await User.find({
+                org_id,
+                status: { $nin: ["terminated", "alumni", "inactive"] },
+            }).select("firstName lastName email department position status")
+
+            const balances = await LeaveBalance.find({ org_id, year })
+            const balanceMap = new Map(
+                balances.map((b) => [String(b.user_id), b.toObject()]),
+            )
+
+            const data = []
+            for (const user of users) {
+                let balance = balanceMap.get(String(user._id))
+                if (!balance) {
+                    const created = await LeaveBalance.create({
+                        org_id,
+                        user_id: String(user._id),
+                        year,
+                    })
+                    balance = created.toObject()
+                }
+                data.push({
+                    user: {
+                        _id: String(user._id),
+                        firstName: user.firstName,
+                        lastName: user.lastName,
+                        email: user.email,
+                        department: user.department,
+                        position: user.position,
+                        status: user.status,
+                    },
+                    balance,
+                })
+            }
+
+            return res.status(200).json({ success: true, data, year })
+        } catch (error: any) {
+            return res.status(500).json({ success: false, message: error.message })
+        }
+    }
+
+    /** Adjust leave entitlements / used days for an employee */
+    static async updateBalance(req: AuthenticatedRequest, res: Response) {
+        try {
+            const org_id = req.user?.org_id || req.org_id
+            if (!org_id) {
+                return res.status(401).json({ success: false, message: "Unauthorized" })
+            }
+            const { userId } = req.params
+            const year = Number(req.body?.year) || new Date().getFullYear()
+            const allowed = [
+                "annual_total",
+                "annual_used",
+                "sick_total",
+                "sick_used",
+                "maternity_total",
+                "maternity_used",
+                "paternity_total",
+                "paternity_used",
+                "unpaid_used",
+            ] as const
+
+            let balance = await LeaveBalance.findOne({
+                org_id,
+                user_id: userId,
+                year,
+            })
+            if (!balance) {
+                balance = await LeaveBalance.create({
+                    org_id,
+                    user_id: userId,
+                    year,
+                })
+            }
+
+            for (const key of allowed) {
+                if (req.body?.[key] !== undefined && req.body?.[key] !== null) {
+                    const value = Number(req.body[key])
+                    if (Number.isFinite(value) && value >= 0) {
+                        ;(balance as any)[key] = value
+                    }
+                }
+            }
+            await balance.save()
+
+            return res.status(200).json({ success: true, data: balance })
+        } catch (error: any) {
+            return res.status(500).json({ success: false, message: error.message })
+        }
+    }
+
+    /** Pending + approved leave for team calendar view */
+    static async getCalendar(req: AuthenticatedRequest, res: Response) {
+        try {
+            const org_id = req.user?.org_id || req.org_id
+            if (!org_id) {
+                return res.status(401).json({ success: false, message: "Unauthorized" })
+            }
+            const from = req.query.from
+                ? new Date(String(req.query.from))
+                : new Date(new Date().getFullYear(), 0, 1)
+            const to = req.query.to
+                ? new Date(String(req.query.to))
+                : new Date(new Date().getFullYear(), 11, 31)
+
+            const requests = await LeaveRequest.find({
+                org_id,
+                status: { $in: ["pending", "approved"] },
+                startDate: { $lte: to },
+                endDate: { $gte: from },
+            }).sort({ startDate: 1 })
+
+            const userIds = [...new Set(requests.map((r) => r.user_id))]
+            const users = await User.find({ _id: { $in: userIds } }).select(
+                "firstName lastName department",
+            )
+            const userMap = new Map(
+                users.map((u) => [String(u._id), u]),
+            )
+
+            const data = requests.map((r) => {
+                const user = userMap.get(String(r.user_id))
+                return {
+                    ...r.toObject(),
+                    userName: user
+                        ? `${user.firstName} ${user.lastName}`
+                        : "Unknown",
+                    department: user?.department || "",
+                }
+            })
+
+            return res.status(200).json({ success: true, data })
+        } catch (error: any) {
+            return res.status(500).json({ success: false, message: error.message })
+        }
+    }
 }

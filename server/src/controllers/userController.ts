@@ -93,8 +93,11 @@ export class UserController {
 
       const { userId } = req.params
 
-      // Users can only update themselves unless they're admin or company admin
-      if (userId !== req.user.userId && !["company_admin", "admin"].includes(req.user.role)) {
+      // Users can only update themselves unless they're admin, company admin, or HR
+      if (
+        userId !== req.user.userId &&
+        !["company_admin", "admin", "hr", "super_admin"].includes(req.user.role)
+      ) {
         return res.status(403).json({
           success: false,
           message: "Unauthorized to update this user",

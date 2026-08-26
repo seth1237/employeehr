@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils"
 
 const STATUS_LABELS: Record<string, string> = {
   paid: "Paid",
-  issued: "Issued",
+  issued: "Posted",
   cancelled: "Cancelled",
   draft: "Draft",
   pending_approval: "Pending approval",

@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { Plus, ChevronLeft, Download, AlertCircle, CheckCircle, Trash2, Edit2, Search, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -66,7 +67,11 @@ const REASON_OPTIONS = {
 
 export default function CreditNotesPage() {
   const { toast } = useToast()
-  const [view, setView] = useState<"list" | "create" | "edit">("list")
+  const searchParams = useSearchParams()
+  const preselectInvoiceId = searchParams.get("invoiceId")
+  const [view, setView] = useState<"list" | "create" | "edit">(
+    preselectInvoiceId ? "create" : "list",
+  )
   const [creditNotes, setCreditNotes] = useState<CreditNote[]>([])
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [loading, setLoading] = useState(true)
@@ -154,6 +159,15 @@ export default function CreditNotesPage() {
       fetchInvoices()
     }
   }, [view])
+
+  useEffect(() => {
+    if (!preselectInvoiceId || invoices.length === 0) return
+    const match = invoices.find((inv) => inv._id === preselectInvoiceId)
+    if (match && selectedInvoice?._id !== match._id) {
+      setSelectedInvoice(match)
+      setSelectedItems({})
+    }
+  }, [preselectInvoiceId, invoices, selectedInvoice?._id])
 
   // Reset form
   const resetForm = () => {

@@ -23,7 +23,28 @@ export interface IUser {
   promptStampOnPdf?: boolean;
   phone?: string;
   dateOfJoining?: Date;
-  status: "active" | "inactive" | "pending";
+  status:
+    | "active"
+    | "inactive"
+    | "pending"
+    | "preboarding"
+    | "probation"
+    | "notice"
+    | "terminated"
+    | "alumni";
+  employmentType?: "permanent" | "contract" | "intern" | "casual" | "consultant";
+  grade?: string;
+  workLocation?: string;
+  probationEndDate?: Date;
+  noticePeriodDays?: number;
+  lastWorkingDay?: Date;
+  offboardingReason?: string;
+  emergencyContact?: {
+    name?: string;
+    phone?: string;
+    relationship?: string;
+  };
+  employmentNotes?: string;
   salary?: number;
   sha_id?: string;
   kra_pin?: string;

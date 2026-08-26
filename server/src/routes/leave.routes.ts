@@ -18,5 +18,20 @@ router.put("/request/:id", roleMiddleware("manager", "company_admin", "hr"), Lea
 
 // Admin/HR routes
 router.get("/admin/all", roleMiddleware("company_admin", "hr"), LeaveController.getAllRequests)
+router.get(
+  "/admin/balances",
+  roleMiddleware("company_admin", "hr", "admin"),
+  LeaveController.getAllBalances,
+)
+router.put(
+  "/admin/balances/:userId",
+  roleMiddleware("company_admin", "hr", "admin"),
+  LeaveController.updateBalance,
+)
+router.get(
+  "/admin/calendar",
+  roleMiddleware("company_admin", "hr", "admin", "manager"),
+  LeaveController.getCalendar,
+)
 
 export default router

@@ -130,5 +130,16 @@ export const updateUserSchema = z.object({
   position: z.string().optional(),
   manager_id: z.string().optional(),
   phone: z.string().optional(),
-  status: z.enum(["active", "inactive", "pending"]).optional(),
+  status: z
+    .enum([
+      "active",
+      "inactive",
+      "pending",
+      "preboarding",
+      "probation",
+      "notice",
+      "terminated",
+      "alumni",
+    ])
+    .optional(),
 }).passthrough()

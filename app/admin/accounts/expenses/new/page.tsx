@@ -270,7 +270,7 @@ export default function AddExpensePage() {
             <Input
               id="expense-proof"
               type="file"
-              accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.xls,.xlsx,.txt,.csv"
+              accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,.txt,.csv"
               onChange={(e) => setProofFile(e.target.files?.[0] || null)}
             />
             <p className="mt-1 text-xs text-muted-foreground">

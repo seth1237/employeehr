@@ -526,9 +526,22 @@ export class AuthService {
         password: hashedPassword,
         role: data.role || "employee",
         department: data.department,
+        position: data.position || (data as any).position,
         manager_id: data.manager_id,
         employee_id: (data as any).employee_id || undefined,
-        status: "active",
+        phone: data.phone,
+        dateOfJoining: data.dateOfJoining
+          ? new Date(data.dateOfJoining as any)
+          : undefined,
+        employmentType: data.employmentType,
+        grade: data.grade,
+        workLocation: data.workLocation,
+        probationEndDate: data.probationEndDate
+          ? new Date(data.probationEndDate as any)
+          : undefined,
+        noticePeriodDays: data.noticePeriodDays,
+        salary: data.salary,
+        status: data.status || "active",
       })
 
       const savedUser = await user.save()

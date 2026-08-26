@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Search, Star, Eye, MessageSquare, Filter, Mail, Download } from 'lucide-react';
+import { Search, Star, Eye, MessageSquare, Filter, Mail, Download, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -38,6 +38,7 @@ export default function ApplicationsPage() {
   const [jobFilter, setJobFilter] = useState('all');
   const [selectedApp, setSelectedApp] = useState<Application | null>(null);
   const [noteText, setNoteText] = useState('');
+  const [hiringId, setHiringId] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -129,6 +130,43 @@ export default function ApplicationsPage() {
         description: 'Failed to add note',
         variant: 'destructive',
       });
+    }
+  };
+
+  const canHire = (status: string) =>
+    ['shortlisted', 'reviewing', 'pending'].includes(status) && status !== 'hired';
+
+  const hireApplicant = async (appId: string) => {
+    if (!confirm('Hire this candidate? This will create an employee record and can start onboarding.')) {
+      return;
+    }
+    setHiringId(appId);
+    try {
+      const response = await fetch(`${API_URL}/api/job-applications/${appId}/hire`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({}),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || 'Hire failed');
+      }
+      toast({
+        title: 'Candidate hired',
+        description: 'Next: open /admin/employees and /admin/onboarding to finish setup.',
+      });
+      fetchApplications(true);
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to hire candidate',
+        variant: 'destructive',
+      });
+    } finally {
+      setHiringId(null);
     }
   };
 
@@ -280,6 +318,16 @@ export default function ApplicationsPage() {
                   </div>
 
                   <div className="flex gap-2">
+                    {canHire(app.status) && (
+                      <Button
+                        size="sm"
+                        onClick={() => hireApplicant(app._id)}
+                        disabled={hiringId === app._id}
+                      >
+                        <UserPlus size={16} className="mr-1" />
+                        {hiringId === app._id ? 'Hiring…' : 'Hire'}
+                      </Button>
+                    )}
                     <Dialog>
                       <DialogTrigger asChild>
                         <Button size="sm" variant="outline" onClick={() => setSelectedApp(app)}>

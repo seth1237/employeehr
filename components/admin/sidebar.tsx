@@ -102,6 +102,18 @@ const adminMenuItems = [
 
   // Employee Management
   {
+    label: "Employees",
+    icon: Users,
+    href: "/admin/employees",
+    section: "EMPLOYEE MANAGEMENT",
+  },
+  {
+    label: "Onboarding",
+    icon: UserCheck,
+    href: "/admin/onboarding",
+    section: "EMPLOYEE MANAGEMENT",
+  },
+  {
     label: "Leave Requests",
     icon: Calendar,
     href: "/admin/leave",

@@ -399,7 +399,8 @@ export default function SalesDashboardPage() {
           <h2 className="text-sm font-semibold text-slate-900">Quick actions</h2>
           <div className="grid gap-2">
             <SalesQuickAction href="/sales/report" icon={ClipboardList} title="Record visit" description="File a visit from today’s planner" color={branding.primaryColor} />
-            <SalesQuickAction href="/sales/planner" icon={CalendarDays} title="Plan visit" description="Build tomorrow’s route" color={branding.primaryColor} />
+            <SalesQuickAction href="/sales/calendar" icon={CalendarDays} title="Calendar" description="View activity and schedule visits" color={branding.primaryColor} />
+            <SalesQuickAction href="/sales/planner" icon={ClipboardList} title="Plan visit" description="Build tomorrow’s route" color={branding.primaryColor} />
             <SalesQuickAction href="/sales/meetings" icon={Video} title="Meetings" description="Join invites and past calls" color={branding.primaryColor} />
             <SalesQuickAction href="/sales/quotes" icon={FileText} title="Create quotation" description="Quote from live stock" color={branding.primaryColor} />
             <SalesQuickAction href="/sales/clients" icon={BookUser} title="New client / call" description="Search the book or log a call" color={branding.primaryColor} />

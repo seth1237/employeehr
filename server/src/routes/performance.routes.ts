@@ -7,13 +7,13 @@ const router = Router()
 
 router.use(authMiddleware, orgMiddleware, tenantIsolation)
 
+// Get all performances for organization (must be before /:userId/:period)
+router.get("/", PerformanceController.getOrganizationPerformances)
+
 // Get performance by period
 router.get("/:userId/:period", PerformanceController.getPerformanceByPeriod)
 
 // Update KPI score
 router.put("/:performanceId/kpi/:kpiId", PerformanceController.updateKPIScore)
-
-// Get all performances for organization
-router.get("/", PerformanceController.getOrganizationPerformances)
 
 export default router

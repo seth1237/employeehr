@@ -677,6 +677,62 @@ export const leaveApi = {
   ) => client.put<any>(`/api/leave/request/${id}`, data),
 
   getAllRequests: () => client.get<any[]>("/api/leave/admin/all"),
+
+  getAllBalances: (year?: number) =>
+    client.get<any[]>(
+      `/api/leave/admin/balances${year ? `?year=${year}` : ""}`,
+    ),
+
+  updateBalance: (
+    userId: string,
+    data: Record<string, number | string | undefined>,
+  ) => client.put<any>(`/api/leave/admin/balances/${userId}`, data),
+
+  getCalendar: (from?: string, to?: string) => {
+    const params = new URLSearchParams();
+    if (from) params.set("from", from);
+    if (to) params.set("to", to);
+    const q = params.toString();
+    return client.get<any[]>(`/api/leave/admin/calendar${q ? `?${q}` : ""}`);
+  },
+};
+
+export const onboardingApi = {
+  list: () => client.get<any[]>("/api/onboarding"),
+  getByUser: (userId: string) =>
+    client.get<any>(`/api/onboarding/user/${userId}`),
+  create: (data: {
+    userId: string;
+    templateName?: string;
+    startDate?: string;
+  }) => client.post<any>("/api/onboarding", data),
+  toggleTask: (
+    checklistId: string,
+    taskId: string,
+    data?: { completed?: boolean; notes?: string },
+  ) =>
+    client.patch<any>(
+      `/api/onboarding/${checklistId}/tasks/${taskId}`,
+      data || {},
+    ),
+};
+
+export const jobApplicationsApi = {
+  hire: (
+    applicationId: string,
+    data?: {
+      department?: string;
+      position?: string;
+      role?: string;
+      manager_id?: string;
+      salary?: number;
+      dateOfJoining?: string;
+      employmentType?: string;
+      createOnboarding?: boolean;
+      probationDays?: number;
+    },
+  ) =>
+    client.post<any>(`/api/job-applications/${applicationId}/hire`, data || {}),
 };
 
 export const payrollApi = {
@@ -975,6 +1031,21 @@ export const stockApi = {
     client.post<any>(`/api/stock/quotations/${quotationId}/convert`, data || {}),
   approveInvoice: (invoiceId: string) =>
     client.post<any>(`/api/stock/invoices/${invoiceId}/approve`, {}),
+  postInvoice: (invoiceId: string) =>
+    client.post<any>(`/api/stock/invoices/${invoiceId}/post`, {}),
+  updateDraftInvoice: (
+    invoiceId: string,
+    data: {
+      client?: { name?: string; number?: string; location?: string }
+      items?: Array<Record<string, unknown>>
+      transportCost?: number
+      transportNote?: string
+    },
+  ) => client.put<any>(`/api/stock/invoices/${invoiceId}`, data),
+  cancelInvoice: (invoiceId: string) =>
+    client.post<any>(`/api/stock/invoices/${invoiceId}/cancel`, {}),
+  reviseInvoice: (invoiceId: string) =>
+    client.post<any>(`/api/stock/invoices/${invoiceId}/revise`, {}),
   rejectInvoice: (invoiceId: string) =>
     client.post<any>(`/api/stock/invoices/${invoiceId}/reject`, {}),
   addQuotationFollowUp: (
@@ -1770,6 +1841,8 @@ export const api = {
   company: companyApi,
   holidays: holidayApi,
   leave: leaveApi,
+  onboarding: onboardingApi,
+  jobApplications: jobApplicationsApi,
   payroll: payrollApi,
   meetings: meetingsApi,
   stock: stockApi,

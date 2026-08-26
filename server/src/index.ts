@@ -44,6 +44,7 @@ import leaveRoutes from "./routes/leave.routes"
 import payrollRoutes from "./routes/payroll.routes"
 import meetingRoutes from "./routes/meeting.routes"
 import setupRoutes from "./routes/setup.routes"
+import onboardingRoutes from "./routes/onboarding.routes"
 import anonymousFeedbackRoutes from "./routes/anonymousFeedback.routes"
 import feedbackSurveyRoutes from "./routes/feedbackSurvey.routes"
 import stockRoutes from "./routes/stock.routes"
@@ -177,6 +178,7 @@ app.use("/api/reports", reportRoutes)
 app.use("/api/company", companyRoutes)
 app.use("/api/holidays", holidayRoutes)
 app.use("/api/leave", leaveRoutes)
+app.use("/api/onboarding", onboardingRoutes)
 app.use("/api/payroll", payrollRoutes)
 app.use("/api/meetings", meetingRoutes)
 app.use("/api/setup", setupRoutes)

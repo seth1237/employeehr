@@ -27,6 +27,8 @@ export const ADMIN_NAV_ITEMS: AdminNavItem[] = [
   { label: "Applications", href: "/admin/applications", section: "RECRUITMENT" },
   { label: "Job Analytics", href: "/admin/analytics", section: "RECRUITMENT" },
   { label: "Communications", href: "/admin/communications", section: "RECRUITMENT" },
+  { label: "Employees", href: "/admin/employees", section: "EMPLOYEE MANAGEMENT", keywords: ["directory", "staff", "people"] },
+  { label: "Onboarding", href: "/admin/onboarding", section: "EMPLOYEE MANAGEMENT", keywords: ["checklist", "new hire"] },
   { label: "Leave Requests", href: "/admin/leave", section: "EMPLOYEE MANAGEMENT" },
   { label: "Attendance Tracker", href: "/admin/attendance", section: "EMPLOYEE MANAGEMENT" },
   { label: "Allocations", href: "/admin/allocations", section: "EMPLOYEE MANAGEMENT" },

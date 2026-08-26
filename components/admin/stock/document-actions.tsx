@@ -198,10 +198,10 @@ export function StockDocumentActions({
       const invoiceId = (res.data as { _id?: string })?._id
       const invoiceNumber = (res.data as { invoiceNumber?: string })?.invoiceNumber
       toast({
-        title: "Invoice created",
+        title: "Draft invoice created",
         description: invoiceNumber
-          ? `${invoiceNumber} is ready — open it to preview, print, or email.`
-          : "Quotation converted successfully.",
+          ? `${invoiceNumber} is a draft — review, edit if needed, then post to lock it.`
+          : "Quotation converted to a draft invoice.",
       })
       setTransportOpen(false)
       if (invoiceId) {

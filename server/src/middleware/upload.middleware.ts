@@ -84,13 +84,26 @@ const applicationFileFilter = (req: any, file: Express.Multer.File, cb: multer.F
     "image/png",
     "image/jpeg",
     "image/jpg",
+    "image/webp",
   ]
-  const allowedExtensions = [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".txt", ".csv", ".png", ".jpg", ".jpeg"]
+  const allowedExtensions = [
+    ".pdf",
+    ".doc",
+    ".docx",
+    ".xls",
+    ".xlsx",
+    ".txt",
+    ".csv",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".webp",
+  ]
 
   if (allowedMimes.includes(file.mimetype) || isAllowedExtension(file.originalname, allowedExtensions)) {
     cb(null, true)
   } else {
-    cb(new Error("File type not allowed. Supported: PDF, DOC, DOCX, XLS, XLSX, TXT, PNG, JPG, CSV"))
+    cb(new Error("File type not allowed. Supported: PDF, DOC, DOCX, XLS, XLSX, TXT, PNG, JPG, WEBP, CSV"))
   }
 }
 
@@ -140,26 +153,9 @@ export const uploadProductImage = multer({
 
 export const uploadVisitPhoto = uploadProductImage
 
-// Expense proofs (invoice / receipt / transaction proof)
-const expenseProofsDir = path.join(__dirname, "../../uploads/expense-proofs")
-if (!fs.existsSync(expenseProofsDir)) {
-  fs.mkdirSync(expenseProofsDir, { recursive: true })
-}
-
-const expenseProofStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, expenseProofsDir)
-  },
-  filename: (_req, file, cb) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9)
-    const ext = path.extname(file.originalname)
-    const name = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9]/g, "_")
-    cb(null, `${name}-${uniqueSuffix}${ext}`)
-  },
-})
-
+// Expense proofs — memory so images can be compressed to WebP before save
 export const uploadExpenseProof = multer({
-  storage: expenseProofStorage,
+  storage: multer.memoryStorage(),
   fileFilter: applicationFileFilter,
   limits: { fileSize: 10 * 1024 * 1024 },
 })

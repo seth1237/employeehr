@@ -45,7 +45,10 @@ export interface IStockInvoice {
     postedBy?: string
     responseMessage?: string
   }
-  status: "pending_approval" | "issued" | "paid" | "cancelled"
+  status: "draft" | "pending_approval" | "issued" | "paid" | "cancelled"
+  revisedFromInvoiceId?: string
+  postedAt?: Date
+  postedBy?: string
   dispatch?: {
     status: "not_assigned" | "assigned" | "packing" | "packed" | "dispatched" | "delivered"
     assignedToUserId?: string
@@ -143,9 +146,12 @@ const stockInvoiceSchema = new Schema<IStockInvoice>(
     },
     status: {
       type: String,
-      enum: ["pending_approval", "issued", "paid", "cancelled"],
+      enum: ["draft", "pending_approval", "issued", "paid", "cancelled"],
       default: "issued",
     },
+    revisedFromInvoiceId: { type: String, index: true },
+    postedAt: { type: Date },
+    postedBy: { type: String },
     dispatch: {
       status: {
         type: String,

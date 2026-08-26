@@ -3775,22 +3775,57 @@ export class StockController {
       if (!org_id)
         return res.status(401).json({ success: false, message: "Unauthorized" });
 
-      if (!req.file) {
+      if (!req.file?.buffer) {
         return res.status(400).json({
           success: false,
           message: "Proof file is required (PDF, image, or document)",
         });
       }
 
-      const proofUrl = `/uploads/expense-proofs/${req.file.filename}`;
+      const uploadDir = path.join(process.cwd(), "uploads/expense-proofs");
+      await fs.mkdir(uploadDir, { recursive: true });
+
+      const originalName = req.file.originalname || "proof";
+      const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+      const baseName = path
+        .basename(originalName, path.extname(originalName))
+        .replace(/[^a-zA-Z0-9]/g, "_");
+      const mime = String(req.file.mimetype || "").toLowerCase();
+      const isImage =
+        mime.startsWith("image/") ||
+        /\.(png|jpe?g|webp|gif|bmp|tiff?)$/i.test(originalName);
+
+      let filename: string;
+      let mimeType: string;
+      let size: number;
+
+      if (isImage) {
+        filename = `${baseName}-${uniqueSuffix}.webp`;
+        const outPath = path.join(uploadDir, filename);
+        const webpBuffer = await sharp(req.file.buffer)
+          .rotate()
+          .webp({ quality: 80 })
+          .toBuffer();
+        await fs.writeFile(outPath, webpBuffer);
+        mimeType = "image/webp";
+        size = webpBuffer.length;
+      } else {
+        const ext = path.extname(originalName) || "";
+        filename = `${baseName}-${uniqueSuffix}${ext}`;
+        await fs.writeFile(path.join(uploadDir, filename), req.file.buffer);
+        mimeType = req.file.mimetype || "application/octet-stream";
+        size = req.file.buffer.length;
+      }
+
+      const proofUrl = `/uploads/expense-proofs/${filename}`;
       return res.status(201).json({
         success: true,
         data: {
           proofUrl,
-          proofFileName: req.file.filename,
-          proofOriginalName: req.file.originalname,
-          mimeType: req.file.mimetype,
-          size: req.file.size,
+          proofFileName: filename,
+          proofOriginalName: originalName,
+          mimeType,
+          size,
         },
       });
     } catch (error: any) {
@@ -6086,53 +6121,12 @@ export class StockController {
         });
       }
 
-      const quotationProductIds = [
-        ...new Set(
-          quotation.items.map((item: any) => item.productId).filter(Boolean),
-        ),
-      ];
-      const allProducts = await StockProduct.find({
-        _id: { $in: quotationProductIds },
-        org_id,
-      });
-      const productMap = new Map(
-        allProducts.map((product) => [String(product._id), product]),
-      );
-
-      const stockManagedItems = quotation.items.filter((item: any) => {
+      // Admin convert creates a DRAFT invoice — stock is deducted only on Post
+      const stockManagedItemsPreview = quotation.items.filter((item: any) => {
         if (item.isOutsourced) return false;
         if (item.productType === "service") return false;
-        const product = productMap.get(String(item.productId));
-        return product ? product.productType !== "service" : true;
+        return true;
       });
-
-      const stockManagedProductIds = [
-        ...new Set(
-          stockManagedItems.map((item) => item.productId).filter(Boolean),
-        ),
-      ];
-      const stockManagedProducts = allProducts.filter((product) =>
-        stockManagedProductIds.includes(String(product._id)),
-      );
-      const stockManagedProductMap = new Map(
-        stockManagedProducts.map((product) => [String(product._id), product]),
-      );
-
-      for (const item of stockManagedItems) {
-        const product = stockManagedProductMap.get(String(item.productId));
-        if (!product) {
-          return res.status(400).json({
-            success: false,
-            message: `Product not found for quotation item: ${item.productName}`,
-          });
-        }
-        if (product.currentQuantity < item.quantity) {
-          return res.status(400).json({
-            success: false,
-            message: `Insufficient stock for ${item.productName}. Available: ${product.currentQuantity}, requested: ${item.quantity}`,
-          });
-        }
-      }
 
       const invoice = await StockInvoice.create({
         org_id,
@@ -6149,108 +6143,29 @@ export class StockController {
             Number(quotation.subTotal || 0) + Number((quotation as any).taxTotal || 0),
         ),
         ...transportFields,
-        status: "issued",
+        status: "draft",
         dispatch: {
           status: "not_assigned",
-          packingItems: stockManagedItems.map((item) => ({
+          packingItems: stockManagedItemsPreview.map((item: any) => ({
             productId: item.productId,
             productName: item.productName,
             requiredQuantity: item.quantity,
             packedQuantity: 0,
           })),
-          packingCompleted: stockManagedItems.length === 0,
+          packingCompleted: stockManagedItemsPreview.length === 0,
           inquiries: [],
         },
         createdBy: String(quotation.createdBy || actorId),
       });
 
-      await StockController.recordInvoiceTransportExpense(org_id, actorId, {
-        invoiceId: String(invoice._id),
-        invoiceNumber: invoice.invoiceNumber,
-        quotationId: String(quotation._id),
-        quotationNumber: quotation.quotationNumber,
-        clientName: quotation.client?.name || "Client",
-        transportCost,
-        transportNote,
-      });
-
-      const receiptNumber = generateDocumentNumber("RCP");
-
-      const salesToCreate = stockManagedItems.map((item) => {
-        const product = stockManagedProductMap.get(String(item.productId))!;
-        product.currentQuantity -= item.quantity;
-
-        return {
-          org_id,
-          productId: item.productId,
-          quantitySold: item.quantity,
-          soldPrice: item.unitPrice,
-          soldBy: actorId,
-          buyerName: quotation.client.name,
-          buyerNumber: quotation.client.number,
-          buyerLocation: quotation.client.location,
-          isWalkInClient: false,
-          isSalesCompany: false,
-          quotationId: String(quotation._id),
-          invoiceId: String(invoice._id),
-          receiptNumber,
-          remainingQuantity: product.currentQuantity,
-        };
-      });
-
-      if (stockManagedProducts.length > 0) {
-        await Promise.all(
-          stockManagedProducts.map((product) => product.save()),
-        );
-        await Promise.all(
-          stockManagedProducts.map((product) =>
-            sendLowStockAlert(product, org_id),
-          ),
-        );
-      }
-
-      if (salesToCreate.length > 0) {
-        await StockSale.insertMany(salesToCreate);
-      }
-
-      // Auto-create InstalledMachine records for physical products (machines)
-      const machineRecordsToCreate = quotation.items
-        .filter((item: any) => {
-          if (item.isOutsourced) return false;
-          if (item.productType === "service") return false;
-          const product = productMap.get(String(item.productId));
-          return product ? product.productType !== "service" : true;
-        })
-        .map((item: any) => ({
-          org_id,
-          client: {
-            name: quotation.client.name,
-            number: quotation.client.number,
-            location: quotation.client.location,
-            contactPerson: quotation.client.contactPerson,
-          },
-          productId: String(item.productId),
-          productName: item.productName,
-          category:
-            productMap.get(String(item.productId))?.category ||
-            item.productType ||
-            "Uncategorized",
-          invoiceId: String(invoice._id),
-          quotationId: String(quotation._id),
-          status: "installation_pending",
-          isActive: true,
-          createdBy: actorId,
-        }));
-
-      if (machineRecordsToCreate.length > 0) {
-        await InstalledMachine.insertMany(machineRecordsToCreate);
-      }
-
-      quotation.status = "converted";
       quotation.convertedInvoiceId = String(invoice._id);
       await quotation.save();
 
-      return res.status(201).json({ success: true, data: invoice });
+      return res.status(201).json({
+        success: true,
+        message: "Draft invoice created — review and post when ready",
+        data: invoice,
+      });
     } catch (error: any) {
       return res.status(500).json({
         success: false,
@@ -6270,7 +6185,7 @@ export class StockController {
       if (!isAdminRole(role)) {
         return res.status(403).json({
           success: false,
-          message: "Only admin/HR can approve invoices",
+          message: "Only admin/HR can post invoices",
         });
       }
 
@@ -6278,10 +6193,10 @@ export class StockController {
       if (!invoice) {
         return res.status(404).json({ success: false, message: "Invoice not found" });
       }
-      if (invoice.status !== "pending_approval") {
+      if (invoice.status !== "pending_approval" && invoice.status !== "draft") {
         return res.status(400).json({
           success: false,
-          message: "Only pending invoices can be approved",
+          message: "Only draft or pending invoices can be posted",
         });
       }
 
@@ -6289,7 +6204,11 @@ export class StockController {
         ? await StockQuotation.findOne({ _id: invoice.quotationId, org_id })
         : null;
 
-      const sourceItems = quotation?.items || invoice.items;
+      // Prefer invoice line items (may have been edited while draft)
+      const sourceItems =
+        invoice.items?.length > 0
+          ? invoice.items
+          : quotation?.items || [];
       const quotationProductIds = [
         ...new Set(sourceItems.map((item: any) => item.productId).filter(Boolean)),
       ];
@@ -6390,7 +6309,19 @@ export class StockController {
         await InstalledMachine.insertMany(machineRecordsToCreate);
       }
 
+      await StockController.recordInvoiceTransportExpense(org_id, actorId, {
+        invoiceId: String(invoice._id),
+        invoiceNumber: invoice.invoiceNumber,
+        quotationId: invoice.quotationId,
+        quotationNumber: invoice.quotationNumber,
+        clientName: invoice.client?.name || "Client",
+        transportCost: Number((invoice as any).transportCost || 0),
+        transportNote: (invoice as any).transportNote,
+      });
+
       invoice.status = "issued";
+      (invoice as any).postedAt = new Date();
+      (invoice as any).postedBy = String(actorId);
       const dispatch = invoice.dispatch || ({} as NonNullable<typeof invoice.dispatch>);
       dispatch.status = dispatch.status || "not_assigned";
       dispatch.packingItems = stockManagedItems.map((item: any) => ({
@@ -6411,11 +6342,279 @@ export class StockController {
         await quotation.save();
       }
 
-      return res.status(200).json({ success: true, message: "Invoice approved", data: invoice });
+      return res.status(200).json({
+        success: true,
+        message: "Invoice posted",
+        data: invoice,
+      });
     } catch (error: any) {
       return res.status(500).json({
         success: false,
-        message: error.message || "Failed to approve invoice",
+        message: error.message || "Failed to post invoice",
+      });
+    }
+  }
+
+  static async postInvoice(req: AuthenticatedRequest, res: Response) {
+    return StockController.approveInvoice(req, res);
+  }
+
+  static async updateDraftInvoice(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id;
+      const actorId = req.user?.userId;
+      const role = req.user?.role;
+      if (!org_id || !actorId) {
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+      }
+      if (!isAdminRole(role)) {
+        return res.status(403).json({
+          success: false,
+          message: "Only admin/HR can edit draft invoices",
+        });
+      }
+
+      const invoice = await StockInvoice.findOne({
+        _id: req.params.invoiceId,
+        org_id,
+      });
+      if (!invoice) {
+        return res.status(404).json({ success: false, message: "Invoice not found" });
+      }
+      if (invoice.status !== "draft") {
+        return res.status(400).json({
+          success: false,
+          message: "Only draft invoices can be edited. Create a revision to change a posted invoice.",
+        });
+      }
+
+      const { client, items, transportCost, transportNote } = req.body || {};
+
+      if (client && typeof client === "object") {
+        invoice.client = {
+          name: String(client.name || invoice.client.name).trim(),
+          number: String(client.number || invoice.client.number).trim(),
+          location: String(client.location || invoice.client.location).trim(),
+        };
+      }
+
+      if (Array.isArray(items) && items.length > 0) {
+        const normalizedItems = await buildQuotationItems(org_id, items);
+        const totals = summarizeDocumentTotals(normalizedItems);
+        invoice.items = normalizedItems as any;
+        invoice.subTotal = totals.subTotal;
+        invoice.taxTotal = totals.taxTotal;
+        invoice.grandTotal = totals.grandTotal;
+
+        const stockManagedItems = normalizedItems.filter(
+          (i: any) => !i.isOutsourced && i.productType !== "service",
+        );
+        const dispatch = invoice.dispatch || ({} as NonNullable<typeof invoice.dispatch>);
+        dispatch.packingItems = stockManagedItems.map((item: any) => ({
+          productId: item.productId,
+          productName: item.productName,
+          requiredQuantity: item.quantity,
+          packedQuantity: 0,
+        }));
+        dispatch.packingCompleted = stockManagedItems.length === 0;
+        invoice.dispatch = dispatch;
+        invoice.markModified("dispatch");
+        invoice.markModified("items");
+      }
+
+      if (transportCost !== undefined) {
+        const cost = Number(transportCost || 0);
+        (invoice as any).transportCost =
+          Number.isFinite(cost) && cost > 0 ? Number(cost.toFixed(2)) : undefined;
+      }
+      if (transportNote !== undefined) {
+        const note = String(transportNote || "").trim();
+        (invoice as any).transportNote = note || undefined;
+      }
+
+      await invoice.save();
+      return res.status(200).json({ success: true, data: invoice });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to update draft invoice",
+      });
+    }
+  }
+
+  static async cancelInvoice(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id;
+      const actorId = req.user?.userId;
+      const role = req.user?.role;
+      if (!org_id || !actorId) {
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+      }
+      if (!isAdminRole(role)) {
+        return res.status(403).json({
+          success: false,
+          message: "Only admin/HR can cancel invoices",
+        });
+      }
+
+      const invoice = await StockInvoice.findOne({
+        _id: req.params.invoiceId,
+        org_id,
+      });
+      if (!invoice) {
+        return res.status(404).json({ success: false, message: "Invoice not found" });
+      }
+      if (invoice.status === "cancelled") {
+        return res.status(400).json({
+          success: false,
+          message: "Invoice is already cancelled",
+        });
+      }
+      if (invoice.status === "paid") {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Paid invoices cannot be cancelled. Create a credit note instead.",
+        });
+      }
+
+      const invoiceId = String(invoice._id);
+
+      if (invoice.status === "issued") {
+        const payments = await StockInvoicePayment.find({
+          org_id,
+          invoiceId,
+        }).lean();
+        const paidAmount = payments.reduce(
+          (sum, p: any) => sum + Number(p.amount || 0),
+          0,
+        );
+        if (paidAmount > 0) {
+          return res.status(400).json({
+            success: false,
+            message:
+              "This invoice has payments recorded. Create a credit note instead of cancelling.",
+          });
+        }
+
+        const sales = await StockSale.find({ org_id, invoiceId });
+        for (const sale of sales) {
+          const product = await StockProduct.findOne({
+            _id: sale.productId,
+            org_id,
+          });
+          if (product) {
+            product.currentQuantity += Number(sale.quantitySold || 0);
+            await product.save();
+          }
+        }
+        if (sales.length > 0) {
+          await StockSale.deleteMany({ org_id, invoiceId });
+        }
+        await InstalledMachine.updateMany(
+          { org_id, invoiceId },
+          { $set: { isActive: false, status: "ended" } },
+        );
+      }
+
+      invoice.status = "cancelled";
+      await invoice.save();
+
+      if (
+        invoice.quotationId &&
+        (invoice.status === "cancelled")
+      ) {
+        await StockQuotation.updateOne(
+          {
+            _id: invoice.quotationId,
+            org_id,
+            convertedInvoiceId: invoiceId,
+          },
+          { $unset: { convertedInvoiceId: 1 } },
+        );
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: "Invoice cancelled",
+        data: invoice,
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to cancel invoice",
+      });
+    }
+  }
+
+  static async reviseInvoice(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id;
+      const actorId = req.user?.userId;
+      const role = req.user?.role;
+      if (!org_id || !actorId) {
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+      }
+      if (!isAdminRole(role)) {
+        return res.status(403).json({
+          success: false,
+          message: "Only admin/HR can create invoice revisions",
+        });
+      }
+
+      const source = await StockInvoice.findOne({
+        _id: req.params.invoiceId,
+        org_id,
+      }).lean();
+      if (!source) {
+        return res.status(404).json({ success: false, message: "Invoice not found" });
+      }
+      if (source.status !== "issued" && source.status !== "cancelled") {
+        return res.status(400).json({
+          success: false,
+          message: "Revisions can only be created from posted or cancelled invoices",
+        });
+      }
+
+      const revision = await StockInvoice.create({
+        org_id,
+        invoiceNumber: generateDocumentNumber("INV"),
+        deliveryNoteNumber: generateDocumentNumber("DN"),
+        quotationId: source.quotationId,
+        quotationNumber: source.quotationNumber,
+        client: source.client,
+        clientProfileId: source.clientProfileId,
+        items: source.items,
+        subTotal: source.subTotal,
+        taxTotal: source.taxTotal,
+        grandTotal: source.grandTotal,
+        transportCost: (source as any).transportCost,
+        transportNote: (source as any).transportNote,
+        revisedFromInvoiceId: String(source._id),
+        status: "draft",
+        dispatch: {
+          status: "not_assigned",
+          packingItems: (source.dispatch?.packingItems || []).map((item: any) => ({
+            productId: item.productId,
+            productName: item.productName,
+            requiredQuantity: item.requiredQuantity,
+            packedQuantity: 0,
+          })),
+          packingCompleted: !(source.dispatch?.packingItems || []).length,
+          inquiries: [],
+        },
+        createdBy: String(actorId),
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: "Revision draft created",
+        data: revision,
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to create revision",
       });
     }
   }
@@ -6438,10 +6637,10 @@ export class StockController {
       if (!invoice) {
         return res.status(404).json({ success: false, message: "Invoice not found" });
       }
-      if (invoice.status !== "pending_approval") {
+      if (invoice.status !== "pending_approval" && invoice.status !== "draft") {
         return res.status(400).json({
           success: false,
-          message: "Only pending invoices can be rejected",
+          message: "Only draft or pending invoices can be rejected",
         });
       }
 
@@ -6455,7 +6654,7 @@ export class StockController {
         );
       }
 
-      return res.status(200).json({ success: true, message: "Invoice sent back", data: invoice });
+      return res.status(200).json({ success: true, message: "Invoice cancelled", data: invoice });
     } catch (error: any) {
       return res.status(500).json({
         success: false,
@@ -6770,11 +6969,31 @@ export class StockController {
           completedAt: quotation?.createdAt || null,
         },
         {
-          key: "invoice",
-          label: "Invoice",
-          status: invoice.status === "cancelled" ? "cancelled" : "completed",
+          key: "draft",
+          label: "Invoice draft",
+          status:
+            invoice.status === "draft" || invoice.status === "pending_approval"
+              ? "in_progress"
+              : invoice.status === "cancelled" && !(invoice as any).postedAt
+                ? "cancelled"
+                : "completed",
           reference: invoice.invoiceNumber,
           completedAt: invoice.createdAt || null,
+        },
+        {
+          key: "posted",
+          label: "Posted invoice",
+          status:
+            invoice.status === "issued" || invoice.status === "paid"
+              ? "completed"
+              : invoice.status === "cancelled" && (invoice as any).postedAt
+                ? "cancelled"
+                : "pending",
+          reference:
+            invoice.status === "issued" || invoice.status === "paid"
+              ? invoice.invoiceNumber
+              : null,
+          completedAt: (invoice as any).postedAt || null,
         },
         {
           key: "payment",

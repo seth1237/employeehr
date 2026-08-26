@@ -120,6 +120,10 @@ router.get("/global-search", StockController.globalSearch);
 router.get("/invoices", StockController.getInvoices);
 router.post("/invoices/create", StockController.createInvoiceFromItems);
 router.post("/invoices/:invoiceId/approve", StockController.approveInvoice);
+router.post("/invoices/:invoiceId/post", StockController.postInvoice);
+router.put("/invoices/:invoiceId", StockController.updateDraftInvoice);
+router.post("/invoices/:invoiceId/cancel", StockController.cancelInvoice);
+router.post("/invoices/:invoiceId/revise", StockController.reviseInvoice);
 router.post("/invoices/:invoiceId/reject", StockController.rejectInvoice);
 router.get(
   "/invoices/:invoiceId/lifecycle",

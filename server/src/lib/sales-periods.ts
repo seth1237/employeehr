@@ -65,5 +65,10 @@ export function invoiceAmount(invoice: { grandTotal?: number; subTotal?: number 
 }
 
 export function isGeneratedInvoice(invoice: { status?: string }) {
-  return invoice.status === "issued" || invoice.status === "paid" || invoice.status === "pending_approval"
+  return (
+    invoice.status === "draft" ||
+    invoice.status === "issued" ||
+    invoice.status === "paid" ||
+    invoice.status === "pending_approval"
+  )
 }

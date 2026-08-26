@@ -106,19 +106,25 @@ export class PayrollController {
                     ? [employee.firstName, employee.lastName].filter(Boolean).join(" ")
                     : String(payroll.user_id)
 
-                await postPayrollToCashbook({
-                    orgId: String(payroll.org_id),
-                    userId: String(actorId),
-                    payroll: {
-                        _id: payroll._id,
-                        net_pay: payroll.net_pay,
-                        month: payroll.month,
-                        user_id: String(payroll.user_id),
-                        status: payroll.status,
-                        paymentMethod: "bank",
-                        employeeName,
-                    },
-                })
+                try {
+                    await postPayrollToCashbook({
+                        orgId: String(payroll.org_id),
+                        userId: String(actorId),
+                        payroll: {
+                            _id: payroll._id,
+                            net_pay: payroll.net_pay,
+                            month: payroll.month,
+                            user_id: String(payroll.user_id),
+                            status: payroll.status,
+                            paymentMethod: "bank",
+                            employeeName,
+                        },
+                    })
+                } catch (cashbookError: any) {
+                    payroll.status = previousStatus
+                    await payroll.save()
+                    throw cashbookError
+                }
             }
 
             res.status(200).json({ success: true, data: payroll })

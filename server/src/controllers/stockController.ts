@@ -3455,6 +3455,14 @@ export class StockController {
     const cost = Number(params.transportCost || 0);
     if (!Number.isFinite(cost) || cost <= 0) return null;
 
+    // Idempotent: convert → later post must not double-count transport
+    const existing = await StockExpense.findOne({
+      org_id,
+      invoiceId: params.invoiceId,
+      source: "invoice_transport",
+    });
+    if (existing) return existing;
+
     let category = await StockExpenseCategory.findOne({
       org_id,
       name: "Transport",
@@ -3754,11 +3762,16 @@ export class StockController {
         requestedByName: req.user?.email || String(actorId),
       });
 
-      await postExpenseToCashbook({
-        orgId: org_id,
-        userId: String(actorId),
-        expense,
-      });
+      try {
+        await postExpenseToCashbook({
+          orgId: org_id,
+          userId: String(actorId),
+          expense,
+        });
+      } catch (cashbookError: any) {
+        await StockExpense.deleteOne({ _id: expense._id, org_id });
+        throw cashbookError;
+      }
 
       return res.status(201).json({ success: true, data: expense });
     } catch (error: any) {
@@ -4950,15 +4963,34 @@ export class StockController {
         org_id,
         invoiceId: String(invoice._id),
       }).lean();
-      const alreadyPaid = existingPayments.reduce(
-        (sum, payment) => sum + Number(payment.amount || 0),
+
+      const [debitNotes, creditNotes] = await Promise.all([
+        DebitNote.find({
+          org_id,
+          invoiceId: String(invoice._id),
+          status: "issued",
+        }).lean(),
+        CreditNote.find({
+          org_id,
+          invoiceId: String(invoice._id),
+          status: { $in: ["issued", "applied"] },
+        }).lean(),
+      ]);
+      const debitTotal = debitNotes.reduce(
+        (sum, note) => sum + Number(note.subTotal || 0),
         0,
       );
-      const subTotal = Number(invoice.subTotal || 0);
-      const balanceRemaining = Math.max(
+      const creditTotal = creditNotes.reduce(
+        (sum, note) => sum + Number(note.subTotal || 0),
         0,
-        Number((subTotal - alreadyPaid).toFixed(2)),
       );
+
+      const paymentSummary = buildInvoicePaymentSummary(
+        invoice,
+        existingPayments,
+        { debitTotal, creditTotal },
+      );
+      const balanceRemaining = Number(paymentSummary.balanceRemaining || 0);
 
       if (numericAmount > balanceRemaining) {
         return res.status(400).json({
@@ -4986,14 +5018,23 @@ export class StockController {
         receivedBy: String(actorId),
       });
 
-      await postInvoicePaymentToCashbook({
-        orgId: org_id,
-        userId: String(actorId),
-        payment,
-      });
+      try {
+        await postInvoicePaymentToCashbook({
+          orgId: org_id,
+          userId: String(actorId),
+          payment,
+        });
+      } catch (cashbookError: any) {
+        await StockInvoicePayment.deleteOne({ _id: payment._id, org_id });
+        throw cashbookError;
+      }
 
-      const newPaidAmount = alreadyPaid + Number(payment.amount || 0);
-      const isFullyPaid = newPaidAmount >= subTotal;
+      const afterSummary = buildInvoicePaymentSummary(
+        invoice,
+        [...existingPayments, payment],
+        { debitTotal, creditTotal },
+      );
+      const isFullyPaid = Number(afterSummary.balanceRemaining || 0) <= 0;
       await StockInvoice.updateOne(
         { _id: invoiceId, org_id },
         { $set: { status: isFullyPaid ? "paid" : "issued" } },
@@ -6094,15 +6135,7 @@ export class StockController {
           createdBy: String(quotation.createdBy || actorId),
         });
 
-        await StockController.recordInvoiceTransportExpense(org_id, actorId, {
-          invoiceId: String(invoice._id),
-          invoiceNumber: invoice.invoiceNumber,
-          quotationId: String(quotation._id),
-          quotationNumber: quotation.quotationNumber,
-          clientName: quotation.client?.name || "Client",
-          transportCost,
-          transportNote,
-        });
+        // Transport expense is recorded only when the invoice is posted (approveInvoice)
 
         quotation.convertedInvoiceId = String(invoice._id);
         await quotation.save();
@@ -6189,22 +6222,54 @@ export class StockController {
         });
       }
 
-      const invoice = await StockInvoice.findOne({ _id: req.params.invoiceId, org_id });
-      if (!invoice) {
+      const invoiceId = req.params.invoiceId;
+      const invoiceBefore = await StockInvoice.findOne({
+        _id: invoiceId,
+        org_id,
+      });
+      if (!invoiceBefore) {
         return res.status(404).json({ success: false, message: "Invoice not found" });
       }
-      if (invoice.status !== "pending_approval" && invoice.status !== "draft") {
+      if (
+        invoiceBefore.status !== "pending_approval" &&
+        invoiceBefore.status !== "draft"
+      ) {
         return res.status(400).json({
           success: false,
           message: "Only draft or pending invoices can be posted",
         });
       }
 
+      const previousStatus = invoiceBefore.status;
+
+      // Claim post lock so concurrent posts cannot double-decrement stock
+      const claimed = await StockInvoice.findOneAndUpdate(
+        {
+          _id: invoiceId,
+          org_id,
+          status: { $in: ["draft", "pending_approval"] },
+        },
+        {
+          $set: {
+            status: "issued",
+            postedAt: new Date(),
+            postedBy: String(actorId),
+          },
+        },
+        { new: true },
+      );
+      if (!claimed) {
+        return res.status(409).json({
+          success: false,
+          message: "Invoice was already posted or is no longer postable",
+        });
+      }
+
+      const invoice = claimed;
       const quotation = invoice.quotationId
         ? await StockQuotation.findOne({ _id: invoice.quotationId, org_id })
         : null;
 
-      // Prefer invoice line items (may have been edited while draft)
       const sourceItems =
         invoice.items?.length > 0
           ? invoice.items
@@ -6216,40 +6281,83 @@ export class StockController {
         _id: { $in: quotationProductIds },
         org_id,
       });
-      const productMap = new Map(allProducts.map((product) => [String(product._id), product]));
+      const productMap = new Map(
+        allProducts.map((product) => [String(product._id), product]),
+      );
       const stockManagedItems = sourceItems.filter((item: any) => {
         if (item.isOutsourced) return false;
         if (item.productType === "service") return false;
         const product = productMap.get(String(item.productId));
         return product ? product.productType !== "service" : true;
       });
-      const stockManagedProductMap = new Map(
-        allProducts
-          .filter((product) => stockManagedItems.some((item) => String(item.productId) === String(product._id)))
-          .map((product) => [String(product._id), product]),
-      );
 
-      for (const item of stockManagedItems) {
-        const product = stockManagedProductMap.get(String(item.productId));
-        if (!product) {
-          return res.status(400).json({
-            success: false,
-            message: `Product not found for invoice item: ${item.productName}`,
+      const decremented: Array<{ productId: string; quantity: number }> = [];
+      const remainingByProduct = new Map<string, number>();
+      let createdSaleIds: string[] = [];
+      let createdMachineIds: string[] = [];
+
+      const rollbackPost = async () => {
+        if (createdSaleIds.length > 0) {
+          await StockSale.deleteMany({
+            _id: { $in: createdSaleIds },
+            org_id,
           });
         }
-        if (product.currentQuantity < item.quantity) {
-          return res.status(400).json({
-            success: false,
-            message: `Insufficient stock for ${item.productName}. Available: ${product.currentQuantity}, requested: ${item.quantity}`,
+        if (createdMachineIds.length > 0) {
+          await InstalledMachine.deleteMany({
+            _id: { $in: createdMachineIds },
+            org_id,
           });
         }
-      }
+        await Promise.all(
+          decremented.map((entry) =>
+            StockProduct.updateOne(
+              { _id: entry.productId, org_id },
+              { $inc: { currentQuantity: entry.quantity } },
+            ),
+          ),
+        );
+        await StockInvoice.updateOne(
+          { _id: invoiceId, org_id },
+          {
+            $set: { status: previousStatus },
+            $unset: { postedAt: 1, postedBy: 1 },
+          },
+        );
+      };
 
-      const receiptNumber = generateDocumentNumber("RCP");
-      const salesToCreate = stockManagedItems.map((item: any) => {
-        const product = stockManagedProductMap.get(String(item.productId))!;
-        product.currentQuantity -= item.quantity;
-        return {
+      try {
+        for (const item of stockManagedItems) {
+          const qty = Number(item.quantity || 0);
+          if (!Number.isFinite(qty) || qty <= 0) {
+            throw new Error(`Invalid quantity for ${item.productName}`);
+          }
+          const updated = await StockProduct.findOneAndUpdate(
+            {
+              _id: item.productId,
+              org_id,
+              currentQuantity: { $gte: qty },
+            },
+            { $inc: { currentQuantity: -qty } },
+            { new: true },
+          );
+          if (!updated) {
+            throw new Error(
+              `Insufficient stock for ${item.productName} (or product missing)`,
+            );
+          }
+          decremented.push({
+            productId: String(item.productId),
+            quantity: qty,
+          });
+          remainingByProduct.set(
+            String(item.productId),
+            Number(updated.currentQuantity || 0),
+          );
+        }
+
+        const receiptNumber = generateDocumentNumber("RCP");
+        const salesToCreate = stockManagedItems.map((item: any) => ({
           org_id,
           productId: item.productId,
           quantitySold: item.quantity,
@@ -6263,90 +6371,95 @@ export class StockController {
           quotationId: invoice.quotationId,
           invoiceId: String(invoice._id),
           receiptNumber,
-          remainingQuantity: product.currentQuantity,
-        };
-      });
-
-      if (stockManagedProductMap.size > 0) {
-        await Promise.all(Array.from(stockManagedProductMap.values()).map((product) => product.save()));
-        await Promise.all(
-          Array.from(stockManagedProductMap.values()).map((product) => sendLowStockAlert(product, org_id)),
-        );
-      }
-      if (salesToCreate.length > 0) {
-        await StockSale.insertMany(salesToCreate);
-      }
-
-      const machineRecordsToCreate = sourceItems
-        .filter((item: any) => {
-          if (item.isOutsourced) return false;
-          if (item.productType === "service") return false;
-          const product = productMap.get(String(item.productId));
-          return product ? product.productType !== "service" : true;
-        })
-        .map((item: any) => ({
-          org_id,
-          client: {
-            name: invoice.client.name,
-            number: invoice.client.number,
-            location: invoice.client.location,
-            contactPerson: quotation?.client?.contactPerson,
-          },
-          productId: String(item.productId),
-          productName: item.productName,
-          category:
-            productMap.get(String(item.productId))?.category ||
-            item.productType ||
-            "Uncategorized",
-          invoiceId: String(invoice._id),
-          quotationId: invoice.quotationId,
-          status: "installation_pending",
-          isActive: true,
-          createdBy: actorId,
+          remainingQuantity:
+            remainingByProduct.get(String(item.productId)) ?? 0,
         }));
 
-      if (machineRecordsToCreate.length > 0) {
-        await InstalledMachine.insertMany(machineRecordsToCreate);
+        if (salesToCreate.length > 0) {
+          const sales = await StockSale.insertMany(salesToCreate);
+          createdSaleIds = sales.map((sale) => String(sale._id));
+        }
+
+        for (const productId of decremented.map((d) => d.productId)) {
+          const product = await StockProduct.findOne({ _id: productId, org_id });
+          if (product) await sendLowStockAlert(product, org_id);
+        }
+
+        const machineRecordsToCreate = sourceItems
+          .filter((item: any) => {
+            if (item.isOutsourced) return false;
+            if (item.productType === "service") return false;
+            const product = productMap.get(String(item.productId));
+            return product ? product.productType !== "service" : true;
+          })
+          .map((item: any) => ({
+            org_id,
+            client: {
+              name: invoice.client.name,
+              number: invoice.client.number,
+              location: invoice.client.location,
+              contactPerson: quotation?.client?.contactPerson,
+            },
+            productId: String(item.productId),
+            productName: item.productName,
+            category:
+              productMap.get(String(item.productId))?.category ||
+              item.productType ||
+              "Uncategorized",
+            invoiceId: String(invoice._id),
+            quotationId: invoice.quotationId,
+            status: "installation_pending",
+            isActive: true,
+            createdBy: actorId,
+          }));
+
+        if (machineRecordsToCreate.length > 0) {
+          const machines = await InstalledMachine.insertMany(
+            machineRecordsToCreate,
+          );
+          createdMachineIds = machines.map((m) => String(m._id));
+        }
+
+        await StockController.recordInvoiceTransportExpense(org_id, actorId, {
+          invoiceId: String(invoice._id),
+          invoiceNumber: invoice.invoiceNumber,
+          quotationId: invoice.quotationId,
+          quotationNumber: invoice.quotationNumber,
+          clientName: invoice.client?.name || "Client",
+          transportCost: Number((invoice as any).transportCost || 0),
+          transportNote: (invoice as any).transportNote,
+        });
+
+        const dispatch =
+          invoice.dispatch || ({} as NonNullable<typeof invoice.dispatch>);
+        dispatch.status = dispatch.status || "not_assigned";
+        dispatch.packingItems = stockManagedItems.map((item: any) => ({
+          productId: item.productId,
+          productName: item.productName,
+          requiredQuantity: item.quantity,
+          packedQuantity: 0,
+        }));
+        dispatch.packingCompleted = stockManagedItems.length === 0;
+        dispatch.inquiries = dispatch.inquiries || [];
+        invoice.dispatch = dispatch;
+        invoice.markModified("dispatch");
+        await invoice.save();
+
+        if (quotation) {
+          quotation.status = "converted";
+          quotation.convertedInvoiceId = String(invoice._id);
+          await quotation.save();
+        }
+
+        return res.status(200).json({
+          success: true,
+          message: "Invoice posted",
+          data: invoice,
+        });
+      } catch (postError: any) {
+        await rollbackPost();
+        throw postError;
       }
-
-      await StockController.recordInvoiceTransportExpense(org_id, actorId, {
-        invoiceId: String(invoice._id),
-        invoiceNumber: invoice.invoiceNumber,
-        quotationId: invoice.quotationId,
-        quotationNumber: invoice.quotationNumber,
-        clientName: invoice.client?.name || "Client",
-        transportCost: Number((invoice as any).transportCost || 0),
-        transportNote: (invoice as any).transportNote,
-      });
-
-      invoice.status = "issued";
-      (invoice as any).postedAt = new Date();
-      (invoice as any).postedBy = String(actorId);
-      const dispatch = invoice.dispatch || ({} as NonNullable<typeof invoice.dispatch>);
-      dispatch.status = dispatch.status || "not_assigned";
-      dispatch.packingItems = stockManagedItems.map((item: any) => ({
-        productId: item.productId,
-        productName: item.productName,
-        requiredQuantity: item.quantity,
-        packedQuantity: 0,
-      }));
-      dispatch.packingCompleted = stockManagedItems.length === 0;
-      dispatch.inquiries = dispatch.inquiries || [];
-      invoice.dispatch = dispatch;
-      invoice.markModified("dispatch");
-      await invoice.save();
-
-      if (quotation) {
-        quotation.status = "converted";
-        quotation.convertedInvoiceId = String(invoice._id);
-        await quotation.save();
-      }
-
-      return res.status(200).json({
-        success: true,
-        message: "Invoice posted",
-        data: invoice,
-      });
     } catch (error: any) {
       return res.status(500).json({
         success: false,
@@ -6823,21 +6936,33 @@ export class StockController {
       // If payNow requested, create a payment record marking invoice fully paid
       let payment: any = null;
       if (payNow) {
+        const settleAmount = Number(
+          (grandTotal ?? subTotal ?? 0).toFixed(2),
+        );
         payment = await StockInvoicePayment.create({
           org_id,
           invoiceId: String(invoice._id),
           invoiceNumber: String(invoice.invoiceNumber),
-          amount: Number(subTotal.toFixed(2)),
+          amount: settleAmount,
           paymentMethod: "cash",
           reference: receiptNumber,
           paidAt: new Date(),
           receivedBy: String(actorId),
         });
-        await postInvoicePaymentToCashbook({
-          orgId: org_id,
-          userId: String(actorId),
-          payment,
-        });
+        try {
+          await postInvoicePaymentToCashbook({
+            orgId: org_id,
+            userId: String(actorId),
+            payment,
+          });
+        } catch (cashbookError: any) {
+          await StockInvoicePayment.deleteOne({ _id: payment._id, org_id });
+          await StockInvoice.updateOne(
+            { _id: invoice._id, org_id },
+            { $set: { status: "issued" } },
+          );
+          throw cashbookError;
+        }
         await StockInvoice.updateOne(
           { _id: invoice._id, org_id },
           { $set: { status: "paid" } },
@@ -9858,6 +9983,75 @@ export class StockController {
           success: false,
           message: "Stock check is already closed",
         });
+      }
+
+      const countedItems = Array.isArray(stockCheck.countedItems)
+        ? stockCheck.countedItems
+        : [];
+      const warehouseId = String(
+        stockCheck.warehouseId || stockCheck.warehouse?._id || "",
+      );
+
+      for (const item of countedItems) {
+        if (item.countedQuantity == null) continue;
+        const productId = String(item.productId || "");
+        if (!productId) continue;
+
+        const expected = Number(
+          item.expectedQuantity ?? item.warehouseQuantity ?? 0,
+        );
+        const counted = Number(item.countedQuantity);
+        if (!Number.isFinite(counted)) continue;
+
+        const variance =
+          item.variance != null && Number.isFinite(Number(item.variance))
+            ? Number(item.variance)
+            : counted - expected;
+        if (!Number.isFinite(variance) || variance === 0) continue;
+
+        const updated = await StockProduct.findOneAndUpdate(
+          { _id: productId, org_id },
+          { $inc: { currentQuantity: variance } },
+          { new: true },
+        );
+        if (!updated) continue;
+
+        if (Number(updated.currentQuantity || 0) < 0) {
+          await StockProduct.updateOne(
+            { _id: productId, org_id },
+            { $set: { currentQuantity: 0 } },
+          );
+        }
+
+        // Align warehouse branch quantities when this check is warehouse-scoped
+        if (warehouseId) {
+          const locations = await StockProductLocation.find({
+            org_id,
+            productId,
+            branchId: warehouseId,
+          });
+          if (locations.length === 1) {
+            locations[0].quantity = Math.max(
+              0,
+              Number(locations[0].quantity || 0) + variance,
+            );
+            await locations[0].save();
+          } else if (locations.length > 1 && variance < 0) {
+            let remaining = Math.abs(variance);
+            for (const loc of locations) {
+              if (remaining <= 0) break;
+              const available = Number(loc.quantity || 0);
+              const take = Math.min(available, remaining);
+              loc.quantity = available - take;
+              remaining -= take;
+              await loc.save();
+            }
+          } else if (locations.length > 1 && variance > 0) {
+            locations[0].quantity =
+              Number(locations[0].quantity || 0) + variance;
+            await locations[0].save();
+          }
+        }
       }
 
       stockCheck.status = "closed";

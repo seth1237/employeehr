@@ -679,7 +679,7 @@ export class CashBankingController {
             paymentMethod: "bank",
             employeeName,
           },
-        })
+        }).catch(() => null)
         if (before) skipped += 1
         else if (posted) importedPayrolls += 1
         else skipped += 1

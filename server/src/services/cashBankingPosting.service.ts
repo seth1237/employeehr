@@ -98,22 +98,30 @@ async function postTransaction(params: {
   sourceId?: string
   createdBy: string
 }) {
-  const signed = params.direction === "in" ? params.amount : -params.amount
-  const nextBalance = Number(
-    (Number(params.account.currentBalance || 0) + signed).toFixed(2),
+  const amount = Number(params.amount)
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error("Cashbook amount must be a positive number")
+  }
+
+  const signed = params.direction === "in" ? amount : -amount
+  const updated = await CashBankAccount.findOneAndUpdate(
+    { _id: params.account._id, org_id: params.orgId },
+    { $inc: { currentBalance: signed } },
+    { new: true },
   )
-  params.account.currentBalance = nextBalance
-  await params.account.save()
+  if (!updated) {
+    throw new Error("Cashbook account not found while posting")
+  }
 
   return CashTransaction.create({
     org_id: params.orgId,
-    accountId: String(params.account._id),
-    accountName: params.account.name,
-    accountType: params.account.type,
+    accountId: String(updated._id),
+    accountName: updated.name,
+    accountType: updated.type,
     direction: params.direction,
     kind: params.kind,
-    amount: params.amount,
-    balanceAfter: nextBalance,
+    amount,
+    balanceAfter: Number(updated.currentBalance || 0),
     occurredAt: params.occurredAt,
     description: params.description,
     reference: params.reference,
@@ -127,7 +135,6 @@ async function postTransaction(params: {
   })
 }
 
-/** Best-effort: never throw to callers that must keep primary business flow. */
 export async function postInvoicePaymentToCashbook(params: {
   orgId: string
   userId: string
@@ -140,40 +147,39 @@ export async function postInvoicePaymentToCashbook(params: {
     invoiceNumber?: string
   }
 }) {
-  try {
-    await ensureDefaultCashAccounts(params.orgId, params.userId)
-    const sourceId = `invoice_payment:${params.payment._id}`
-    const exists = await CashTransaction.findOne({
-      org_id: params.orgId,
-      sourceType: "invoice_payment",
-      sourceId,
-    }).lean()
-    if (exists) return exists
+  await ensureDefaultCashAccounts(params.orgId, params.userId)
+  const sourceId = `invoice_payment:${params.payment._id}`
+  const exists = await CashTransaction.findOne({
+    org_id: params.orgId,
+    sourceType: "invoice_payment",
+    sourceId,
+  }).lean()
+  if (exists) return exists
 
-    const account = await findDefaultAccountForMethod(
-      params.orgId,
-      params.payment.paymentMethod,
+  const account = await findDefaultAccountForMethod(
+    params.orgId,
+    params.payment.paymentMethod,
+  )
+  if (!account) {
+    throw new Error(
+      "No cashbook account configured for this payment method. Create a cash/bank/M-Pesa account first.",
     )
-    if (!account) return null
-
-    return postTransaction({
-      orgId: params.orgId,
-      account: account as any,
-      direction: "in",
-      kind: "payment",
-      amount: Number(params.payment.amount),
-      occurredAt: params.payment.paidAt || new Date(),
-      description: `Customer payment · Invoice ${params.payment.invoiceNumber || ""}`.trim(),
-      reference: params.payment.reference,
-      counterparty: params.payment.invoiceNumber,
-      sourceType: "invoice_payment",
-      sourceId,
-      createdBy: params.userId,
-    })
-  } catch (error) {
-    console.error("postInvoicePaymentToCashbook failed:", error)
-    return null
   }
+
+  return postTransaction({
+    orgId: params.orgId,
+    account: account as any,
+    direction: "in",
+    kind: "payment",
+    amount: Number(params.payment.amount),
+    occurredAt: params.payment.paidAt || new Date(),
+    description: `Customer payment · Invoice ${params.payment.invoiceNumber || ""}`.trim(),
+    reference: params.payment.reference,
+    counterparty: params.payment.invoiceNumber,
+    sourceType: "invoice_payment",
+    sourceId,
+    createdBy: params.userId,
+  })
 }
 
 export async function postExpenseToCashbook(params: {
@@ -191,45 +197,44 @@ export async function postExpenseToCashbook(params: {
     mpesaReceiptNumber?: string
   }
 }) {
-  try {
-    await ensureDefaultCashAccounts(params.orgId, params.userId)
-    const sourceId = `expense:${params.expense._id}`
-    const exists = await CashTransaction.findOne({
-      org_id: params.orgId,
-      sourceType: "expense",
-      sourceId,
-    }).lean()
-    if (exists) return exists
+  await ensureDefaultCashAccounts(params.orgId, params.userId)
+  const sourceId = `expense:${params.expense._id}`
+  const exists = await CashTransaction.findOne({
+    org_id: params.orgId,
+    sourceType: "expense",
+    sourceId,
+  }).lean()
+  if (exists) return exists
 
-    const account = await findDefaultAccountForMethod(
-      params.orgId,
-      params.expense.paymentMethod || "mpesa",
+  const account = await findDefaultAccountForMethod(
+    params.orgId,
+    params.expense.paymentMethod || "mpesa",
+  )
+  if (!account) {
+    throw new Error(
+      "No cashbook account configured for this expense payment method.",
     )
-    if (!account) return null
-
-    return postTransaction({
-      orgId: params.orgId,
-      account: account as any,
-      direction: "out",
-      kind: "expense",
-      amount: Number(params.expense.amount),
-      occurredAt:
-        params.expense.expenseDate || params.expense.createdAt || new Date(),
-      description:
-        params.expense.purpose ||
-        params.expense.expenseNumber ||
-        "Company expense",
-      reference:
-        params.expense.mpesaReceiptNumber || params.expense.expenseNumber,
-      counterparty: params.expense.payeePhone,
-      sourceType: "expense",
-      sourceId,
-      createdBy: params.userId,
-    })
-  } catch (error) {
-    console.error("postExpenseToCashbook failed:", error)
-    return null
   }
+
+  return postTransaction({
+    orgId: params.orgId,
+    account: account as any,
+    direction: "out",
+    kind: "expense",
+    amount: Number(params.expense.amount),
+    occurredAt:
+      params.expense.expenseDate || params.expense.createdAt || new Date(),
+    description:
+      params.expense.purpose ||
+      params.expense.expenseNumber ||
+      "Company expense",
+    reference:
+      params.expense.mpesaReceiptNumber || params.expense.expenseNumber,
+    counterparty: params.expense.payeePhone,
+    sourceType: "expense",
+    sourceId,
+    createdBy: params.userId,
+  })
 }
 
 /** Salary / net pay outflow when a payslip is marked paid. Defaults to bank. */
@@ -246,45 +251,44 @@ export async function postPayrollToCashbook(params: {
     employeeName?: string
   }
 }) {
-  try {
-    if (params.payroll.status && params.payroll.status !== "paid") return null
-    const amount = Number(params.payroll.net_pay || 0)
-    if (!Number.isFinite(amount) || amount <= 0) return null
+  if (params.payroll.status && params.payroll.status !== "paid") return null
+  const amount = Number(params.payroll.net_pay || 0)
+  if (!Number.isFinite(amount) || amount <= 0) return null
 
-    await ensureDefaultCashAccounts(params.orgId, params.userId)
-    const sourceId = `payroll:${params.payroll._id}`
-    const exists = await CashTransaction.findOne({
-      org_id: params.orgId,
-      sourceType: "payroll",
-      sourceId,
-    }).lean()
-    if (exists) return exists
+  await ensureDefaultCashAccounts(params.orgId, params.userId)
+  const sourceId = `payroll:${params.payroll._id}`
+  const exists = await CashTransaction.findOne({
+    org_id: params.orgId,
+    sourceType: "payroll",
+    sourceId,
+  }).lean()
+  if (exists) return exists
 
-    const account = await findDefaultAccountForMethod(
-      params.orgId,
-      params.payroll.paymentMethod || "bank",
+  const account = await findDefaultAccountForMethod(
+    params.orgId,
+    params.payroll.paymentMethod || "bank",
+  )
+  if (!account) {
+    throw new Error(
+      "No cashbook bank/cash account configured for payroll posting.",
     )
-    if (!account) return null
-
-    const who = params.payroll.employeeName || params.payroll.user_id || "employee"
-    return postTransaction({
-      orgId: params.orgId,
-      account: account as any,
-      direction: "out",
-      kind: "payroll",
-      amount,
-      occurredAt: new Date(),
-      description: `Salary payment · ${params.payroll.month || ""} · ${who}`.trim(),
-      reference: params.payroll.month,
-      counterparty: who,
-      sourceType: "payroll",
-      sourceId,
-      createdBy: params.userId,
-    })
-  } catch (error) {
-    console.error("postPayrollToCashbook failed:", error)
-    return null
   }
+
+  const who = params.payroll.employeeName || params.payroll.user_id || "employee"
+  return postTransaction({
+    orgId: params.orgId,
+    account: account as any,
+    direction: "out",
+    kind: "payroll",
+    amount,
+    occurredAt: new Date(),
+    description: `Salary payment · ${params.payroll.month || ""} · ${who}`.trim(),
+    reference: params.payroll.month,
+    counterparty: who,
+    sourceType: "payroll",
+    sourceId,
+    createdBy: params.userId,
+  })
 }
 
 export { postTransaction }

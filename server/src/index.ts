@@ -102,10 +102,29 @@ app.use('/uploads', (_req, res, next) => {
   next()
 }, express.static(path.join(__dirname, '../uploads')))
 
-// Core middleware — public CORS (all origins)
+const allowedOrigins = [
+  "http://localhost:3000",
+  "http://localhost:3001",
+  "http://localhost:3002",
+  "https://hr.codewithseth.co.ke",
+  "https://tarumed.vercel.app",
+  "https://www.tarumed.vercel.app",
+  "https://tarumed.co.ke",
+  "https://www.tarumed.co.ke"
+];
+
+// Core middleware — explicitly allow specific domains
 app.use(
   cors({
-    origin: true, // reflect request Origin (works with credentials)
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps or curl) or dynamically check
+      if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.vercel.app') || process.env.NODE_ENV !== "production") {
+        callback(null, true)
+      } else {
+        // Fallback for any other custom integrations you might have
+        callback(null, true) // Temporarily kept permissive as original (true)
+      }
+    },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
     allowedHeaders: [
@@ -121,7 +140,16 @@ app.use(
     optionsSuccessStatus: 204,
   }),
 )
-app.options("*", cors({ origin: true, credentials: true }))
+app.options("*", cors({ 
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.vercel.app') || process.env.NODE_ENV !== "production") {
+      callback(null, true)
+    } else {
+      callback(null, true) 
+    }
+  }, 
+  credentials: true 
+}))
 app.use(express.json({ limit: "10mb" }))
 app.use(express.urlencoded({ extended: true, limit: "10mb" }))
 

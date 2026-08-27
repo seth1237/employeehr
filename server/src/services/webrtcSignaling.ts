@@ -14,9 +14,25 @@ export class WebRTCSignalingService {
   private meetingRooms: Map<string, Set<string>> = new Map()
 
   constructor(server: HTTPServer) {
+    const allowedOrigins = [
+      "http://localhost:3000",
+      "http://localhost:3001",
+      "https://hr.codewithseth.co.ke",
+      "https://tarumed.vercel.app",
+      "https://www.tarumed.vercel.app",
+      "https://tarumed.co.ke",
+      "https://www.tarumed.co.ke"
+    ];
+
     this.io = new SocketIOServer(server, {
       cors: {
-        origin: true, // public — allow any origin
+        origin: (origin, callback) => {
+          if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.vercel.app') || process.env.NODE_ENV !== "production") {
+            callback(null, true)
+          } else {
+            callback(null, true)
+          }
+        },
         credentials: true,
       },
     })

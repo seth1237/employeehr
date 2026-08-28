@@ -133,6 +133,31 @@ export default function QuotationDetailPage({
     }
   }
 
+  const deleteQuotation = async () => {
+    if (!confirm("Are you sure you want to permanently delete this cancelled quotation? This cannot be undone.")) return
+    setBusy(true)
+    try {
+      const res = await fetch(
+        `${API_URL}/api/stock/quotations/${quotationId}`,
+        { method: "DELETE", headers: authHeaders() },
+      )
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "Failed to delete quotation")
+      }
+      toast({ title: "Quotation permanently deleted" })
+      router.push("/admin/stock/quotations")
+    } catch (e) {
+      toast({
+        title: "Error",
+        description: e instanceof Error ? e.message : "Action failed",
+        variant: "destructive",
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const addFollowUp = async () => {
     if (!note.trim()) return
     setBusy(true)
@@ -254,6 +279,17 @@ export default function QuotationDetailPage({
                 Reject
               </Button>
             </>
+          )}
+          {quotation.status === "cancelled" && canApprove && (
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={deleteQuotation}
+              disabled={busy}
+            >
+              <X className="h-4 w-4 mr-1" />
+              Delete Completely
+            </Button>
           )}
         </div>
       </div>

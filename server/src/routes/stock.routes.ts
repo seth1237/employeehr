@@ -61,6 +61,7 @@ router.post(
   QuotationController.approveQuotation,
 );
 router.post("/quotations/:quotationId/reject", QuotationController.rejectQuotation);
+router.delete("/quotations/:quotationId", QuotationController.deleteQuotation);
 router.post(
   "/quotations/:quotationId/convert",
   StockController.convertQuotationToInvoice,

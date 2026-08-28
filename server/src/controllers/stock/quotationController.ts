@@ -471,4 +471,47 @@ export class QuotationController {
       return res.status(500).json({ success: false, message })
     }
   }
+
+  static async deleteQuotation(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id
+      if (!org_id) {
+        return res.status(401).json({ success: false, message: "Unauthorized" })
+      }
+
+      if (!isAdminRole(req.user?.role)) {
+        return res.status(403).json({
+          success: false,
+          message: "Only admin/HR can delete quotations",
+        })
+      }
+
+      const { quotationId } = req.params
+      const quotation = await StockQuotation.findOne({ _id: quotationId, org_id })
+      if (!quotation) {
+        return res.status(404).json({ success: false, message: "Quotation not found" })
+      }
+
+      if (quotation.status !== "cancelled") {
+        return res.status(400).json({
+          success: false,
+          message: "Only cancelled quotations can be completely deleted",
+        })
+      }
+
+      // Delete associated follow-ups
+      await QuotationFollowUp.deleteMany({ quotationId: String(quotation._id), org_id })
+
+      // Delete the quotation
+      await StockQuotation.deleteOne({ _id: quotation._id, org_id })
+
+      return res.status(200).json({
+        success: true,
+        message: "Quotation deleted completely",
+      })
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to delete quotation"
+      return res.status(500).json({ success: false, message })
+    }
+  }
 }

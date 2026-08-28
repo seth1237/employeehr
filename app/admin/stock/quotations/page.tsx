@@ -2907,6 +2907,22 @@ export default function QuotationsPage() {
                               Converted
                             </span>
                           )
+                        ) : quotation.status === "cancelled" ? (
+                          <>
+                            <span className="text-xs text-muted-foreground self-center capitalize mr-2">
+                              Cancelled
+                            </span>
+                            {["company_admin", "hr", "admin", "super_admin"].includes(String(currentUser?.role || "")) && (
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => deleteQuotationCompletely(quotation._id)}
+                                aria-label={`Delete ${quotation.quotationNumber}`}
+                              >
+                                Delete
+                              </Button>
+                            )}
+                          </>
                         ) : (
                           <span className="text-xs text-muted-foreground self-center capitalize">
                             {quotation.status.replaceAll("_", " ")}
@@ -2988,6 +3004,17 @@ export default function QuotationsPage() {
                         </Link>
                       </Button>
                     )}
+                  {quotation.status === "cancelled" && ["company_admin", "hr", "admin", "super_admin"].includes(String(currentUser?.role || "")) && (
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      className="flex-1"
+                      onClick={() => deleteQuotationCompletely(quotation._id)}
+                      aria-label={`Delete ${quotation.quotationNumber}`}
+                    >
+                      Delete
+                    </Button>
+                  )}
                 </div>
               </MobileCard>
             ))}

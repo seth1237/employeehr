@@ -71,6 +71,8 @@ import { uploadProductImage } from "./middleware/upload.middleware"
 import dashboardRoutes from "./routes/dashboard.routes"
 import cftIngestRoutes from "./routes/cftIngest.routes"
 import exhibitionRoutes from "./routes/exhibition.routes"
+import glRoutes from "./routes/gl.routes"
+import projectRoutes from "./routes/project.routes"
 import { startCftIngestScheduler } from "./services/cft/cftIngestScheduler"
 
 const app = express()
@@ -243,6 +245,8 @@ app.use("/api/owner", ownerRoutes)
 app.use("/api/cft-ingest", cftIngestRoutes)
 app.use("/api/ai-assistant", aiAssistantRoutes)
 app.use("/api/dashboard", dashboardRoutes)
+app.use("/api/gl", glRoutes)
+app.use("/api/projects", projectRoutes)
 
 // 404 handler
 app.use((_req, res) => {

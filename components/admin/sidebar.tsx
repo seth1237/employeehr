@@ -36,6 +36,7 @@ import {
   Activity,
   Wallet,
   Star,
+  FolderKanban,
 } from "lucide-react";
 import { getUser, logout } from "@/lib/auth";
 import { getToken } from "@/lib/auth";
@@ -72,6 +73,14 @@ const adminMenuItems = [
     icon: Users,
     href: "/admin/users",
     section: "CORE",
+  },
+
+  // Project Management
+  {
+    label: "Projects",
+    icon: FolderKanban,
+    href: "/admin/projects",
+    section: "PROJECT MANAGEMENT",
   },
 
   // Recruitment & Jobs

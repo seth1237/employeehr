@@ -23,7 +23,7 @@ export default function CustomerStatementsPage() {
   const [clients, setClients] = useState<any[]>([])
   const [selectedKey, setSelectedKey] = useState("")
   const [fromDate, setFromDate] = useState("")
-  const [toDate, setToDate] = useState(new Date().toISOString().slice(0, 10))
+  const [toDate, setToDate] = useState("")
   const [statement, setStatement] = useState<any>(null)
   const [loadingStatement, setLoadingStatement] = useState(false)
 

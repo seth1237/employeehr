@@ -1315,6 +1315,18 @@ export const stockApi = {
   },
 };
 
+// General Ledger API
+export const glApi = {
+  getAccounts: () => client.get<any[]>("/api/gl/accounts"),
+  createAccount: (data: any) => client.post<any>("/api/gl/accounts", data),
+  getJournals: () => client.get<any[]>("/api/gl/journals"),
+  postJournal: (data: any) => client.post<any>("/api/gl/journals", data),
+  getTrialBalance: (params?: any) => client.get<any>("/api/gl/trial-balance", params ? { params: new URLSearchParams(params) } : undefined),
+  getProfitAndLoss: (params?: any) => client.get<any>("/api/gl/profit-and-loss", params ? { params: new URLSearchParams(params) } : undefined),
+  getBalanceSheet: (params?: any) => client.get<any>("/api/gl/balance-sheet", params ? { params: new URLSearchParams(params) } : undefined),
+  getLedger: (params?: any) => client.get<any>("/api/gl/ledger", params ? { params: new URLSearchParams(params) } : undefined),
+};
+
 // Setup API for onboarding wizard
 const setupApi = {
   getProgress: () => client.get<any>("/api/setup/progress"),
@@ -1824,10 +1836,82 @@ export const salesApi = {
     data: { weeklyAmount: number; monthlyAmount: number; quarterlyAmount: number },
   ) => client.patch<any>(`/api/sales/admin/performance/${encodeURIComponent(userId)}`, data),
 };
+// Projects API
+export const projectsApi = {
+  getAll: (params?: { status?: string; priority?: string; search?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.status) q.set("status", params.status);
+    if (params?.priority) q.set("priority", params.priority);
+    if (params?.search) q.set("search", params.search);
+    const qs = q.toString();
+    return client.get<any[]>(`/api/projects${qs ? `?${qs}` : ""}`);
+  },
+
+  getStats: () => client.get<any>("/api/projects/stats"),
+
+  getById: (id: string) => client.get<any>(`/api/projects/${id}`),
+
+  create: (data: {
+    title: string;
+    description?: string;
+    status?: string;
+    priority?: string;
+    start_date?: string;
+    end_date?: string;
+    budget?: number;
+    tags?: string[];
+    phases?: any[];
+    client_name?: string;
+    client_id?: string;
+    member_ids?: string[];
+  }) => client.post<any>("/api/projects", data),
+
+  update: (id: string, data: any) => client.put<any>(`/api/projects/${id}`, data),
+
+  delete: (id: string) => client.delete<any>(`/api/projects/${id}`),
+
+  addMember: (projectId: string, data: { user_id: string; role?: string }) =>
+    client.post<any>(`/api/projects/${projectId}/members`, data),
+
+  removeMember: (projectId: string, userId: string) =>
+    client.delete<any>(`/api/projects/${projectId}/members/${userId}`),
+
+  getTasks: (projectId: string) =>
+    client.get<any[]>(`/api/projects/${projectId}/tasks`),
+
+  createTask: (
+    projectId: string,
+    data: {
+      title: string;
+      description?: string;
+      assigned_to: string;
+      priority?: string;
+      due_date?: string;
+    },
+  ) => client.post<any>(`/api/projects/${projectId}/tasks`, data),
+
+  getTimeLogs: (projectId: string) =>
+    client.get<any>(`/api/projects/${projectId}/time-logs`),
+
+  addTimeLog: (
+    projectId: string,
+    data: {
+      hours: number;
+      description?: string;
+      date?: string;
+      billable?: boolean;
+      task_id?: string;
+    },
+  ) => client.post<any>(`/api/projects/${projectId}/time-logs`, data),
+
+  addNote: (projectId: string, text: string) =>
+    client.post<any>(`/api/projects/${projectId}/notes`, { text }),
+};
 
 // Export all APIs
 export const api = {
   auth: authApi,
+
   users: usersApi,
   awards: awardsApi,
   kpis: kpisApi,
@@ -1860,6 +1944,7 @@ export const api = {
   dashboard: {
     getStats: () => client.get<any>("/api/dashboard/stats"),
   },
+  projects: projectsApi,
 };
 
 export default api;

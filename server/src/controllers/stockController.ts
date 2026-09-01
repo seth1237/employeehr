@@ -2152,11 +2152,9 @@ export class StockController {
         });
       }
 
-      const portalUser = await ensureWebsitePortalUser(org_id, {
-        name: clientName,
-        phone: clientNumber,
-        email,
-      });
+      // NO LONGER CREATE A PORTAL USER FOR THE CLIENT.
+      // Website quotation requests are anonymous/guest-driven.
+      const portalUser = null;
 
       const sourceName = clientName;
       const sourceNumber = clientNumber;
@@ -4359,8 +4357,7 @@ export class StockController {
             debitTotal: debitByInvoice.get(String(invoice._id)) || 0,
             creditTotal: creditByInvoice.get(String(invoice._id)) || 0,
           });
-        })
-        .filter((invoice: any) => Number(invoice.balanceRemaining || 0) > 0);
+        });
 
       return res.status(200).json({ success: true, data });
     } catch (error: any) {

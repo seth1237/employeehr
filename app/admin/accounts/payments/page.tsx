@@ -8,6 +8,7 @@ import { PageLoadingSkeleton } from "@/components/admin/ui/page-states"
 import { FinanceDocumentShell, FinanceTableCard } from "@/components/accounts/finance-document-shell"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 
@@ -47,6 +48,7 @@ export default function AccountsPaymentsPage() {
   const [search, setSearch] = useState("")
   const [rows, setRows] = useState<PaymentInvoiceRow[]>([])
   const [selectedInvoiceId, setSelectedInvoiceId] = useState(queryInvoiceId)
+  const [activeTab, setActiveTab] = useState<"pending" | "collected">("pending")
   const [form, setForm] = useState({
     amount: "",
     paymentMethod: "mpesa",
@@ -83,10 +85,17 @@ export default function AccountsPaymentsPage() {
     loadData()
   }, [queryInvoiceId])
 
+  const tabRows = useMemo(() => {
+    return rows.filter((row) => {
+      if (activeTab === "pending") return Number(row.balanceRemaining || 0) > 0
+      return Number(row.balanceRemaining || 0) <= 0
+    })
+  }, [rows, activeTab])
+
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return rows
-    return rows.filter((row) =>
+    if (!q) return tabRows
+    return tabRows.filter((row) =>
       [
         row.invoiceNumber,
         row.client?.name,
@@ -96,7 +105,7 @@ export default function AccountsPaymentsPage() {
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(q)),
     )
-  }, [rows, search])
+  }, [tabRows, search])
 
   const selectedInvoice = useMemo(
     () => rows.find((row) => row._id === selectedInvoiceId) || null,
@@ -165,9 +174,16 @@ export default function AccountsPaymentsPage() {
     >
       <div className="grid gap-6 lg:grid-cols-2">
         <FinanceTableCard title="Sales Invoices">
-          <div className="max-h-[560px] overflow-auto space-y-2 p-3">
+          <Tabs value={activeTab} onValueChange={(val: any) => setActiveTab(val)} className="w-full">
+            <div className="px-3 pt-3">
+              <TabsList className="w-full grid grid-cols-2">
+                <TabsTrigger value="pending">Pending Payments</TabsTrigger>
+                <TabsTrigger value="collected">Already Collected</TabsTrigger>
+              </TabsList>
+            </div>
+            <div className="max-h-[560px] overflow-auto space-y-2 p-3">
               {filteredRows.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No invoices found.</p>
+                <p className="text-sm text-muted-foreground">No invoices found in this view.</p>
               ) : (
                 filteredRows.map((row) => (
                   <button
@@ -192,6 +208,7 @@ export default function AccountsPaymentsPage() {
                 ))
               )}
             </div>
+          </Tabs>
         </FinanceTableCard>
 
         <FinanceTableCard title="Record Payment">

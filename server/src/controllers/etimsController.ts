@@ -48,18 +48,25 @@ export class EtimsController {
         return res.status(400).json({ success: false, message: "Device Serial Number is required for initialization." })
       }
 
-      const apiUrl = `${config.apiEndpoint}/selectInitOsdcInfo`
+      const baseEndpoint = config.apiEndpoint.replace(/\/$/, '');
+      const apiUrl = `${baseEndpoint}${baseEndpoint.endsWith('/etims-api') ? '' : '/etims-api'}/selectInitOsdcInfo`
       const payload = {
         tin: config.kraPin,
         bhfId: config.branchId,
         dvcSrlNo: config.deviceSerialNumber
       }
 
+      const headers: any = { 
+        'Content-Type': 'application/json'
+      }
+      if (config.oscuToken) {
+        headers['Authorization'] = `Bearer ${config.oscuToken}`;
+        headers['token'] = config.oscuToken;
+      }
+
       const response = await axios.post(apiUrl, payload, {
-        headers: { 
-          'Content-Type': 'application/json'
-        },
-        timeout: 15000
+        headers,
+        timeout: 60000 // Increased to 60 seconds
       })
 
       if (response.data && response.data.resultCd === "000" && response.data.data?.info) {
@@ -83,9 +90,10 @@ export class EtimsController {
         message: response.data?.resultMsg || "Failed to initialize device" 
       })
     } catch (error: any) {
+      const errorMsg = error.response?.data?.resultMsg || error.response?.data?.message || (error.response?.data ? JSON.stringify(error.response.data) : error.message);
       return res.status(500).json({ 
         success: false, 
-        message: error.response?.data?.resultMsg || error.message || "Initialization request failed" 
+        message: errorMsg || "Initialization request failed" 
       })
     }
   }
@@ -243,7 +251,8 @@ export class EtimsController {
       }
 
       // Create Initial Log
-      const apiUrl = `${config.apiEndpoint}/saveTrnsSalesOsdc`
+      const baseEndpoint = config.apiEndpoint.replace(/\/$/, '');
+      const apiUrl = `${baseEndpoint}${baseEndpoint.endsWith('/etims-api') ? '' : '/etims-api'}/saveTrnsSalesOsdc`
       const payload = EtimsController.buildEtimsPayload(invoice, config)
 
       const log = new EtimsLog({
@@ -257,16 +266,22 @@ export class EtimsController {
       })
       await log.save()
 
+      const headers: any = {
+        'Content-Type': 'application/json',
+        'tin': config.kraPin,
+        'bhfId': config.branchId,
+        'cmcKey': config.communicationKey
+      };
+      if (config.oscuToken) {
+        headers['Authorization'] = `Bearer ${config.oscuToken}`;
+        headers['token'] = config.oscuToken;
+      }
+
       // --- REAL API CALL TO KRA ---
       try {
         const response = await axios.post(apiUrl, payload, {
-          headers: {
-            'Content-Type': 'application/json',
-            'tin': config.kraPin,
-            'bhfId': config.branchId,
-            'cmcKey': config.communicationKey
-          },
-          timeout: 15000 // 15 seconds
+          headers,
+          timeout: 60000 // Increased to 60 seconds for KRA sandbox which can be very slow
         })
 
         log.responseTime = new Date()
@@ -335,7 +350,8 @@ export class EtimsController {
         return res.status(400).json({ success: false, message: "eTIMS device is not initialized. Please click 'Initialize Device' first." })
       }
 
-      const apiUrl = `${config.apiEndpoint}/selectCustomer`
+      const baseEndpoint = config.apiEndpoint.replace(/\/$/, '');
+      const apiUrl = `${baseEndpoint}${baseEndpoint.endsWith('/etims-api') ? '' : '/etims-api'}/selectCustomer`
       const payload = {
         tin: config.kraPin,
         bhfId: config.branchId,
@@ -343,14 +359,20 @@ export class EtimsController {
         custmTin: customerPin
       }
 
+      const headers: any = {
+        'Content-Type': 'application/json',
+        'tin': config.kraPin,
+        'bhfId': config.branchId,
+        'cmcKey': config.communicationKey
+      };
+      if (config.oscuToken) {
+        headers['Authorization'] = `Bearer ${config.oscuToken}`;
+        headers['token'] = config.oscuToken;
+      }
+
       const response = await axios.post(apiUrl, payload, {
-        headers: {
-          'Content-Type': 'application/json',
-          'tin': config.kraPin,
-          'bhfId': config.branchId,
-          'cmcKey': config.communicationKey
-        },
-        timeout: 10000
+        headers,
+        timeout: 60000 // Increased to 60 seconds
       })
 
       if (response.data && response.data.resultCd === "000" && response.data.data?.custList?.length > 0) {

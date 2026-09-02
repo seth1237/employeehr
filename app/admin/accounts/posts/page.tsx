@@ -84,7 +84,10 @@ export default function AccountsPostsPage() {
     communicationKey: "",
     environment: "Sandbox",
     apiEndpoint: "https://etims-api-sbx.kra.go.ke/etims-api",
-    status: "Active"
+    status: "Active",
+    oscuToken: "",
+    tisName: "",
+    tisVersion: ""
   });
 
   const loadData = async (opts?: SilentLoadOptions) => {
@@ -488,7 +491,31 @@ export default function AccountsPostsPage() {
               <Input
                 value={etimsConfig.deviceSerialNumber}
                 onChange={(e) => setEtimsConfig({ ...etimsConfig, deviceSerialNumber: e.target.value })}
-                placeholder="e.g. SETH-ERP-0001"
+                placeholder="e.g. ELEVATEHUB-AMS-001"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>OSCU Token (Optional)</Label>
+              <Input
+                value={etimsConfig.oscuToken || ""}
+                onChange={(e) => setEtimsConfig({ ...etimsConfig, oscuToken: e.target.value })}
+                placeholder="KRATK04_..."
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>TIS Name (Optional)</Label>
+              <Input
+                value={etimsConfig.tisName || ""}
+                onChange={(e) => setEtimsConfig({ ...etimsConfig, tisName: e.target.value })}
+                placeholder="ElevateHub"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>TIS Version (Optional)</Label>
+              <Input
+                value={etimsConfig.tisVersion || ""}
+                onChange={(e) => setEtimsConfig({ ...etimsConfig, tisVersion: e.target.value })}
+                placeholder="1.0.0"
               />
             </div>
             <div className="space-y-2">

@@ -11,6 +11,9 @@ export interface IEtimsConfig extends Document {
   communicationKey?: string
   environment: "Sandbox" | "Production"
   apiEndpoint: string
+  oscuToken?: string
+  tisName?: string
+  tisVersion?: string
   status: "Active" | "Inactive"
   createdBy: string
   createdAt: Date
@@ -29,6 +32,9 @@ const etimsConfigSchema = new Schema<IEtimsConfig>(
     communicationKey: { type: String },
     environment: { type: String, enum: ["Sandbox", "Production"], default: "Sandbox" },
     apiEndpoint: { type: String, required: true },
+  oscuToken: { type: String },
+  tisName: { type: String },
+  tisVersion: { type: String },
     status: { type: String, enum: ["Active", "Inactive"], default: "Active" },
     createdBy: { type: String, required: true },
   },

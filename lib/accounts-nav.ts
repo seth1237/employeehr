@@ -877,6 +877,12 @@ export function getAccountsModuleEntryHref(groupId: string): string {
   if (groupId === "payables") {
     return `${ACCOUNTS_BASE}/payables/bills`
   }
+  if (groupId === "tax") {
+    return `${ACCOUNTS_BASE}/posts`
+  }
+  if (groupId === "general-ledger") {
+    return `${ACCOUNTS_BASE}/general-ledger/chart-of-accounts`
+  }
   const preferred =
     pages.find((p) => p.status === "live" && !p.redirectTo) ||
     pages.find((p) => p.status === "live") ||
@@ -896,19 +902,23 @@ export type AccountsSidebarModule = {
 const ACCOUNTS_SIDEBAR_MODULE_IDS = [
   "expenses",
   "receivables",
+  "payables",
   "cash-banking",
   "payroll",
+  "tax",
   "inventory-accounting",
-  "payables",
+  "general-ledger",
 ] as const
 
 const ACCOUNTS_SIDEBAR_LABELS: Record<string, string> = {
   expenses: "Expenses",
   receivables: "Sales & Receivables",
+  payables: "Purchases & Payables",
   "cash-banking": "Cashflow & Banking",
   payroll: "Payroll & Statutory Deductions",
+  tax: "Tax & eTIMS",
   "inventory-accounting": "Inventory Accounting",
-  payables: "Purchases & Payables",
+  "general-ledger": "General Ledger",
 }
 
 /** Flat module list for the Accounts sidebar (one row per allowed module). */

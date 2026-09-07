@@ -48,8 +48,7 @@ export class EtimsController {
         return res.status(400).json({ success: false, message: "Device Serial Number is required for initialization." })
       }
 
-      const baseEndpoint = config.apiEndpoint.replace(/\/$/, '');
-      const apiUrl = `${baseEndpoint}${baseEndpoint.endsWith('/etims-api') ? '' : '/etims-api'}/selectInitOsdcInfo`
+      const apiUrl = `${config.apiEndpoint.replace(/\/$/, '')}/etims-api/selectInitOsdcInfo`
       const payload = {
         tin: config.kraPin,
         bhfId: config.branchId,
@@ -61,7 +60,6 @@ export class EtimsController {
       }
       if (config.oscuToken) {
         headers['Authorization'] = `Bearer ${config.oscuToken}`;
-        headers['token'] = config.oscuToken;
       }
 
       const response = await axios.post(apiUrl, payload, {
@@ -90,10 +88,15 @@ export class EtimsController {
         message: response.data?.resultMsg || "Failed to initialize device" 
       })
     } catch (error: any) {
+      console.error("KRA ERROR:");
+      console.error(error.response?.status);
+      console.error(error.response?.data);
+      
       const errorMsg = error.response?.data?.resultMsg || error.response?.data?.message || (error.response?.data ? JSON.stringify(error.response.data) : error.message);
-      return res.status(500).json({ 
+      return res.status(error.response?.status || 400).json({ 
         success: false, 
-        message: errorMsg || "Initialization request failed" 
+        message: errorMsg || "Initialization request failed",
+        error: error.response?.data
       })
     }
   }
@@ -251,8 +254,7 @@ export class EtimsController {
       }
 
       // Create Initial Log
-      const baseEndpoint = config.apiEndpoint.replace(/\/$/, '');
-      const apiUrl = `${baseEndpoint}${baseEndpoint.endsWith('/etims-api') ? '' : '/etims-api'}/saveTrnsSalesOsdc`
+      const apiUrl = `${config.apiEndpoint.replace(/\/$/, '')}/etims-api/saveTrnsSalesOsdc`
       const payload = EtimsController.buildEtimsPayload(invoice, config)
 
       const log = new EtimsLog({
@@ -272,10 +274,6 @@ export class EtimsController {
         'bhfId': config.branchId,
         'cmcKey': config.communicationKey
       };
-      if (config.oscuToken) {
-        headers['Authorization'] = `Bearer ${config.oscuToken}`;
-        headers['token'] = config.oscuToken;
-      }
 
       // --- REAL API CALL TO KRA ---
       try {
@@ -350,8 +348,7 @@ export class EtimsController {
         return res.status(400).json({ success: false, message: "eTIMS device is not initialized. Please click 'Initialize Device' first." })
       }
 
-      const baseEndpoint = config.apiEndpoint.replace(/\/$/, '');
-      const apiUrl = `${baseEndpoint}${baseEndpoint.endsWith('/etims-api') ? '' : '/etims-api'}/selectCustomer`
+      const apiUrl = `${config.apiEndpoint.replace(/\/$/, '')}/etims-api/selectCustomer`
       const payload = {
         tin: config.kraPin,
         bhfId: config.branchId,
@@ -365,10 +362,6 @@ export class EtimsController {
         'bhfId': config.branchId,
         'cmcKey': config.communicationKey
       };
-      if (config.oscuToken) {
-        headers['Authorization'] = `Bearer ${config.oscuToken}`;
-        headers['token'] = config.oscuToken;
-      }
 
       const response = await axios.post(apiUrl, payload, {
         headers,
@@ -391,6 +384,61 @@ export class EtimsController {
       return res.status(400).json({ success: false, message: response.data?.resultMsg || "Validation failed or no customer found" })
     } catch (error: any) {
       return res.status(500).json({ success: false, message: error.response?.data?.resultMsg || error.message || "Validation failed", error })
+    }
+  }
+
+  static async testAPI(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { endpoint, method, payload, additionalHeaders } = req.body
+      if (!endpoint) return res.status(400).json({ success: false, message: "Endpoint is required" })
+
+      const config = await EtimsConfig.findOne({ org_id: req.org_id })
+      if (!config) {
+        return res.status(400).json({ success: false, message: "eTIMS config is required" })
+      }
+
+      // Allow specifying an exact full URL or just a path
+      const isFullUrl = endpoint.startsWith('http');
+      const baseEndpoint = config.apiEndpoint.replace(/\/$/, '');
+      const hasApiSuffix = baseEndpoint.toLowerCase().endsWith('/etims-api') || baseEndpoint.toLowerCase().endsWith('/etimsapi');
+      const apiUrl = isFullUrl ? endpoint : `${baseEndpoint}${hasApiSuffix ? '' : '/etims-api'}${endpoint.startsWith('/') ? endpoint : '/' + endpoint}`
+
+      const headers: any = {
+        'Content-Type': 'application/json',
+        ...additionalHeaders
+      };
+
+      console.log(`[TEST API] Executing ${method || 'POST'} to ${apiUrl}`);
+      console.log(`[TEST API] Headers:`, headers);
+      console.log(`[TEST API] Payload:`, payload);
+
+      const axiosConfig: any = {
+        method: method || 'POST',
+        url: apiUrl,
+        headers,
+        timeout: 60000,
+      }
+      
+      if (payload && (method === 'POST' || !method)) {
+        axiosConfig.data = payload;
+      }
+
+      const response = await axios(axiosConfig)
+      
+      return res.status(200).json({
+        success: true,
+        data: response.data,
+        status: response.status
+      })
+
+    } catch (error: any) {
+      console.error("[TEST API] KRA ERROR:", error.response?.status, error.response?.data);
+      return res.status(error.response?.status || 500).json({
+        success: false,
+        message: "API Test failed",
+        error: error.response?.data || error.message,
+        status: error.response?.status
+      })
     }
   }
 }

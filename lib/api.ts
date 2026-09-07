@@ -1679,6 +1679,7 @@ export const etimsApi = {
   getLogs: () => client.get<any[]>("/api/etims/logs"),
   submitInvoice: (data: any) => client.post<any>("/api/etims/submit-invoice", data),
   validateCustomer: (data: any) => client.post<any>("/api/etims/validate-customer", data),
+  testKRAApi: (data: any) => client.post<any>("/api/etims/tester", data),
 };
 
 export const crmApi = {

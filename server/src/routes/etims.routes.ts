@@ -21,5 +21,6 @@ router.get("/logs", EtimsController.getLogs)
 // Operations
 router.post("/submit-invoice", EtimsController.submitInvoice)
 router.post("/validate-customer", EtimsController.validateCustomer)
+router.post("/tester", EtimsController.testAPI)
 
 export default router

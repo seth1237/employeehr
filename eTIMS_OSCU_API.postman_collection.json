@@ -1,0 +1,482 @@
+{
+  "info": {
+    "name": "eTIMS OSCU API - Sandbox Test Suite",
+    "description": "KRA eTIMS OSCU API sandbox test cases for TARUMED SUPPLIES LTD (P052287216A). Base URL: https://etims-api-sbx.kra.go.ke/",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Core System Setup & Initialization",
+      "item": [
+        {
+          "name": "OSCU Initialization",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "tin", "value": "{{tin}}"},
+              {"key": "bhfId", "value": "{{bhfId}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tin\": \"{{tin}}\",\n  \"bhfId\": \"{{bhfId}}\",\n  \"dvcSrlNo\": \"ELEVATEHUB-AMS-001\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/selectInitOsdcInfo",
+              "host": ["{{baseUrl}}"],
+              "path": ["selectInitOsdcInfo"]
+            },
+            "description": "Registers the device and retrieves the primary communication key (cmcKey). NOTE: This is the only call that does NOT require the cmcKey header, since it is used to obtain it. Copy the returned cmcKey into the {{cmcKey}} collection variable afterward."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Auto-save cmcKey from response into the environment for subsequent requests",
+                  "try {",
+                  "    const jsonData = pm.response.json();",
+                  "    const cmcKey = jsonData?.data?.info?.cmcKey || jsonData?.data?.cmcKey;",
+                  "    if (cmcKey) {",
+                  "        pm.collectionVariables.set('cmcKey', cmcKey);",
+                  "        console.log('Saved cmcKey:', cmcKey);",
+                  "    }",
+                  "} catch (e) {",
+                  "    console.log('Could not auto-extract cmcKey, please set it manually.');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Look Up List of Code",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "tin", "value": "{{tin}}"},
+              {"key": "bhfId", "value": "{{bhfId}}"},
+              {"key": "cmcKey", "value": "{{cmcKey}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tin\": \"{{tin}}\",\n  \"bhfId\": \"{{bhfId}}\",\n  \"lastReqDt\": \"{{lastReqDt}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/selectCodeList",
+              "host": ["{{baseUrl}}"],
+              "path": ["selectCodeList"]
+            }
+          }
+        },
+        {
+          "name": "Look Up Item Classification",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "tin", "value": "{{tin}}"},
+              {"key": "bhfId", "value": "{{bhfId}}"},
+              {"key": "cmcKey", "value": "{{cmcKey}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tin\": \"{{tin}}\",\n  \"bhfId\": \"{{bhfId}}\",\n  \"lastReqDt\": \"{{lastReqDt}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/selectItemClsList",
+              "host": ["{{baseUrl}}"],
+              "path": ["selectItemClsList"]
+            }
+          }
+        },
+        {
+          "name": "Look Up Branch List",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "tin", "value": "{{tin}}"},
+              {"key": "bhfId", "value": "{{bhfId}}"},
+              {"key": "cmcKey", "value": "{{cmcKey}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tin\": \"{{tin}}\",\n  \"bhfId\": \"{{bhfId}}\",\n  \"lastReqDt\": \"{{lastReqDt}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/selectBhfList",
+              "host": ["{{baseUrl}}"],
+              "path": ["selectBhfList"]
+            }
+          }
+        },
+        {
+          "name": "Look Up Notices List",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "tin", "value": "{{tin}}"},
+              {"key": "bhfId", "value": "{{bhfId}}"},
+              {"key": "cmcKey", "value": "{{cmcKey}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tin\": \"{{tin}}\",\n  \"bhfId\": \"{{bhfId}}\",\n  \"lastReqDt\": \"{{lastReqDt}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/selectNoticeList",
+              "host": ["{{baseUrl}}"],
+              "path": ["selectNoticeList"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Customer & Branch Management",
+      "item": [
+        {
+          "name": "Get Customer Information",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "tin", "value": "{{tin}}"},
+              {"key": "bhfId", "value": "{{bhfId}}"},
+              {"key": "cmcKey", "value": "{{cmcKey}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tin\": \"{{tin}}\",\n  \"bhfId\": \"{{bhfId}}\",\n  \"custTin\": \"P000000000X\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/selectCustInfo",
+              "host": ["{{baseUrl}}"],
+              "path": ["selectCustInfo"]
+            }
+          }
+        },
+        {
+          "name": "Save Customer Branch",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "tin", "value": "{{tin}}"},
+              {"key": "bhfId", "value": "{{bhfId}}"},
+              {"key": "cmcKey", "value": "{{cmcKey}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tin\": \"{{tin}}\",\n  \"bhfId\": \"{{bhfId}}\",\n  \"custNo\": \"CUST-001\",\n  \"custName\": \"Sample Customer\",\n  \"custTin\": \"P000000000X\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/saveBhfCustomer",
+              "host": ["{{baseUrl}}"],
+              "path": ["saveBhfCustomer"]
+            }
+          }
+        },
+        {
+          "name": "Save Branch User Account",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "tin", "value": "{{tin}}"},
+              {"key": "bhfId", "value": "{{bhfId}}"},
+              {"key": "cmcKey", "value": "{{cmcKey}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tin\": \"{{tin}}\",\n  \"bhfId\": \"{{bhfId}}\",\n  \"userId\": \"USER01\",\n  \"userName\": \"Admin User\",\n  \"useYn\": \"Y\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/saveBhfUser",
+              "host": ["{{baseUrl}}"],
+              "path": ["saveBhfUser"]
+            }
+          }
+        },
+        {
+          "name": "Save Branch Insurances",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "tin", "value": "{{tin}}"},
+              {"key": "bhfId", "value": "{{bhfId}}"},
+              {"key": "cmcKey", "value": "{{cmcKey}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tin\": \"{{tin}}\",\n  \"bhfId\": \"{{bhfId}}\",\n  \"isrCd\": \"INS001\",\n  \"isrNm\": \"Sample Insurance\",\n  \"useYn\": \"Y\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/saveBhfInsurance",
+              "host": ["{{baseUrl}}"],
+              "path": ["saveBhfInsurance"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Product & Item Catalog Management",
+      "item": [
+        {
+          "name": "Look Up Product List",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "tin", "value": "{{tin}}"},
+              {"key": "bhfId", "value": "{{bhfId}}"},
+              {"key": "cmcKey", "value": "{{cmcKey}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tin\": \"{{tin}}\",\n  \"bhfId\": \"{{bhfId}}\",\n  \"lastReqDt\": \"{{lastReqDt}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/selectItemList",
+              "host": ["{{baseUrl}}"],
+              "path": ["selectItemList"]
+            }
+          }
+        },
+        {
+          "name": "Save Item",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "tin", "value": "{{tin}}"},
+              {"key": "bhfId", "value": "{{bhfId}}"},
+              {"key": "cmcKey", "value": "{{cmcKey}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tin\": \"{{tin}}\",\n  \"bhfId\": \"{{bhfId}}\",\n  \"itemCd\": \"ITM-001\",\n  \"itemClsCd\": \"10101501\",\n  \"itemNm\": \"Surgical Gloves\",\n  \"pkgUnitCd\": \"BX\",\n  \"qtyUnitCd\": \"PCS\",\n  \"vatTyCd\": \"A\",\n  \"dftPrc\": 1000,\n  \"useYn\": \"Y\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/saveItem",
+              "host": ["{{baseUrl}}"],
+              "path": ["saveItem"]
+            }
+          }
+        },
+        {
+          "name": "Save Item Composition",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "tin", "value": "{{tin}}"},
+              {"key": "bhfId", "value": "{{bhfId}}"},
+              {"key": "cmcKey", "value": "{{cmcKey}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tin\": \"{{tin}}\",\n  \"bhfId\": \"{{bhfId}}\",\n  \"mainItemCd\": \"ITM-KIT-01\",\n  \"subItemCd\": \"ITM-001\",\n  \"subItemQty\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/saveItemComposition",
+              "host": ["{{baseUrl}}"],
+              "path": ["saveItemComposition"]
+            }
+          }
+        },
+        {
+          "name": "Look Up Imported Item List",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "tin", "value": "{{tin}}"},
+              {"key": "bhfId", "value": "{{bhfId}}"},
+              {"key": "cmcKey", "value": "{{cmcKey}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tin\": \"{{tin}}\",\n  \"bhfId\": \"{{bhfId}}\",\n  \"lastReqDt\": \"{{lastReqDt}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/selectImportItemList",
+              "host": ["{{baseUrl}}"],
+              "path": ["selectImportItemList"]
+            }
+          }
+        },
+        {
+          "name": "Update Imported Items",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "tin", "value": "{{tin}}"},
+              {"key": "bhfId", "value": "{{bhfId}}"},
+              {"key": "cmcKey", "value": "{{cmcKey}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tin\": \"{{tin}}\",\n  \"bhfId\": \"{{bhfId}}\",\n  \"taskNum\": \"IMP2026001\",\n  \"itemCd\": \"ITM-001\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/updateImportItem",
+              "host": ["{{baseUrl}}"],
+              "path": ["updateImportItem"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Sales & Receipts Processing",
+      "item": [
+        {
+          "name": "Save Sales Transaction",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "tin", "value": "{{tin}}"},
+              {"key": "bhfId", "value": "{{bhfId}}"},
+              {"key": "cmcKey", "value": "{{cmcKey}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tin\": \"{{tin}}\",\n  \"bhfId\": \"{{bhfId}}\",\n  \"invcNo\": 1,\n  \"orgInvcNo\": 0,\n  \"custTin\": \"P000000000X\",\n  \"custNm\": \"Test Customer\",\n  \"salesTyCd\": \"N\",\n  \"rcptTyCd\": \"S\",\n  \"pmtTyCd\": \"01\",\n  \"salesSttsCd\": \"02\",\n  \"cfmDt\": \"20260902143000\",\n  \"salesDt\": \"20260902\",\n  \"totItemCnt\": 1,\n  \"taxblAmtA\": 1000,\n  \"taxAmtA\": 160,\n  \"totTaxblAmt\": 1000,\n  \"totTaxAmt\": 160,\n  \"totAmt\": 1160,\n  \"itemList\": [\n    {\n      \"itemSeq\": 1,\n      \"itemCd\": \"ITM-001\",\n      \"itemClsCd\": \"10101501\",\n      \"itemNm\": \"Surgical Gloves\",\n      \"pkgUnitCd\": \"BX\",\n      \"qty\": 1,\n      \"prc\": 1160,\n      \"splyAmt\": 1000,\n      \"taxAmt\": 160,\n      \"totAmt\": 1160,\n      \"vatTyCd\": \"A\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/saveTrnsSalesOsdc",
+              "host": ["{{baseUrl}}"],
+              "path": ["saveTrnsSalesOsdc"]
+            }
+          }
+        },
+        {
+          "name": "Look Up Purchases-Sales List",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "tin", "value": "{{tin}}"},
+              {"key": "bhfId", "value": "{{bhfId}}"},
+              {"key": "cmcKey", "value": "{{cmcKey}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tin\": \"{{tin}}\",\n  \"bhfId\": \"{{bhfId}}\",\n  \"lastReqDt\": \"{{lastReqDt}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/selectTrnsSalesList",
+              "host": ["{{baseUrl}}"],
+              "path": ["selectTrnsSalesList"]
+            }
+          }
+        },
+        {
+          "name": "Save Purchases Information",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "tin", "value": "{{tin}}"},
+              {"key": "bhfId", "value": "{{bhfId}}"},
+              {"key": "cmcKey", "value": "{{cmcKey}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tin\": \"{{tin}}\",\n  \"bhfId\": \"{{bhfId}}\",\n  \"sllrTin\": \"P011111111Z\",\n  \"sllrNm\": \"Vendor Ltd\",\n  \"sllrBhfId\": \"00\",\n  \"sllrInvcNo\": 101,\n  \"pchsSttsCd\": \"02\",\n  \"pchsDt\": \"20260902\",\n  \"totAmt\": 5000,\n  \"itemList\": [\n    {\n      \"itemSeq\": 1,\n      \"itemCd\": \"ITM-001\",\n      \"qty\": 5,\n      \"prc\": 1000,\n      \"totAmt\": 5000\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/saveTrnsPurchase",
+              "host": ["{{baseUrl}}"],
+              "path": ["saveTrnsPurchase"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Stock & Inventory Management",
+      "item": [
+        {
+          "name": "Save Stock-Master Information",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "tin", "value": "{{tin}}"},
+              {"key": "bhfId", "value": "{{bhfId}}"},
+              {"key": "cmcKey", "value": "{{cmcKey}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tin\": \"{{tin}}\",\n  \"bhfId\": \"{{bhfId}}\",\n  \"itemCd\": \"ITM-001\",\n  \"rsdQty\": 100\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/saveStockMaster",
+              "host": ["{{baseUrl}}"],
+              "path": ["saveStockMaster"]
+            }
+          }
+        },
+        {
+          "name": "Look Up Stock Movement",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "tin", "value": "{{tin}}"},
+              {"key": "bhfId", "value": "{{bhfId}}"},
+              {"key": "cmcKey", "value": "{{cmcKey}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tin\": \"{{tin}}\",\n  \"bhfId\": \"{{bhfId}}\",\n  \"lastReqDt\": \"{{lastReqDt}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/selectStockMoveList",
+              "host": ["{{baseUrl}}"],
+              "path": ["selectStockMoveList"]
+            }
+          }
+        },
+        {
+          "name": "Save Stock In/Out",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "tin", "value": "{{tin}}"},
+              {"key": "bhfId", "value": "{{bhfId}}"},
+              {"key": "cmcKey", "value": "{{cmcKey}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tin\": \"{{tin}}\",\n  \"bhfId\": \"{{bhfId}}\",\n  \"sarNo\": 1,\n  \"ocrnDt\": \"20260902\",\n  \"sarTyCd\": \"01\",\n  \"totItemCnt\": 1,\n  \"totTaxblAmt\": 1000,\n  \"totTaxAmt\": 160,\n  \"totAmt\": 1160,\n  \"itemList\": [\n    {\n      \"itemSeq\": 1,\n      \"itemCd\": \"ITM-001\",\n      \"itemClsCd\": \"10101501\",\n      \"itemNm\": \"Surgical Gloves\",\n      \"qty\": 10,\n      \"prc\": 1160,\n      \"splyAmt\": 1000,\n      \"taxAmt\": 160,\n      \"totAmt\": 1160,\n      \"vatTyCd\": \"A\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/saveStockItems",
+              "host": ["{{baseUrl}}"],
+              "path": ["saveStockItems"]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {"key": "baseUrl", "value": "https://etims-api-sbx.kra.go.ke/etimsApi"},
+    {"key": "tin", "value": "P052287216A"},
+    {"key": "bhfId", "value": "00"},
+    {"key": "cmcKey", "value": "<PASTE_CMC_KEY_AFTER_INIT_CALL>"},
+    {"key": "lastReqDt", "value": "20260101000000"}
+  ]
+}

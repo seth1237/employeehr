@@ -251,14 +251,20 @@ export default function AccountsPostsPage() {
           <h1 className="text-2xl font-bold">eTIMS OSCU Integration</h1>
           <p className="text-sm text-muted-foreground mt-1">Manage and post electronic tax invoices to KRA.</p>
         </div>
-        <Button variant="outline" onClick={() => loadData({ silent: true })} disabled={refreshing} className="gap-2">
-          <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-          Refresh
-        </Button>
-        <Button variant="outline" onClick={() => setShowEtimsConfig(true)} className="gap-2">
-          <Settings className="h-4 w-4" />
-          OSCU Configuration
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => loadData({ silent: true })} disabled={refreshing} className="gap-2">
+            <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
+          <Button variant="outline" onClick={() => window.location.href = "/admin/accounts/posts/tester"} className="gap-2">
+            <ServerCrash className="h-4 w-4" />
+            API Tester
+          </Button>
+          <Button variant="outline" onClick={() => setShowEtimsConfig(true)} className="gap-2">
+            <Settings className="h-4 w-4" />
+            OSCU Configuration
+          </Button>
+        </div>
       </div>
 
       {/* DASHBOARD STATS */}

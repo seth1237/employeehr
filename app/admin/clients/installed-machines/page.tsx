@@ -3037,14 +3037,13 @@ export default function InstalledMachinesPage() {
                 <p className="text-sm text-muted-foreground">
                   Upload a CSV of installed machines. Required:{" "}
                   <strong>Machine Name</strong> and <strong>Client</strong>.
-                  Recommended: <strong>Machine S/No</strong> and{" "}
+                  Recommended:                   <strong>Machine S/No</strong>, <strong>Machine Category</strong>, and{" "}
                   <strong>LOCATION</strong>.
                 </p>
                 <div className="rounded-md border bg-muted/30 p-3 text-xs space-y-2">
                   <p className="font-medium text-foreground">Expected columns</p>
                   <p>
-                    <code>Machine Name</code>, <code>Client</code>,{" "}
-                    <code>Contact person</code>, <code>phone number</code>,{" "}
+                    <code>Machine Name</code>, <code>Machine Category</code>, <code>Client</code>,{" "} <code>Contact person</code>, <code>phone number</code>,{" "}
                     <code>In charge of machine (name)</code>, <code>Role</code>,{" "}
                     <code>No</code> (attendant phone), <code>LOCATION</code>,{" "}
                     <code>Machine S/No</code>, <code>Installation Date</code>,{" "}

@@ -8,7 +8,7 @@ import { StockProduct } from "../models/StockProduct";
 import { MachineService } from "../models/MachineService";
 import { isAdminRole } from "./stock/stockShared";
 
-function parseCsvLine(line: string): string[] {
+function parseCsvLine(line: string, delimiter: string = ","): string[] {
   const cells: string[] = [];
   let current = "";
   let inQuotes = false;
@@ -26,7 +26,7 @@ function parseCsvLine(line: string): string[] {
       continue;
     }
 
-    if (char === "," && !inQuotes) {
+    if (char === delimiter && !inQuotes) {
       cells.push(current.trim());
       current = "";
       continue;
@@ -41,16 +41,27 @@ function parseCsvLine(line: string): string[] {
 
 function parseCsv(content: string): Array<Record<string, string>> {
   const lines = content
-    .split(/\r?\n/)
+    .split(/\r\n|\n|\r/)
     .map((line) => line.trimEnd())
     .filter((line) => line.length > 0);
 
   if (lines.length < 1) return [];
 
-  const headers = parseCsvLine(lines[0]).map((header) => header.trim());
+  // Detect delimiter
+  let delimiter = ",";
+  if (!lines[0].includes(",") && lines[0].includes(";")) delimiter = ";";
+  if (!lines[0].includes(",") && lines[0].includes("\t")) delimiter = "\t";
+  if (!lines[0].includes(",") && !lines[0].includes(";") && !lines[0].includes("\t")) {
+    // Fallback: Check if it's tab-separated but we didn't detect it clearly
+    const commaCount = (lines[0].match(/,/g) || []).length;
+    const tabCount = (lines[0].match(/\t/g) || []).length;
+    if (tabCount > commaCount) delimiter = "\t";
+  }
+
+  const headers = parseCsvLine(lines[0], delimiter).map((header) => header.trim());
 
   return lines.slice(1).map((line) => {
-    const values = parseCsvLine(line);
+    const values = parseCsvLine(line, delimiter);
     const row: Record<string, string> = {};
     headers.forEach((header, headerIndex) => {
       row[header] = values[headerIndex] ?? "";
@@ -562,21 +573,22 @@ export class InstalledMachineController {
         ]),
       );
 
-      const resolveProduct = async (productName: string) => {
+      const resolveProduct = async (productName: string, productCategory?: string) => {
         const key = productName.trim().toLowerCase();
         const existing = productByName.get(key);
         if (existing) {
+          // If the CSV provided a category, we might want to update it, but for now we just use existing
           return {
             productId: String(existing._id),
             productName: String(existing.name),
-            category: String(existing.category || ""),
+            category: productCategory || String(existing.category || ""),
           };
         }
 
         const created = await StockProduct.create({
           org_id,
           name: productName.trim(),
-          category: "Imported Machines",
+          category: productCategory || "Imported Machines",
           productType: "physical",
           startingPrice: 0,
           sellingPrice: 0,
@@ -588,7 +600,7 @@ export class InstalledMachineController {
         const resolved = {
           productId: String(created._id),
           productName: String(created.name),
-          category: "Imported Machines",
+          category: productCategory || "Imported Machines",
         };
         productByName.set(key, {
           _id: created._id,
@@ -611,6 +623,9 @@ export class InstalledMachineController {
             "Client Name",
             "Facility",
             "Facility Name",
+            "Facility/Client",
+            "Client/Facility",
+            "Hospital",
             "sourceName",
           ]);
           const contactPerson = cell(row, [
@@ -683,6 +698,12 @@ export class InstalledMachineController {
             "Equipment",
             "productName",
           ]);
+          const categoryRaw = cell(row, [
+            "Category",
+            "Machine Category",
+            "Product Category",
+            "category",
+          ]);
           const installationDate = parseFlexibleDate(
             cell(row, [
               "Installation Date",
@@ -726,7 +747,7 @@ export class InstalledMachineController {
 
           const attendantNumber = looksLikePhone(noValue) ? noValue : "";
           const productName = productNameRaw;
-          const product = await resolveProduct(productName);
+          const product = await resolveProduct(productName, categoryRaw);
 
           const noteParts = [notesRaw];
           if (noValue && !attendantNumber) noteParts.push(`No: ${noValue}`);
@@ -741,11 +762,12 @@ export class InstalledMachineController {
             },
             productId: product.productId,
             productName: product.productName,
-            category: product.category || undefined,
+            category: categoryRaw || product.category || undefined,
             serialNumber: serialNumber || undefined,
             installationLocation:
               installationLocation || location || undefined,
             installationDate,
+            lastServiceDate,
             nextServiceDate,
             installedBy: installedBy || undefined,
             attendant: attendant || undefined,
@@ -789,7 +811,7 @@ export class InstalledMachineController {
               },
               productId: product.productId,
               productName: product.productName,
-              category: product.category || existing.category,
+              category: categoryRaw || product.category || existing.category,
               serialNumber: serialNumber || existing.serialNumber,
               installationLocation:
                 installationLocation ||
@@ -797,6 +819,8 @@ export class InstalledMachineController {
                 existing.installationLocation,
               installationDate:
                 installationDate || existing.installationDate,
+              lastServiceDate:
+                lastServiceDate || existing.lastServiceDate,
               nextServiceDate: nextServiceDate || existing.nextServiceDate,
               installedBy: installedBy || existing.installedBy,
               attendant: attendant || existing.attendant,

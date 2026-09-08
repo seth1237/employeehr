@@ -292,29 +292,44 @@ export function DispatchWorkflow({ invoiceId, allowBackTo }: DispatchWorkflowPro
   if (!invoice) return <div className="p-4">Invoice not found.</div>
 
   return (
-    <div className="min-h-screen bg-white">
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-muted-foreground">Order</span>
-              <span className="h-4 w-px bg-border" />
-              <span className="text-sm font-medium text-muted-foreground">Dispatch</span>
+    <div className="min-h-screen bg-slate-50/50 pb-8">
+      {/* Header section designed to look standard and edge-to-edge */}
+      <div className="bg-white border-b sticky top-0 z-10">
+        <div className="px-4 md:px-8 py-6 w-full">
+          <div className="mb-4">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
+              <span className="cursor-pointer hover:text-primary transition-colors" onClick={() => (window.location.href = allowBackTo || "/admin/stock/dispatch")}>
+                Dispatch Management
+              </span>
+              <span className="text-border">/</span>
+              <span className="font-medium text-foreground">{invoice.invoiceNumber}</span>
             </div>
-            <h1 className="text-3xl font-bold tracking-tight text-foreground">{invoice.invoiceNumber}</h1>
-            <p className="text-sm text-muted-foreground">{invoice.client.name} • {invoice.client.number}</p>
-          </div>
-          <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-3">
-            <Badge className={statusColor} style={{ fontSize: "0.875rem", padding: "0.5rem 0.75rem" }}>
-              {dispatchStatus.charAt(0).toUpperCase() + dispatchStatus.slice(1).replaceAll("_", " ")}
-            </Badge>
-            {allowBackTo && (
-              <Button variant="outline" onClick={() => (window.location.href = allowBackTo)}>
-                Back
-              </Button>
-            )}
+            
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+              <div>
+                <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-3">
+                  Dispatch Flow
+                  <Badge className={statusColor}>
+                    {dispatchStatus.charAt(0).toUpperCase() + dispatchStatus.slice(1).replaceAll("_", " ")}
+                  </Badge>
+                </h1>
+                <p className="text-muted-foreground mt-1 text-sm">
+                  {invoice.client.name} • {invoice.client.number} • DN: {invoice.deliveryNoteNumber}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {allowBackTo && (
+                  <Button variant="outline" onClick={() => (window.location.href = allowBackTo)}>
+                    Back to Queue
+                  </Button>
+                )}
+              </div>
+            </div>
           </div>
         </div>
+      </div>
+
+      <div className="px-4 md:px-8 pt-8 w-full max-w-[1600px] mx-auto">
 
         <div className="grid gap-6 xl:grid-cols-[1fr_320px]">
           <div className="space-y-6">
@@ -341,10 +356,13 @@ export function DispatchWorkflow({ invoiceId, allowBackTo }: DispatchWorkflowPro
             {success && <Alert><AlertDescription className="text-green-700">{success}</AlertDescription></Alert>}
 
             {(dispatchStatus === "not_assigned" || dispatchStatus === "assigned" || dispatchStatus === "packing" || dispatchStatus === "packed") && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Packing</CardTitle>
-                </CardHeader>
+            <Card className="shadow-sm border-0 ring-1 ring-border/50">
+              <CardHeader className="bg-muted/30 border-b">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-semibold">1</span>
+                  Packing
+                </CardTitle>
+              </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="grid gap-3 lg:grid-cols-2">
                     {packingItems.map((item, index) => {
@@ -388,10 +406,13 @@ export function DispatchWorkflow({ invoiceId, allowBackTo }: DispatchWorkflowPro
             )}
 
             {(dispatchStatus === "packed" || dispatchStatus === "dispatched" || dispatchStatus === "delivered") && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Dispatch</CardTitle>
-                </CardHeader>
+            <Card className="shadow-sm border-0 ring-1 ring-border/50">
+              <CardHeader className="bg-muted/30 border-b">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-semibold">2</span>
+                  Dispatch
+                </CardTitle>
+              </CardHeader>
                 <CardContent className="grid gap-4 lg:grid-cols-[1fr_280px]">
                   <div className="space-y-3">
                     <div>
@@ -478,10 +499,13 @@ export function DispatchWorkflow({ invoiceId, allowBackTo }: DispatchWorkflowPro
             )}
 
             {(dispatchStatus === "dispatched" || dispatchStatus === "delivered") && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Follow-up</CardTitle>
-                </CardHeader>
+            <Card className="shadow-sm border-0 ring-1 ring-border/50">
+              <CardHeader className="bg-muted/30 border-b">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-semibold">3</span>
+                  Follow-up
+                </CardTitle>
+              </CardHeader>
                 <CardContent className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
                   <div className="space-y-3">
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -523,8 +547,13 @@ export function DispatchWorkflow({ invoiceId, allowBackTo }: DispatchWorkflowPro
             )}
 
             {dispatchStatus === "dispatched" && (
-              <Card>
-                <CardHeader><CardTitle className="text-lg">Delivery Confirmation</CardTitle></CardHeader>
+            <Card className="shadow-sm border-0 ring-1 ring-border/50">
+              <CardHeader className="bg-muted/30 border-b">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-semibold">4</span>
+                  Delivery Confirmation
+                </CardTitle>
+              </CardHeader>
                 <CardContent className="space-y-3">
                   <div>
                     <Label>Condition on Arrival</Label>
@@ -555,8 +584,13 @@ export function DispatchWorkflow({ invoiceId, allowBackTo }: DispatchWorkflowPro
             )}
 
             {dispatchStatus === "delivered" && (
-              <Card>
-                <CardHeader><CardTitle className="text-lg">Delivery Complete</CardTitle></CardHeader>
+              <Card className="shadow-sm border-0 ring-1 ring-emerald-200">
+                <CardHeader className="bg-emerald-50 border-b border-emerald-100">
+                  <CardTitle className="text-lg text-emerald-800 flex items-center gap-2">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-200 text-emerald-900 text-xs font-semibold">✓</span>
+                    Delivery Complete
+                  </CardTitle>
+                </CardHeader>
                 <CardContent className="space-y-2 text-sm">
                   <p><strong>Condition:</strong> {invoice.dispatch?.delivery?.condition === "good" ? "Good" : "Not Good"}</p>
                   <p><strong>Arrival Time:</strong> {invoice.dispatch?.delivery?.arrivalTime ? new Date(invoice.dispatch.delivery.arrivalTime).toLocaleString() : ""}</p>
@@ -568,8 +602,8 @@ export function DispatchWorkflow({ invoiceId, allowBackTo }: DispatchWorkflowPro
           </div>
 
           <aside className="space-y-4 xl:sticky xl:top-8">
-            <Card>
-              <CardHeader>
+            <Card className="shadow-sm border-0 ring-1 ring-border/50 sticky top-[120px]">
+              <CardHeader className="bg-muted/30 border-b">
                 <CardTitle className="text-lg">Summary</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4 text-sm">

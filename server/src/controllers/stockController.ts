@@ -6991,12 +6991,23 @@ export class StockController {
           .json({ success: false, message: "Unauthorized" });
 
       const query: any = { org_id };
+      
+      // If they are checking the dispatch page specifically (by checking a query parameter or path),
+      // we might want to filter. But since we use the same getInvoices endpoint for both sales/invoices
+      // and dispatch, we'll let the frontend filter, UNLESS they are a pure dispatch role.
+      // Assuming 'employee' or 'manager' roles might be restricted to their assigned dispatches.
+      
       if (isOwnDocumentsRole(role)) {
         if (!userId)
           return res
             .status(401)
             .json({ success: false, message: "Unauthorized" });
-        query.createdBy = String(userId);
+            
+        // For restricted roles, they should see invoices they created OR invoices assigned to them for dispatch
+        query.$or = [
+          { createdBy: String(userId) },
+          { "dispatch.assignedToUserId": String(userId) }
+        ];
       }
 
       const invoices = await StockInvoice.find(query)

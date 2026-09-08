@@ -3,13 +3,14 @@
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import API_URL from "@/lib/apiBase"
-import { getToken } from "@/lib/auth"
+import { getToken, getUser } from "@/lib/auth"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   ResponsiveContainer,
   LineChart,
@@ -99,7 +100,7 @@ export default function AdminDispatchManagementPage() {
   const [smsDefaultTemplate, setSmsDefaultTemplate] = useState("")
   const [deliverySmsDefaultTemplate, setDeliverySmsDefaultTemplate] = useState("")
 
-  const [dateFilter, setDateFilter] = useState<"week" | "month" | "custom">("week")
+  const [dateFilter, setDateFilter] = useState<"all" | "week" | "month" | "custom">("all")
   const [customFrom, setCustomFrom] = useState("")
   const [customTo, setCustomTo] = useState("")
   const [selectedCourier, setSelectedCourier] = useState("all")
@@ -108,6 +109,10 @@ export default function AdminDispatchManagementPage() {
   const [search, setSearch] = useState("")
   const [sortBy, setSortBy] = useState<"createdAt-desc" | "createdAt-asc" | "status" | "client">("createdAt-desc")
   const [smsSettingsOpen, setSmsSettingsOpen] = useState(false)
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 20
 
   const headers = useMemo(() => ({
     "Content-Type": "application/json",
@@ -219,6 +224,7 @@ export default function AdminDispatchManagementPage() {
   }, [smsSettings.deliveryMessageTemplate, smsSettings.officePhone, deliverySmsDefaultTemplate])
 
   const isInDateRange = (value?: string) => {
+    if (dateFilter === "all") return true
     if (!value) return false
     const date = new Date(value)
     if (Number.isNaN(date.getTime())) return false
@@ -282,13 +288,25 @@ export default function AdminDispatchManagementPage() {
   }, [invoices])
 
   const filteredInvoices = useMemo(() => {
+    const currentUser = getUser()
+    const isCompanyAdmin = currentUser?.role === "company_admin" || currentUser?.role === "admin"
+
     const data = invoices.filter((invoice) => {
+      // ONLY SHOW INVOICES THAT HAVE BEEN ASSIGNED TO DISPATCH
+      const status = invoice.dispatch?.status || "not_assigned";
+      if (status === "not_assigned") return false;
+
+      // ENFORCE: If they are NOT an admin, they can ONLY see dispatch tasks explicitly assigned to them
+      if (!isCompanyAdmin && invoice.dispatch?.assignedToUserId !== currentUser?._id) {
+        return false;
+      }
+
       const dispatchDate = invoice.dispatch?.dispatchedAt || invoice.createdAt
       if (!isInDateRange(dispatchDate)) return false
 
       if (selectedCourier !== "all" && invoice.dispatch?.courier?.name !== selectedCourier) return false
       if (selectedStaff !== "all" && invoice.dispatch?.assignedToUserId !== selectedStaff) return false
-      if (selectedStatus !== "all" && (invoice.dispatch?.status || "not_assigned") !== selectedStatus) return false
+      if (selectedStatus !== "all" && status !== selectedStatus) return false
 
       if (search.trim()) {
         const q = search.toLowerCase()
@@ -326,6 +344,13 @@ export default function AdminDispatchManagementPage() {
     search,
     sortBy,
   ])
+
+  // Pagination logic
+  const totalPages = Math.ceil(filteredInvoices.length / itemsPerPage)
+  const paginatedInvoices = filteredInvoices.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  )
 
   const metrics = useMemo(() => {
     const startOfToday = new Date()
@@ -462,11 +487,6 @@ export default function AdminDispatchManagementPage() {
             <h1 className="text-xl font-semibold tracking-tight text-foreground">Dispatch dashboard</h1>
             <p className="text-sm text-muted-foreground">Track courier movement, delivery quality, and client notifications from one screen.</p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => setSmsSettingsOpen(!smsSettingsOpen)}>
-              {smsSettingsOpen ? "Hide SMS Settings" : "SMS Settings"}
-            </Button>
-          </div>
         </div>
 
         <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
@@ -517,29 +537,25 @@ export default function AdminDispatchManagementPage() {
         </div>
       </div>
 
-      <Card className="shadow-sm">
-        <CardHeader>
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <CardTitle className="text-base">Dispatch SMS Settings</CardTitle>
-              <p className="mt-1 text-sm text-muted-foreground">Configure the dispatch and delivery-complete messages sent to clients.</p>
-            </div>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setSmsSettingsOpen(!smsSettingsOpen)}
-              className="flex items-center gap-1"
-            >
-              {smsSettingsOpen ? (
-                <><ChevronUp className="w-4 h-4" /> Collapse</>
-              ) : (
-                <><ChevronDown className="w-4 h-4" /> Expand</>
-              )}
-            </Button>
-          </div>
-        </CardHeader>
-        {smsSettingsOpen && (
-        <CardContent className="space-y-4 border-t pt-4">
+      <Tabs defaultValue="overview" className="space-y-4">
+        <TabsList className="bg-muted/50 border grid grid-cols-2 lg:flex h-auto p-1 lg:h-10 lg:w-fit">
+          <TabsTrigger value="overview">Analytics Overview</TabsTrigger>
+          <TabsTrigger value="logs">Dispatch Logs</TabsTrigger>
+          <TabsTrigger value="leaderboard">Courier Leaderboard</TabsTrigger>
+          <TabsTrigger value="sms">SMS Settings</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="sms" className="space-y-4">
+          <Card className="shadow-sm">
+            <CardHeader>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <CardTitle className="text-base">Dispatch SMS Settings</CardTitle>
+                  <p className="mt-1 text-sm text-muted-foreground">Configure the dispatch and delivery-complete messages sent to clients.</p>
+                </div>
+              </div>
+            </CardHeader>
+          <CardContent className="space-y-4 border-t pt-4">
           {smsSettingsLoading ? (
             <p className="text-sm text-muted-foreground">Loading SMS settings...</p>
           ) : (
@@ -644,17 +660,16 @@ export default function AdminDispatchManagementPage() {
             </>
           )}
         </CardContent>
-        )}
       </Card>
+      </TabsContent>
 
-      <Card className="shadow-sm">
-        <CardContent className="p-3">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-6">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-6 mb-4 mt-4 bg-muted/20 p-3 rounded-xl border border-dashed">
           <select
             className="h-10 rounded-md border bg-background px-3 text-sm"
             value={dateFilter}
-            onChange={(e) => setDateFilter(e.target.value as "week" | "month" | "custom")}
+            onChange={(e) => setDateFilter(e.target.value as "all" | "week" | "month" | "custom")}
           >
+            <option value="all">All Time</option>
             <option value="week">Last 7 days</option>
             <option value="month">Last 30 days</option>
             <option value="custom">Custom range</option>
@@ -726,10 +741,9 @@ export default function AdminDispatchManagementPage() {
             />
           </div>
         </div>
-        </CardContent>
-      </Card>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+      <TabsContent value="overview" className="space-y-4">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <Card className="shadow-sm">
           <CardHeader>
             <CardTitle className="text-base">Deliveries Per Day</CardTitle>
@@ -744,44 +758,6 @@ export default function AdminDispatchManagementPage() {
                 <Line type="monotone" dataKey="deliveries" stroke="#2563eb" strokeWidth={2} />
               </LineChart>
             </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-base">Courier Performance</CardTitle>
-          </CardHeader>
-          <CardContent className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={courierPerformance.slice(0, 8)}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="courier" />
-                <YAxis allowDecimals={false} />
-                <Tooltip />
-                <Bar dataKey="delivered" fill="#22c55e" name="Delivered" />
-                <Bar dataKey="failed" fill="#ef4444" name="Failed" />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <Card className="shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-base">Average Delivery Time</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{averageDeliveryTime.label}</div>
-            <p className="text-sm text-muted-foreground mt-1">Calculated from dispatch to delivery timestamps</p>
-            <div className="mt-4 space-y-2">
-              {courierPerformance.slice(0, 5).map((c) => (
-                <div key={c.courier} className="flex items-center justify-between text-sm border-b pb-1">
-                  <span>{c.courier}</span>
-                  <span className="font-medium">{c.avgMinutes} min avg</span>
-                </div>
-              ))}
-            </div>
           </CardContent>
         </Card>
 
@@ -803,14 +779,56 @@ export default function AdminDispatchManagementPage() {
           </CardContent>
         </Card>
       </div>
+      </TabsContent>
 
-      <Card className="shadow-sm">
-        <CardHeader>
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle className="text-base">Dispatch Logs</CardTitle>
-            <p className="text-sm text-muted-foreground">{filteredInvoices.length} records</p>
-          </div>
-        </CardHeader>
+      <TabsContent value="leaderboard" className="space-y-4">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <Card className="shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-base">Courier Performance</CardTitle>
+            </CardHeader>
+            <CardContent className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={courierPerformance.slice(0, 8)}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="courier" />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip />
+                  <Bar dataKey="delivered" fill="#22c55e" name="Delivered" />
+                  <Bar dataKey="failed" fill="#ef4444" name="Failed" />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-base">Average Delivery Time</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold">{averageDeliveryTime.label}</div>
+              <p className="text-sm text-muted-foreground mt-1">Calculated from dispatch to delivery timestamps</p>
+              <div className="mt-4 space-y-2">
+                {courierPerformance.slice(0, 5).map((c) => (
+                  <div key={c.courier} className="flex items-center justify-between text-sm border-b pb-1">
+                    <span>{c.courier}</span>
+                    <span className="font-medium">{c.avgMinutes} min avg</span>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </TabsContent>
+
+      <TabsContent value="logs" className="space-y-4">
+        <Card className="shadow-sm">
+          <CardHeader>
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <CardTitle className="text-base">Dispatch Logs</CardTitle>
+              <p className="text-sm text-muted-foreground">{filteredInvoices.length} records</p>
+            </div>
+          </CardHeader>
         <CardContent className="space-y-3">
           <div className="hidden lg:grid grid-cols-7 text-xs font-semibold uppercase tracking-wide text-muted-foreground border-b pb-2">
             <span>Invoice ID</span>
@@ -822,7 +840,7 @@ export default function AdminDispatchManagementPage() {
             <span>Delivered At</span>
           </div>
 
-          {filteredInvoices.map((invoice) => {
+          {paginatedInvoices.map((invoice) => {
             const statusColors = 
               invoice.dispatch?.status === "delivered" ? "bg-green-100 text-green-700" :
               invoice.dispatch?.status === "dispatched" ? "bg-blue-100 text-blue-700" :
@@ -866,32 +884,82 @@ export default function AdminDispatchManagementPage() {
             )
           })}
 
-          {filteredInvoices.length === 0 && (
+          {paginatedInvoices.length === 0 && (
             <div className="text-sm text-muted-foreground py-8 text-center">No dispatch logs for selected filters</div>
           )}
         </CardContent>
       </Card>
+      
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2 mt-4">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+          >
+            Previous
+          </Button>
+          <span className="text-sm text-muted-foreground">
+            Page {currentPage} of {totalPages}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+            disabled={currentPage === totalPages}
+          >
+            Next
+          </Button>
+        </div>
+      )}
 
-      <Card className="shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-base">Courier Leaderboard</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {courierPerformance.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No courier data available</p>
-          ) : (
-            courierPerformance.map((c) => (
-              <div key={c.courier} className="grid grid-cols-1 gap-2 rounded-xl border bg-white/90 p-3 text-sm shadow-sm md:grid-cols-5">
-                <span className="font-medium">{c.courier}</span>
-                <span>Delivered: {c.delivered}</span>
-                <span>Failed: {c.failed}</span>
-                <span>Success: {c.successRate}%</span>
-                <span>Avg Time: {c.avgMinutes}m</span>
+        <Card className="shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-base">Courier Leaderboard</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {courierPerformance.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No courier data available</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="pb-2 font-medium">Courier / Transport</th>
+                      <th className="pb-2 font-medium">Total Orders</th>
+                      <th className="pb-2 font-medium">Delivered</th>
+                      <th className="pb-2 font-medium text-red-600">Failed/Damaged</th>
+                      <th className="pb-2 font-medium">Success Rate</th>
+                      <th className="pb-2 font-medium">Avg Time</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {courierPerformance.map((c) => {
+                      const rate = c.total > 0 ? Math.round((c.delivered / c.total) * 100) : 0
+                      return (
+                        <tr key={c.courier} className="hover:bg-muted/30 transition-colors">
+                          <td className="py-3 font-medium">{c.courier}</td>
+                          <td className="py-3">{c.total}</td>
+                          <td className="py-3">{c.delivered}</td>
+                          <td className="py-3 text-red-600">{c.failed}</td>
+                          <td className="py-3">
+                            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${rate >= 90 ? "bg-green-100 text-green-700" : rate >= 75 ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700"}`}>
+                              {rate}%
+                            </span>
+                          </td>
+                          <td className="py-3 text-muted-foreground">{c.avgMinutes} min</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
               </div>
-            ))
-          )}
-        </CardContent>
-      </Card>
+            )}
+          </CardContent>
+        </Card>
+      </TabsContent>
+      </Tabs>
     </div>
   )
 }

@@ -86,6 +86,10 @@ interface Invoice {
       | "dispatched"
       | "delivered";
     assignedToUserId?: string;
+    assignedAt?: string;
+    dispatchedAt?: string;
+    courier?: { name?: string };
+    delivery?: { arrivalTime?: string, condition?: string, note?: string };
     packingItems?: Array<{ requiredQuantity: number; packedQuantity: number }>;
   };
 }
@@ -204,6 +208,7 @@ export default function InvoicesPage() {
 
   // Export Modal State
   const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [deliveryStatusInvoice, setDeliveryStatusInvoice] = useState<Invoice | null>(null);
   const [exportType, setExportType] = useState<"pdf" | "excel" | null>(null);
   const [exportStartDate, setExportStartDate] = useState("");
   const [exportEndDate, setExportEndDate] = useState("");
@@ -324,15 +329,9 @@ export default function InvoicesPage() {
         window.alert(json.message || "Failed to assign dispatch");
         return;
       }
-      if (json?.success) {
-        const openDispatchNow = window.confirm(
-          "Dispatch handler assigned. Open Dispatch Form now to mark as dispatched and send client SMS?",
-        );
-        if (openDispatchNow) {
-          window.location.href = `/admin/stock/dispatch/${invoiceId}`;
-          return;
-        }
-      }
+      
+      // Removed the window.confirm prompt
+      
       await loadData({ silent: true });
     } finally {
       setAssigningInvoiceId(null);
@@ -1259,7 +1258,7 @@ export default function InvoicesPage() {
                             {!isDelivered &&
                               invoice.status !== "pending_approval" &&
                               invoice.status !== "draft" && (
-                              <div className="flex flex-wrap items-center gap-2">
+                              <div className="flex flex-wrap items-center gap-2 mt-2">
                                 <Select
                                   value={
                                     selectedDispatchByInvoice[invoice._id] || ""
@@ -1299,6 +1298,19 @@ export default function InvoicesPage() {
                                   className="h-8 whitespace-nowrap"
                                 >
                                   Assign
+                                </Button>
+                              </div>
+                            )}
+
+                            {dispatchState !== "not_assigned" && (
+                              <div className="mt-2 w-full max-w-[240px]">
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  className="h-7 w-full text-xs shadow-sm"
+                                  onClick={() => setDeliveryStatusInvoice(invoice)}
+                                >
+                                  View Delivery Status
                                 </Button>
                               </div>
                             )}
@@ -1595,6 +1607,82 @@ export default function InvoicesPage() {
             <Button onClick={confirmExport}>
               Export {exportType?.toUpperCase()}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deliveryStatusInvoice} onOpenChange={(open) => !open && setDeliveryStatusInvoice(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delivery Status</DialogTitle>
+          </DialogHeader>
+          {deliveryStatusInvoice && (
+            <div className="space-y-4 pt-2">
+              <div className="grid grid-cols-3 gap-2 py-2 border-b text-sm">
+                <span className="text-muted-foreground col-span-1">Invoice Created:</span>
+                <span className="col-span-2 font-medium">
+                  {new Date(deliveryStatusInvoice.createdAt).toLocaleString("en-KE", { dateStyle: "medium", timeStyle: "short" })}
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 py-2 border-b text-sm">
+                <span className="text-muted-foreground col-span-1">Assigned Handler:</span>
+                <span className="col-span-2 font-medium">
+                  {getUserDisplayName(dispatchUsers.find(u => u._id === deliveryStatusInvoice.dispatch?.assignedToUserId))}
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 py-2 border-b text-sm">
+                <span className="text-muted-foreground col-span-1">Courier:</span>
+                <span className="col-span-2 font-medium">
+                  {deliveryStatusInvoice.dispatch?.courier?.name || "Not specified"}
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 py-2 border-b text-sm">
+                <span className="text-muted-foreground col-span-1">Dispatched At:</span>
+                <span className="col-span-2 font-medium">
+                  {deliveryStatusInvoice.dispatch?.dispatchedAt 
+                    ? new Date(deliveryStatusInvoice.dispatch.dispatchedAt).toLocaleString("en-KE", { dateStyle: "medium", timeStyle: "short" }) 
+                    : "Not dispatched"}
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 py-2 border-b text-sm">
+                <span className="text-muted-foreground col-span-1">Delivered At:</span>
+                <span className="col-span-2 font-medium">
+                  {deliveryStatusInvoice.dispatch?.delivery?.arrivalTime 
+                    ? new Date(deliveryStatusInvoice.dispatch.delivery.arrivalTime).toLocaleString("en-KE", { dateStyle: "medium", timeStyle: "short" }) 
+                    : "Not delivered"}
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 py-2 text-sm">
+                <span className="text-muted-foreground col-span-1">Delivery Status:</span>
+                <span className="col-span-2">
+                  <Badge variant={
+                    deliveryStatusInvoice.dispatch?.delivery?.condition === "good" ? "default" :
+                    deliveryStatusInvoice.dispatch?.delivery?.condition === "not_good" ? "destructive" : "secondary"
+                  } className="capitalize">
+                    {deliveryStatusInvoice.dispatch?.delivery?.condition === "good" ? "Good Condition" :
+                     deliveryStatusInvoice.dispatch?.delivery?.condition === "not_good" ? "Not Good" :
+                     (deliveryStatusInvoice.dispatch?.status || "Pending").replaceAll("_", " ")}
+                  </Badge>
+                </span>
+              </div>
+              
+              {deliveryStatusInvoice.dispatch?.delivery?.note && (
+                <div className="mt-2 p-3 bg-muted/50 rounded-md text-sm border">
+                  <span className="font-semibold block mb-1">Delivery Note:</span>
+                  <span className="text-muted-foreground">{deliveryStatusInvoice.dispatch.delivery.note}</span>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter className="mt-2 gap-2 sm:gap-0">
+            {deliveryStatusInvoice && (
+              <Button variant="outline" asChild>
+                <Link href={`/admin/stock/dispatch/${deliveryStatusInvoice._id}`}>
+                  Open Full Dispatch Form
+                </Link>
+              </Button>
+            )}
+            <Button onClick={() => setDeliveryStatusInvoice(null)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

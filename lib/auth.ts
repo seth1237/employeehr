@@ -18,7 +18,7 @@ export interface AuthUser {
     email: string
     first_name: string
     last_name: string
-    role: 'company_admin' | 'admin' | 'hr' | 'manager' | 'employee' | 'sales_rep' | 'super_admin'
+    role: 'company_admin' | 'admin' | 'hr' | 'manager' | 'employee' | 'sales_rep' | 'super_admin' | 'technical_service_engineer' | 'dispatch'
     org_id: string
     token?: string
 }
@@ -147,12 +147,13 @@ export const hasRole = (requiredRoles: string[]): boolean => {
 
 // Check if user is admin
 export const isAdmin = (): boolean => {
-    return hasRole(['company_admin', 'admin', 'hr', 'super_admin'])
+    return hasRole(['company_admin', 'admin', 'hr', 'super_admin', 'dispatch'])
 }
 
 export function postLoginPath(role?: string | null): string {
     if (role === "super_admin") return "/owner"
     if (role === "company_admin" || role === "admin" || role === "hr") return "/admin"
+    if (role === "dispatch") return "/admin/stock/dispatch"
     if (role === "manager") return "/manager"
     if (role === "sales_rep") return "/sales"
     if (role === "technical_service_engineer") return "/engineer"

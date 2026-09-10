@@ -5,7 +5,7 @@ import {
   Plus, Search, Edit2, Trash2, Lock, Unlock, Eye, FileText, 
   Calendar, Award, BarChart3, MessageSquare, CheckSquare, Mail,
   Phone, MapPin, Briefcase, Clock, Download, Filter, MoreVertical,
-  UserCheck, UserX, Send, TrendingUp, Target, AlertCircle, ShieldCheck
+  UserCheck, UserX, Send, TrendingUp, Target, AlertCircle, ShieldCheck, Package
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PageLoadingSkeleton } from '@/components/admin/ui/page-states';
@@ -275,9 +275,11 @@ export default function AdminUsersPage() {
           ? 'admin'
           : newUser.role === 'sales_rep'
             ? 'sales_rep'
-            : newUser.isManager || newUser.role === 'manager'
-              ? 'manager'
-              : 'employee'
+            : newUser.role === 'dispatch'
+              ? 'dispatch'
+              : newUser.isManager || newUser.role === 'manager'
+                ? 'manager'
+                : 'employee'
       const payload = {
         firstName,
         lastName,
@@ -487,7 +489,7 @@ export default function AdminUsersPage() {
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="secondary" className="bg-white/80 text-slate-700">{users.length} employees</Badge>
             <Badge variant="secondary" className="bg-white/80 text-slate-700">{users.filter(u => u.role === 'sales_rep').length} sales reps</Badge>
-            <Badge variant="secondary" className="bg-white/80 text-slate-700">{departments.length} departments</Badge>
+            <Badge variant="secondary" className="bg-white/80 text-slate-700">{users.filter(u => u.role === 'dispatch').length} dispatch</Badge>
             <Badge variant="secondary" className="bg-white/80 text-slate-700">{users.filter(u => u.role === 'admin').length} admins</Badge>
           </div>
         </div>
@@ -574,6 +576,7 @@ export default function AdminUsersPage() {
                   <SelectItem value="employee">Employee</SelectItem>
                   <SelectItem value="sales_rep">Sales Representative</SelectItem>
                   <SelectItem value="technical_service_engineer">Service Engineer</SelectItem>
+                  <SelectItem value="dispatch">Dispatch</SelectItem>
                   <SelectItem value="manager">Manager</SelectItem>
                   <SelectItem value="admin">Admin</SelectItem>
                 </SelectContent>
@@ -698,15 +701,22 @@ export default function AdminUsersPage() {
                           >
                             Admin
                           </Button>
+                          <Button
+                            type="button"
+                            variant={newUser.role === 'dispatch' ? 'default' : 'outline'}
+                            onClick={() => setNewUser({ ...newUser, role: 'dispatch', isManager: false })}
+                          >
+                            Dispatch
+                          </Button>
                         </div>
                         <p className="text-xs text-muted-foreground">
-                          Sales Reps and Engineers log into their respective specialized portals, not the admin portal.
+                          Sales Reps, Engineers, and Dispatch log into their respective specialized portals, not the full admin portal.
                         </p>
                       </div>
                       <div className="flex items-center gap-2 mt-2">
                         <Checkbox
                           checked={newUser.isManager}
-                          disabled={['admin', 'sales_rep', 'technical_service_engineer'].includes(newUser.role)}
+                          disabled={['admin', 'sales_rep', 'technical_service_engineer', 'dispatch'].includes(newUser.role)}
                           onCheckedChange={(v: any) =>
                             setNewUser({
                               ...newUser,
@@ -718,8 +728,10 @@ export default function AdminUsersPage() {
                                   : newUser.role === 'sales_rep'
                                     ? 'sales_rep'
                                     : newUser.role === 'technical_service_engineer'
-                                    ? 'technical_service_engineer'
-                                    : 'employee',
+                                      ? 'technical_service_engineer'
+                                      : newUser.role === 'dispatch'
+                                        ? 'dispatch'
+                                        : 'employee',
                             })
                           }
                         />
@@ -760,9 +772,10 @@ export default function AdminUsersPage() {
                           <Badge variant={
                             user.role === 'admin' ? 'destructive' :
                             user.role === 'manager' ? 'default' :
+                            user.role === 'dispatch' ? 'outline' :
                             user.role === 'sales_rep' || user.role === 'technical_service_engineer' ? 'outline' : 'secondary'
                           }>
-                            {user.role === 'sales_rep' ? 'Sales Representative' : user.role === 'technical_service_engineer' ? 'Service Engineer' : user.role}
+                            {user.role === 'sales_rep' ? 'Sales Representative' : user.role === 'technical_service_engineer' ? 'Service Engineer' : user.role === 'dispatch' ? 'Dispatch' : user.role}
                           </Badge>
                           {user.status === 'inactive' && (
                             <Badge variant="outline">Inactive</Badge>
@@ -835,6 +848,10 @@ export default function AdminUsersPage() {
                           <DropdownMenuItem onClick={() => handleUpdateRole(user._id, 'technical_service_engineer')}>
                             <FileText className="h-4 w-4 mr-2" />
                             Assign as Service Engineer
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleUpdateRole(user._id, 'dispatch')}>
+                            <Package className="h-4 w-4 mr-2" />
+                            Assign as Dispatch
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleUpdateRole(user._id, 'employee')}>
                             <UserCheck className="h-4 w-4 mr-2" />

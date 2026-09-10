@@ -682,6 +682,22 @@ export default function AdminSidebar({
   // Group menu items by section
   const sections: { [key: string]: typeof adminMenuItems } = {};
   adminMenuItems.forEach((item) => {
+    // If role is dispatch, restrict to specific items
+    if (currentUser?.role === "dispatch") {
+      const allowedDispatchHrefs = [
+        "/admin/stock/add-inventory",
+        "/admin/stock/wms",
+        "/admin/stock/stock-check",
+        "/admin/stock/invoices",
+        "/admin/stock/dispatch",
+        "/admin/stock/status",
+        "/admin/stock/history"
+      ];
+      if (!allowedDispatchHrefs.includes(item.href)) {
+        return;
+      }
+    }
+
     const section = item.section || "OTHER";
     if (!sections[section]) {
       sections[section] = [];
@@ -707,13 +723,27 @@ export default function AdminSidebar({
     () =>
       adminMenuItems.filter((item) => {
         if (!favoriteHrefs.includes(item.href)) return false;
+        
+        if (currentUser?.role === "dispatch") {
+          const allowedDispatchHrefs = [
+            "/admin/stock/add-inventory",
+            "/admin/stock/wms",
+            "/admin/stock/stock-check",
+            "/admin/stock/invoices",
+            "/admin/stock/dispatch",
+            "/admin/stock/status",
+            "/admin/stock/history"
+          ];
+          if (!allowedDispatchHrefs.includes(item.href)) return false;
+        }
+
         if (!allowedSections) return true;
         return allowedSections.has(item.section);
       }),
-    [favoriteHrefs, allowedSections],
+    [favoriteHrefs, allowedSections, currentUser?.role],
   );
 
-  const showAccountsSection = !allowedSections || allowedSections.has("ACCOUNTS");
+  const showAccountsSection = (!allowedSections || allowedSections.has("ACCOUNTS")) && currentUser?.role !== "dispatch";
 
   return (
     <>

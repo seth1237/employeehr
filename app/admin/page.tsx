@@ -138,8 +138,13 @@ export default function AdminDashboard() {
   ])
 
   useEffect(() => {
+    // If the user is dispatch, immediately redirect them to their primary tool
+    if (currentUser?.role === 'dispatch') {
+      router.replace('/admin/stock/dispatch')
+      return
+    }
     setWidgetOrder(getDashboardWidgetOrder())
-  }, [])
+  }, [currentUser, router])
 
   const leftWidgets = useMemo(() => {
     const leftIds: DashboardWidgetId[] = [

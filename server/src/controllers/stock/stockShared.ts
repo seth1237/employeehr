@@ -1,6 +1,6 @@
 import { StockProduct } from "../../models/StockProduct"
 
-export const ADMIN_ROLES = ["company_admin", "hr", "admin", "super_admin"]
+export const ADMIN_ROLES = ["company_admin", "hr", "admin", "super_admin", "dispatch"]
 export const DEFAULT_VAT_RATE = 16
 
 export function isAdminRole(role?: string) {

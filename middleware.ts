@@ -2,13 +2,14 @@ import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 
 const TOKEN_COOKIE = "elevate_auth_token"
-const ADMIN_ROLES = new Set(["company_admin", "admin", "hr", "super_admin"])
+const ADMIN_ROLES = new Set(["company_admin", "admin", "hr", "super_admin", "dispatch"])
 const SALES_ROLES = new Set(["sales_rep"])
 const ENGINEER_ROLES = new Set(["technical_service_engineer"])
 
 function homeForRole(role: string): string {
   if (role === "super_admin") return "/owner"
-  if (ADMIN_ROLES.has(role)) return "/admin"
+  if (role === "company_admin" || role === "admin" || role === "hr") return "/admin"
+  if (role === "dispatch") return "/admin/stock/dispatch"
   if (role === "manager") return "/manager"
   if (SALES_ROLES.has(role)) return "/sales"
   if (ENGINEER_ROLES.has(role)) return "/engineer"
@@ -71,6 +72,30 @@ export function middleware(request: NextRequest) {
 
   if (pathname.startsWith("/admin") && !ADMIN_ROLES.has(role)) {
     return NextResponse.redirect(new URL(homeForRole(role), request.url))
+  }
+
+  // Prevent dispatch from seeing other admin modules (force redirect back to dashboard which is safe)
+  if (role === "dispatch" && pathname.startsWith("/admin")) {
+    const allowedDispatchPaths = [
+      "/admin/stock/add-inventory",
+      "/admin/stock/wms",
+      "/admin/stock/stock-check",
+      "/admin/stock/invoices",
+      "/admin/stock/dispatch",
+      "/admin/stock/status",
+      "/admin/stock/history"
+    ];
+    
+    // Check if the current pathname exactly matches one of the allowed paths
+    // or if it's a child path (e.g. /admin/stock/dispatch/123)
+    const isAllowed = allowedDispatchPaths.some(p => 
+      pathname === p || pathname.startsWith(p + "/")
+    );
+    
+    if (!isAllowed) {
+      // Force them to dispatch overview if they try to access Dashboard or anything else
+      return NextResponse.redirect(new URL("/admin/stock/dispatch", request.url))
+    }
   }
 
   if (pathname.startsWith("/manager") && role !== "manager") {

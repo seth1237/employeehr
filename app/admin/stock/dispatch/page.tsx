@@ -287,10 +287,11 @@ export default function AdminDispatchManagementPage() {
     return ["all", ...Array.from(ids)]
   }, [invoices])
 
-  const filteredInvoices = useMemo(() => {
-    const currentUser = getUser()
-    const isCompanyAdmin = currentUser?.role === "company_admin" || currentUser?.role === "admin"
+  const currentUser = useMemo(() => getUser(), [])
+  const isCompanyAdmin = currentUser?.role === "company_admin" || currentUser?.role === "admin" || currentUser?.role === "hr"
+  const isDispatchWorker = currentUser?.role === "dispatch"
 
+  const filteredInvoices = useMemo(() => {
     const data = invoices.filter((invoice) => {
       // ONLY SHOW INVOICES THAT HAVE BEEN ASSIGNED TO DISPATCH
       const status = invoice.dispatch?.status || "not_assigned";
@@ -343,6 +344,8 @@ export default function AdminDispatchManagementPage() {
     selectedStatus,
     search,
     sortBy,
+    isCompanyAdmin,
+    currentUser?._id
   ])
 
   // Pagination logic
@@ -481,70 +484,71 @@ export default function AdminDispatchManagementPage() {
   return (
     <div className="space-y-5">
       <div className="rounded-2xl border px-4 py-3 shadow-sm" style={{ borderColor: primaryBorderColor, background: `linear-gradient(to right, ${primarySoftColor}, ${secondaryColor}14)` }}>
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-0.5">
-            <p className="text-sm font-medium tracking-wide" style={{ color: primaryColor }}>Dispatch</p>
-            <h1 className="text-xl font-semibold tracking-tight text-foreground">Dispatch dashboard</h1>
-            <p className="text-sm text-muted-foreground">Track courier movement, delivery quality, and client notifications from one screen.</p>
+            <p className="text-xs sm:text-sm font-medium tracking-wide" style={{ color: primaryColor }}>Dispatch</p>
+            <h1 className="text-lg sm:text-xl font-semibold tracking-tight text-foreground">Dispatch dashboard</h1>
+            <p className="text-xs sm:text-sm text-muted-foreground hidden sm:block">Track courier movement, delivery quality, and client notifications from one screen.</p>
           </div>
         </div>
 
-        <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-2 xl:grid-cols-4">
           <Card className="shadow-sm">
             <CardContent className="p-3">
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center justify-between gap-1 sm:gap-3">
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-muted-foreground">Dispatched today</div>
-                  <div className="mt-1 text-xl font-semibold">{metrics.totalDispatchedToday}</div>
+                  <div className="text-[10px] sm:text-xs uppercase tracking-wide text-muted-foreground line-clamp-1">Dispatched</div>
+                  <div className="mt-0.5 sm:mt-1 text-lg sm:text-xl font-semibold">{metrics.totalDispatchedToday}</div>
                 </div>
-                <Truck className="h-5 w-5" style={{ color: primaryColor }} />
+                <Truck className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" style={{ color: primaryColor }} />
               </div>
             </CardContent>
           </Card>
           <Card className="shadow-sm">
             <CardContent className="p-3">
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center justify-between gap-1 sm:gap-3">
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-muted-foreground">Pending dispatch</div>
-                  <div className="mt-1 text-xl font-semibold text-amber-600">{metrics.pendingDispatch}</div>
+                  <div className="text-[10px] sm:text-xs uppercase tracking-wide text-muted-foreground line-clamp-1">Pending</div>
+                  <div className="mt-0.5 sm:mt-1 text-lg sm:text-xl font-semibold text-amber-600">{metrics.pendingDispatch}</div>
                 </div>
-                <Clock3 className="h-5 w-5" style={{ color: secondaryColor }} />
+                <Clock3 className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" style={{ color: secondaryColor }} />
               </div>
             </CardContent>
           </Card>
           <Card className="shadow-sm">
             <CardContent className="p-3">
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center justify-between gap-1 sm:gap-3">
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-muted-foreground">Delivered orders</div>
-                  <div className="mt-1 text-xl font-semibold text-green-600">{metrics.deliveredOrders}</div>
+                  <div className="text-[10px] sm:text-xs uppercase tracking-wide text-muted-foreground line-clamp-1">Delivered</div>
+                  <div className="mt-0.5 sm:mt-1 text-lg sm:text-xl font-semibold text-green-600">{metrics.deliveredOrders}</div>
                 </div>
-                <PackageCheck className="h-5 w-5 text-green-600" />
+                <PackageCheck className="h-4 w-4 sm:h-5 sm:w-5 shrink-0 text-green-600" />
               </div>
             </CardContent>
           </Card>
           <Card className="shadow-sm">
             <CardContent className="p-3">
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center justify-between gap-1 sm:gap-3">
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-muted-foreground">Failed / damaged</div>
-                  <div className="mt-1 text-xl font-semibold text-red-600">{metrics.failedOrDamaged}</div>
+                  <div className="text-[10px] sm:text-xs uppercase tracking-wide text-muted-foreground line-clamp-1">Failed/Damaged</div>
+                  <div className="mt-0.5 sm:mt-1 text-lg sm:text-xl font-semibold text-red-600">{metrics.failedOrDamaged}</div>
                 </div>
-                <PackageX className="h-5 w-5 text-red-600" />
+                <PackageX className="h-4 w-4 sm:h-5 sm:w-5 shrink-0 text-red-600" />
               </div>
             </CardContent>
           </Card>
         </div>
       </div>
 
-      <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList className="bg-muted/50 border grid grid-cols-2 lg:flex h-auto p-1 lg:h-10 lg:w-fit">
-          <TabsTrigger value="overview">Analytics Overview</TabsTrigger>
-          <TabsTrigger value="logs">Dispatch Logs</TabsTrigger>
-          <TabsTrigger value="leaderboard">Courier Leaderboard</TabsTrigger>
-          <TabsTrigger value="sms">SMS Settings</TabsTrigger>
+      <Tabs defaultValue={isDispatchWorker ? "logs" : "overview"} className="space-y-4">
+        <TabsList className={`bg-muted/50 border h-auto p-1 md:h-10 md:w-fit ${isDispatchWorker ? "flex w-fit" : "grid grid-cols-2 md:flex"}`}>
+          {!isDispatchWorker && <TabsTrigger value="overview">Analytics Overview</TabsTrigger>}
+          <TabsTrigger value="logs">{isDispatchWorker ? "My Dispatches" : "Dispatch Logs"}</TabsTrigger>
+          {!isDispatchWorker && <TabsTrigger value="leaderboard">Courier Leaderboard</TabsTrigger>}
+          {!isDispatchWorker && <TabsTrigger value="sms">SMS Settings</TabsTrigger>}
         </TabsList>
 
+      {!isDispatchWorker && (
         <TabsContent value="sms" className="space-y-4">
           <Card className="shadow-sm">
             <CardHeader>
@@ -659,13 +663,14 @@ export default function AdminDispatchManagementPage() {
               </div>
             </>
           )}
-        </CardContent>
-      </Card>
-      </TabsContent>
+          </CardContent>
+        </Card>
+        </TabsContent>
+      )}
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-6 mb-4 mt-4 bg-muted/20 p-3 rounded-xl border border-dashed">
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-6 mb-4 mt-4 bg-muted/20 p-2 sm:p-3 rounded-xl border border-dashed">
           <select
-            className="h-10 rounded-md border bg-background px-3 text-sm"
+            className="h-9 sm:h-10 rounded-md border bg-background px-2 sm:px-3 text-xs sm:text-sm"
             value={dateFilter}
             onChange={(e) => setDateFilter(e.target.value as "all" | "week" | "month" | "custom")}
           >
@@ -676,14 +681,14 @@ export default function AdminDispatchManagementPage() {
           </select>
 
           {dateFilter === "custom" && (
-            <>
-              <Input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
-              <Input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
-            </>
+            <div className="col-span-2 flex gap-2">
+              <Input type="date" className="h-9 sm:h-10 text-xs sm:text-sm w-full" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
+              <Input type="date" className="h-9 sm:h-10 text-xs sm:text-sm w-full" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
+            </div>
           )}
 
           <select
-            className="h-10 rounded-md border bg-background px-3 text-sm"
+            className="h-9 sm:h-10 rounded-md border bg-background px-2 sm:px-3 text-xs sm:text-sm"
             value={selectedCourier}
             onChange={(e) => setSelectedCourier(e.target.value)}
           >
@@ -694,20 +699,22 @@ export default function AdminDispatchManagementPage() {
             ))}
           </select>
 
-          <select
-            className="h-10 rounded-md border bg-background px-3 text-sm"
-            value={selectedStaff}
-            onChange={(e) => setSelectedStaff(e.target.value)}
-          >
-            {staff.map((id) => (
-              <option key={id} value={id}>
-                {id === "all" ? "All Dispatch Staff" : getUserName(id)}
-              </option>
-            ))}
-          </select>
+          {!isDispatchWorker && (
+            <select
+              className="h-9 sm:h-10 rounded-md border bg-background px-2 sm:px-3 text-xs sm:text-sm"
+              value={selectedStaff}
+              onChange={(e) => setSelectedStaff(e.target.value)}
+            >
+              {staff.map((id) => (
+                <option key={id} value={id}>
+                  {id === "all" ? "All Dispatch Staff" : getUserName(id)}
+                </option>
+              ))}
+            </select>
+          )}
 
           <select
-            className="h-10 rounded-md border bg-background px-3 text-sm"
+            className="h-9 sm:h-10 rounded-md border bg-background px-2 sm:px-3 text-xs sm:text-sm"
             value={selectedStatus}
             onChange={(e) => setSelectedStatus(e.target.value)}
           >
@@ -721,20 +728,20 @@ export default function AdminDispatchManagementPage() {
           </select>
 
           <select
-            className="h-10 rounded-md border bg-background px-3 text-sm"
+            className="h-9 sm:h-10 rounded-md border bg-background px-2 sm:px-3 text-xs sm:text-sm"
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as "createdAt-desc" | "createdAt-asc" | "status" | "client")}
           >
-            <option value="createdAt-desc">Sort: Newest first</option>
-            <option value="createdAt-asc">Sort: Oldest first</option>
-            <option value="status">Sort: Status</option>
-            <option value="client">Sort: Client</option>
+            <option value="createdAt-desc">Newest first</option>
+            <option value="createdAt-asc">Oldest first</option>
+            <option value="status">Status</option>
+            <option value="client">Client</option>
           </select>
 
-          <div className="relative md:col-span-2 lg:col-span-2">
-            <Search className="w-4 h-4 absolute left-3 top-3 text-muted-foreground" />
+          <div className="relative col-span-2 md:col-span-3 lg:col-span-2">
+            <Search className="w-4 h-4 absolute left-3 top-2.5 sm:top-3 text-muted-foreground" />
             <Input
-              className="pl-9"
+              className="pl-9 h-9 sm:h-10 text-xs sm:text-sm"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search invoice, client, courier..."
@@ -742,7 +749,8 @@ export default function AdminDispatchManagementPage() {
           </div>
         </div>
 
-      <TabsContent value="overview" className="space-y-4">
+      {!isDispatchWorker && (
+        <TabsContent value="overview" className="space-y-4">
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <Card className="shadow-sm">
           <CardHeader>
@@ -780,52 +788,56 @@ export default function AdminDispatchManagementPage() {
         </Card>
       </div>
       </TabsContent>
+      )}
 
-      <TabsContent value="leaderboard" className="space-y-4">
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-          <Card className="shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-base">Courier Performance</CardTitle>
-            </CardHeader>
-            <CardContent className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={courierPerformance.slice(0, 8)}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="courier" />
-                  <YAxis allowDecimals={false} />
-                  <Tooltip />
-                  <Bar dataKey="delivered" fill="#22c55e" name="Delivered" />
-                  <Bar dataKey="failed" fill="#ef4444" name="Failed" />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
+      {!isDispatchWorker && (
+        <TabsContent value="leaderboard" className="space-y-4">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <Card className="shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-base">Courier Performance</CardTitle>
+              </CardHeader>
+              <CardContent className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={courierPerformance.slice(0, 8)}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="courier" />
+                    <YAxis allowDecimals={false} />
+                    <Tooltip />
+                    <Bar dataKey="deliveries" fill="#0ea5e9" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="delivered" fill="#22c55e" name="Delivered" />
+                    <Bar dataKey="failed" fill="#ef4444" name="Failed" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
 
-          <Card className="shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-base">Average Delivery Time</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">{averageDeliveryTime.label}</div>
-              <p className="text-sm text-muted-foreground mt-1">Calculated from dispatch to delivery timestamps</p>
-              <div className="mt-4 space-y-2">
-                {courierPerformance.slice(0, 5).map((c) => (
-                  <div key={c.courier} className="flex items-center justify-between text-sm border-b pb-1">
-                    <span>{c.courier}</span>
-                    <span className="font-medium">{c.avgMinutes} min avg</span>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </TabsContent>
+            <Card className="shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-base">Average Delivery Time</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">{averageDeliveryTime.label}</div>
+                <p className="text-sm text-muted-foreground mt-1">Calculated from dispatch to delivery timestamps</p>
+                <div className="mt-4 space-y-2">
+                  {courierPerformance.slice(0, 5).map((c) => (
+                    <div key={c.courier} className="flex items-center justify-between text-sm border-b pb-1">
+                      <span>{c.courier}</span>
+                      <span className="font-medium">{c.avgMinutes} min avg</span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+      )}
 
       <TabsContent value="logs" className="space-y-4">
         <Card className="shadow-sm">
           <CardHeader>
             <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-              <CardTitle className="text-base">Dispatch Logs</CardTitle>
+              <CardTitle className="text-base">{isDispatchWorker ? "My Dispatches" : "Dispatch Logs"}</CardTitle>
               <p className="text-sm text-muted-foreground">{filteredInvoices.length} records</p>
             </div>
           </CardHeader>
@@ -842,23 +854,66 @@ export default function AdminDispatchManagementPage() {
 
           {paginatedInvoices.map((invoice) => {
             const statusColors = 
-              invoice.dispatch?.status === "delivered" ? "bg-green-100 text-green-700" :
-              invoice.dispatch?.status === "dispatched" ? "bg-blue-100 text-blue-700" :
-              invoice.dispatch?.status === "packed" ? "bg-purple-100 text-purple-700" :
-              invoice.dispatch?.status === "packing" ? "bg-yellow-100 text-yellow-700" :
-              "bg-gray-100 text-gray-700"
+              invoice.dispatch?.status === "delivered" ? "bg-green-100 text-green-700 hover:bg-green-100" :
+              invoice.dispatch?.status === "dispatched" ? "bg-blue-100 text-blue-700 hover:bg-blue-100" :
+              invoice.dispatch?.status === "packed" ? "bg-purple-100 text-purple-700 hover:bg-purple-100" :
+              invoice.dispatch?.status === "packing" ? "bg-yellow-100 text-yellow-700 hover:bg-yellow-100" :
+              "bg-gray-100 text-gray-700 hover:bg-gray-100"
             
             return (
-              <div key={invoice._id} className="grid grid-cols-1 items-center gap-2 rounded-xl border bg-white/90 p-3 shadow-sm transition-colors hover:bg-muted/30 lg:grid-cols-7">
-                <div>
-                  <p className="font-semibold">{invoice.invoiceNumber}</p>
+              <div key={invoice._id} className="group relative grid grid-cols-1 gap-2 rounded-xl border bg-white/90 p-3 sm:p-4 shadow-sm transition-colors hover:bg-muted/30 lg:grid-cols-7 lg:items-center lg:gap-2 lg:p-3">
+                {/* Mobile View Structure */}
+                <div className="flex items-center justify-between lg:hidden border-b pb-2 mb-1">
+                  <div className="flex items-center gap-2">
+                    <p className="font-bold text-sm">{invoice.invoiceNumber}</p>
+                  </div>
+                  <Badge className={`text-[10px] sm:text-xs px-2 py-0.5 ${statusColors}`}>
+                    {invoice.dispatch?.status === "delivered" ? "Delivered" :
+                      invoice.dispatch?.status === "dispatched" ? "Dispatched" :
+                      invoice.dispatch?.status === "packed" ? "Packed" :
+                      invoice.dispatch?.status === "packing" ? "Packing" :
+                      invoice.dispatch?.status === "assigned" ? "Assigned" :
+                      "Not assigned"}
+                  </Badge>
                 </div>
-                <div>
+                
+                <div className="flex justify-between items-start lg:hidden">
+                  <div>
+                    <p className="text-sm font-semibold">{invoice.client.name}</p>
+                    <p className="text-xs text-muted-foreground">{invoice.client.number}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs font-medium">{invoice.dispatch?.courier?.name || "No Courier"}</p>
+                    <p className="text-[10px] text-muted-foreground">{invoice.dispatch?.packingCompleted ? "Packed ✓" : "Not Packed"}</p>
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-end mt-1 lg:hidden">
+                  <div className="flex flex-col gap-0.5">
+                    {invoice.dispatch?.dispatchedAt && (
+                       <span className="text-[10px] text-muted-foreground">Out: {new Date(invoice.dispatch.dispatchedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</span>
+                    )}
+                    {invoice.dispatch?.delivery?.arrivalTime && (
+                       <span className="text-[10px] text-muted-foreground">In: {new Date(invoice.dispatch.delivery.arrivalTime).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</span>
+                    )}
+                  </div>
+                  <Button size="sm" asChild className="h-7 text-xs px-3" style={{ backgroundColor: primaryColor }}>
+                    <Link href={`/admin/stock/dispatch/${invoice._id}`}>View</Link>
+                  </Button>
+                </div>
+
+                {/* Desktop View Structure */}
+                <div className="hidden lg:block">
+                  <p className="font-semibold text-base">{invoice.invoiceNumber}</p>
+                </div>
+                <div className="hidden lg:block">
                   <p className="text-sm font-medium">{invoice.client.name}</p>
                   <p className="text-xs text-muted-foreground">{invoice.client.number}</p>
                 </div>
-                <div className="text-sm">{invoice.dispatch?.courier?.name || "—"}</div>
-                <div>
+                <div className="hidden lg:block text-sm">
+                  {invoice.dispatch?.courier?.name || "—"}
+                </div>
+                <div className="hidden lg:block">
                   <Badge className={statusColors}>
                     {invoice.dispatch?.status === "delivered" ? "Delivered" :
                       invoice.dispatch?.status === "dispatched" ? "Dispatched" :
@@ -868,9 +923,13 @@ export default function AdminDispatchManagementPage() {
                       "Not assigned"}
                   </Badge>
                 </div>
-                <div className="text-sm">{invoice.dispatch?.packingCompleted ? "Yes" : "No"}</div>
-                <div className="text-sm">{invoice.dispatch?.dispatchedAt ? new Date(invoice.dispatch.dispatchedAt).toLocaleString() : "—"}</div>
-                <div className="flex items-center justify-between gap-2">
+                <div className="hidden lg:block text-sm">
+                  {invoice.dispatch?.packingCompleted ? "Yes" : "No"}
+                </div>
+                <div className="hidden lg:block text-sm">
+                  {invoice.dispatch?.dispatchedAt ? new Date(invoice.dispatch.dispatchedAt).toLocaleString() : "—"}
+                </div>
+                <div className="hidden lg:flex items-center justify-between gap-2">
                   <span className="text-sm">
                     {invoice.dispatch?.delivery?.arrivalTime
                       ? new Date(invoice.dispatch.delivery.arrivalTime).toLocaleString()

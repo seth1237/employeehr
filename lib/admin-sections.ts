@@ -28,7 +28,7 @@ export const LEGACY_ADMIN_SECTIONS = [
   "SYSTEM",
 ] as const
 
-export const ADMIN_ROLES = ["company_admin", "admin", "hr", "super_admin"] as const
+export const ADMIN_ROLES = ["company_admin", "admin", "hr", "super_admin", "dispatch"] as const
 
 export const isAdminRole = (role?: string | null): boolean =>
   !!role && (ADMIN_ROLES as readonly string[]).includes(role)
@@ -136,6 +136,11 @@ export function resolveAdminAllowedSections(params: {
 
   if (role === "company_admin") {
     return applyCap(null)
+  }
+
+  if (role === "dispatch") {
+    // Dispatch role only gets Inventory Manager
+    return applyCap(new Set(["INVENTORY MANAGER"]))
   }
 
   const data = params.pageAccess

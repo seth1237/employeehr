@@ -573,6 +573,7 @@ export default function AdminUsersPage() {
                   <SelectItem value="all">All Roles</SelectItem>
                   <SelectItem value="employee">Employee</SelectItem>
                   <SelectItem value="sales_rep">Sales Representative</SelectItem>
+                  <SelectItem value="technical_service_engineer">Service Engineer</SelectItem>
                   <SelectItem value="manager">Manager</SelectItem>
                   <SelectItem value="admin">Admin</SelectItem>
                 </SelectContent>
@@ -678,6 +679,13 @@ export default function AdminUsersPage() {
                           </Button>
                           <Button
                             type="button"
+                            variant={newUser.role === 'technical_service_engineer' ? 'default' : 'outline'}
+                            onClick={() => setNewUser({ ...newUser, role: 'technical_service_engineer', isManager: false })}
+                          >
+                            Service Engineer
+                          </Button>
+                          <Button
+                            type="button"
                             variant={newUser.role === 'manager' ? 'default' : 'outline'}
                             onClick={() => setNewUser({ ...newUser, role: 'manager', isManager: true })}
                           >
@@ -692,13 +700,13 @@ export default function AdminUsersPage() {
                           </Button>
                         </div>
                         <p className="text-xs text-muted-foreground">
-                          Sales representatives log into the sales reporting tool, not the admin portal.
+                          Sales Reps and Engineers log into their respective specialized portals, not the admin portal.
                         </p>
                       </div>
                       <div className="flex items-center gap-2 mt-2">
                         <Checkbox
                           checked={newUser.isManager}
-                          disabled={newUser.role === 'admin' || newUser.role === 'sales_rep'}
+                          disabled={['admin', 'sales_rep', 'technical_service_engineer'].includes(newUser.role)}
                           onCheckedChange={(v: any) =>
                             setNewUser({
                               ...newUser,
@@ -709,6 +717,8 @@ export default function AdminUsersPage() {
                                   ? 'admin'
                                   : newUser.role === 'sales_rep'
                                     ? 'sales_rep'
+                                    : newUser.role === 'technical_service_engineer'
+                                    ? 'technical_service_engineer'
                                     : 'employee',
                             })
                           }
@@ -750,9 +760,9 @@ export default function AdminUsersPage() {
                           <Badge variant={
                             user.role === 'admin' ? 'destructive' :
                             user.role === 'manager' ? 'default' :
-                            user.role === 'sales_rep' ? 'outline' : 'secondary'
+                            user.role === 'sales_rep' || user.role === 'technical_service_engineer' ? 'outline' : 'secondary'
                           }>
-                            {user.role === 'sales_rep' ? 'Sales Representative' : user.role}
+                            {user.role === 'sales_rep' ? 'Sales Representative' : user.role === 'technical_service_engineer' ? 'Service Engineer' : user.role}
                           </Badge>
                           {user.status === 'inactive' && (
                             <Badge variant="outline">Inactive</Badge>
@@ -821,6 +831,10 @@ export default function AdminUsersPage() {
                           <DropdownMenuItem onClick={() => handleUpdateRole(user._id, 'sales_rep')}>
                             <FileText className="h-4 w-4 mr-2" />
                             Assign as Sales Representative
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleUpdateRole(user._id, 'technical_service_engineer')}>
+                            <FileText className="h-4 w-4 mr-2" />
+                            Assign as Service Engineer
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleUpdateRole(user._id, 'employee')}>
                             <UserCheck className="h-4 w-4 mr-2" />

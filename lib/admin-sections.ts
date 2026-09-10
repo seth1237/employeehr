@@ -11,6 +11,8 @@ export const ADMIN_SECTION_OPTIONS = [
   "ACCOUNTS",
   "PERFORMANCE",
   "SYSTEM",
+  "PROJECT MANAGEMENT",
+  "PROCUREMENT (P2P)",
 ] as const
 
 export type AdminSection = (typeof ADMIN_SECTION_OPTIONS)[number]
@@ -76,6 +78,8 @@ export const ADMIN_SECTION_PATHS: Array<{
   { section: "FIELD MANAGEMENT", match: (path) => path.startsWith("/admin/field-management") },
   { section: "FLEET", match: (path) => path.startsWith("/admin/fleet") },
   { section: "ACCOUNTS", match: (path) => path.startsWith("/admin/accounts") },
+  { section: "PROJECT MANAGEMENT", match: (path) => path.startsWith("/admin/projects") },
+  { section: "PROCUREMENT (P2P)", match: (path) => path.startsWith("/admin/procurement") },
   {
     section: "PERFORMANCE",
     match: (path) =>
@@ -122,8 +126,8 @@ export function resolveAdminAllowedSections(params: {
 
   const applyCap = (allowed: Set<string> | null): Set<string> | null => {
     if (!platformCap) return allowed
-    if (!allowed) return platformCap
-    return new Set([...allowed].filter((section) => platformCap.has(section)))
+    if (!allowed) { platformCap.add("PROCUREMENT (P2P)"); return platformCap; }
+    const res = new Set([...allowed].filter((section) => platformCap.has(section))); res.add("PROCUREMENT (P2P)"); return res;
   }
 
   if (!role || role === "super_admin") {

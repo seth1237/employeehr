@@ -896,6 +896,7 @@ export const stockApi = {
   getProducts: () => client.get<any[]>("/api/stock/products"),
   deleteAllInventory: (confirm: string) =>
     client.post<any>("/api/stock/products/purge-all", { confirm }),
+  getStockCategories: () => client.get<any[]>("/api/stock/categories"),
   deleteAllCategories: (confirm: string) =>
     client.post<any>("/api/stock/categories/purge-all", { confirm }),
 
@@ -1907,6 +1908,30 @@ export const projectsApi = {
 
   addNote: (projectId: string, text: string) =>
     client.post<any>(`/api/projects/${projectId}/notes`, { text }),
+};
+
+// Procurement API
+export const procurementApi = {
+  getSuppliers: () => client.get<any[]>("/api/procurement/suppliers"),
+  createSupplier: (data: any) => client.post<any>("/api/procurement/suppliers", data),
+  
+  getPurchaseRequests: () => client.get<any[]>("/api/procurement/requests"),
+  createPurchaseRequest: (data: any) => client.post<any>("/api/procurement/requests", data),
+  updatePurchaseRequestStatus: (id: string, data: any) => client.patch<any>(`/api/procurement/requests/${id}/status`, data),
+  
+  getPurchaseOrders: () => client.get<any[]>("/api/procurement/orders"),
+  createPurchaseOrder: (data: any) => client.post<any>("/api/procurement/orders", data),
+  updatePurchaseOrder: (id: string, data: any) => client.put<any>(`/api/procurement/orders/${id}`, data),
+  updatePurchaseOrderStatus: (id: string, data: any) => client.patch<any>(`/api/procurement/orders/${id}/status`, data),
+  
+  getGRNs: () => client.get<any[]>("/api/procurement/grns"),
+  createGRN: (data: any) => client.post<any>("/api/procurement/grns", data),
+  confirmGRN: (id: string) => client.post<any>(`/api/procurement/grns/${id}/confirm`, {}),
+  
+  getSupplierInvoices: () => client.get<any[]>("/api/procurement/invoices"),
+  createSupplierInvoice: (data: any) => client.post<any>("/api/procurement/invoices", data),
+  postSupplierInvoiceToGL: (id: string) => client.post<any>(`/api/procurement/invoices/${id}/post`, {}),
+  paySupplierInvoice: (id: string, data: any) => client.post<any>(`/api/procurement/invoices/${id}/pay`, data),
 };
 
 // Export all APIs

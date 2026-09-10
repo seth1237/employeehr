@@ -37,6 +37,8 @@ import {
   Wallet,
   Star,
   FolderKanban,
+  ShoppingCart,
+  ReceiptText,
 } from "lucide-react";
 import { getUser, logout } from "@/lib/auth";
 import { getToken } from "@/lib/auth";
@@ -76,12 +78,43 @@ const adminMenuItems = [
   },
 
   // Project Management
-  {
-    label: "Projects",
-    icon: FolderKanban,
-    href: "/admin/projects",
-    section: "PROJECT MANAGEMENT",
-  },
+      {
+        label: "Projects",
+        icon: FolderKanban,
+        href: "/admin/projects",
+        section: "PROJECT MANAGEMENT",
+      },
+      // Procurement & P2P
+      {
+        label: "Vendors & Suppliers",
+        icon: Truck,
+        href: "/admin/procurement/suppliers",
+        section: "PROCUREMENT (P2P)",
+      },
+      {
+        label: "Purchase Requests",
+        icon: FileText,
+        href: "/admin/procurement/requests",
+        section: "PROCUREMENT (P2P)",
+      },
+      {
+        label: "Purchase Orders",
+        icon: ShoppingCart,
+        href: "/admin/procurement/orders",
+        section: "PROCUREMENT (P2P)",
+      },
+      {
+        label: "Goods Receipt Note",
+        icon: FileCheck,
+        href: "/admin/procurement/grns",
+        section: "PROCUREMENT (P2P)",
+      },
+      {
+        label: "Supplier Bills (AP)",
+        icon: ReceiptText,
+        href: "/admin/procurement/invoices",
+        section: "PROCUREMENT (P2P)",
+      },
 
   // Recruitment & Jobs
   {

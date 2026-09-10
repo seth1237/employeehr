@@ -155,5 +155,6 @@ export function postLoginPath(role?: string | null): string {
     if (role === "company_admin" || role === "admin" || role === "hr") return "/admin"
     if (role === "manager") return "/manager"
     if (role === "sales_rep") return "/sales"
+    if (role === "technical_service_engineer") return "/engineer"
     return "/employee"
 }

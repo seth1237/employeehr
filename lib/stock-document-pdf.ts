@@ -1497,6 +1497,7 @@ export function generateTenderPdf(params: {
   preparedBySignature?: string;
   watermarkText?: string;
   autoSave?: boolean;
+  selectedColumns?: string[];
   groupedByCategory?: Record<string, DocumentItem[]>;
   clientName?: string;
 }) {
@@ -1645,27 +1646,62 @@ function drawLandscapeSummaryTable(
   const hasPaidAndBalance = items.some(
     (i) => i.paid !== undefined || i.balance !== undefined,
   );
-  const columns = hasPaidAndBalance
+  
+  const allColumns = hasPaidAndBalance
     ? [
-        { header: "Date", width: 23 },
-        { header: "Doc #", width: 33 },
-        { header: "Client", width: 40 },
-        { header: "Salesperson", width: 35 },
-        { header: "Products", width: 50 },
-        { header: "Status", width: 20 },
-        { header: "Amount", width: 24 },
-        { header: "Paid", width: 24 },
-        { header: "Balance", width: 24 },
+        { id: "date", header: "Date", width: 23 },
+        { id: "invoiceNumber", header: "Doc #", width: 33 },
+        { id: "clientName", header: "Client", width: 40 },
+        { id: "salesperson", header: "Salesperson", width: 35 },
+        { id: "products", header: "Products", width: 50 },
+        { id: "status", header: "Status", width: 20 },
+        { id: "amount", header: "Amount", width: 24 },
+        { id: "paidAmount", header: "Paid", width: 24 },
+        { id: "balanceRemaining", header: "Balance", width: 24 },
       ]
     : [
-        { header: "Date", width: 25 },
-        { header: "Doc #", width: 35 },
-        { header: "Client", width: 45 },
-        { header: "Salesperson", width: 40 },
-        { header: "Products", width: 78 },
-        { header: "Status", width: 20 },
-        { header: "Amount", width: 30 },
+        { id: "date", header: "Date", width: 25 },
+        { id: "invoiceNumber", header: "Doc #", width: 35 },
+        { id: "clientName", header: "Client", width: 45 },
+        { id: "salesperson", header: "Salesperson", width: 40 },
+        { id: "products", header: "Products", width: 78 },
+        { id: "status", header: "Status", width: 20 },
+        { id: "amount", header: "Amount", width: 30 },
       ];
+      
+  let columns = allColumns;
+  if ((doc as any).__selectedColumns && (doc as any).__selectedColumns.length > 0) {
+    const selected = (doc as any).__selectedColumns;
+    
+    // Map CSV keys to PDF keys
+    const keyMap: Record<string, string> = {
+      date: "date",
+      invoiceNumber: "invoiceNumber",
+      deliveryNoteNumber: "invoiceNumber", // merge
+      quotationNumber: "invoiceNumber",
+      clientName: "clientName",
+      clientNumber: "clientName",
+      clientLocation: "clientName",
+      itemsCount: "products",
+      products: "products",
+      status: "status",
+      amount: "amount",
+      paidAmount: "paidAmount",
+      balanceRemaining: "balanceRemaining"
+    };
+    
+    const mappedSelected = new Set(selected.map((k: string) => keyMap[k]).filter(Boolean));
+    columns = allColumns.filter(c => mappedSelected.has(c.id));
+    
+    if (columns.length === 0) columns = allColumns; // fallback
+    
+    // Recalculate widths to fill 273mm (Landscape A4 width roughly)
+    const totalCurrentWidth = columns.reduce((s, c) => s + c.width, 0);
+    const targetWidth = 273;
+    const ratio = targetWidth / totalCurrentWidth;
+    columns = columns.map(c => ({...c, width: c.width * ratio}));
+  }
+
 
   const startX = 12;
   const pageBottomLimit = 195; // A4 Landscape is 210mm high
@@ -1731,9 +1767,11 @@ function drawLandscapeSummaryTable(
     // Calculate products column height
     const maxLineLength = 55;
     const allProductText = item.products.join("\n");
+    const productsCol = columns.find(c => c.id === "products");
+    const pWidth = productsCol ? productsCol.width - 4 : 50;
     const productLines = doc.splitTextToSize(
       allProductText,
-      columns[4].width - 4,
+      pWidth,
     );
 
     const requiredHeight = Math.max(
@@ -1754,75 +1792,51 @@ function drawLandscapeSummaryTable(
     setColorFromHex(doc, DEFAULT_TEXT, "text");
 
     let currentX = startX;
+    columns.forEach((col) => {
+      let text = "";
+      let align: "left" | "right" | "center" = "left";
 
-    // Date
-    doc.text(item.date, currentX + 3, y + 5);
-    currentX += columns[0].width;
+      if (col.id === "date") text = item.date;
+      else if (col.id === "invoiceNumber") text = item.documentNumber || "";
+      else if (col.id === "clientName") text = item.clientName || "";
+      else if (col.id === "salesperson") text = item.salesperson || "";
+      else if (col.id === "products") {
+        text = item.products ? item.products.join(", ") : "";
+      }
+      else if (col.id === "status") {
+        text = (item.status || "").replace(/_/g, " ").toUpperCase();
+      }
+      else if (col.id === "amount") {
+        text = item.amount.toLocaleString(undefined, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        });
+        align = "right";
+      }
+      else if (col.id === "paidAmount") {
+        text = item.paid !== undefined ? item.paid.toLocaleString(undefined, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        }) : "";
+        align = "right";
+      }
+      else if (col.id === "balanceRemaining") {
+        text = item.balance !== undefined ? item.balance.toLocaleString(undefined, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        }) : "";
+        align = "right";
+      }
 
-    // Doc #
-    const docNoLines = doc.splitTextToSize(
-      item.documentNumber,
-      columns[1].width - 4,
-    );
-    doc.text(docNoLines, currentX + 3, y + 5);
-    currentX += columns[1].width;
+      let printText = text;
+      if (align === "left" && col.width > 5) {
+        printText = doc.splitTextToSize(text, col.width - 4)[0];
+      }
 
-    // Client
-    const clientLines = doc.splitTextToSize(
-      item.clientName,
-      columns[2].width - 4,
-    );
-    doc.text(clientLines, currentX + 3, y + 5);
-    currentX += columns[2].width;
-
-    // Salesperson
-    const sellerLines = doc.splitTextToSize(
-      item.salesperson,
-      columns[3].width - 4,
-    );
-    doc.text(sellerLines, currentX + 3, y + 5);
-    currentX += columns[3].width;
-
-    // Products
-    doc.setFont("helvetica", "italic");
-    setColorFromHex(doc, DEFAULT_GRAY, "text");
-    doc.text(productLines, currentX + 2, y + 5);
-    doc.setFont("helvetica", "normal");
-    setColorFromHex(doc, DEFAULT_TEXT, "text");
-    currentX += columns[4].width;
-
-    // Status
-    doc.text(item.status.replace("_", " ").toUpperCase(), currentX + 3, y + 5);
-    currentX += columns[5].width;
-
-    // Amount
-    doc.setFont("helvetica", "bold");
-    doc.text(
-      formatAmount(item.amount),
-      currentX + columns[6].width - 3,
-      y + 5,
-      { align: "right" },
-    );
-    currentX += columns[6].width;
-    doc.setFont("helvetica", "normal");
-
-    if (hasPaidAndBalance) {
-      doc.text(
-        formatAmount(item.paid || 0),
-        currentX + columns[7].width - 3,
-        y + 5,
-        { align: "right" },
-      );
-      currentX += columns[7].width;
-
-      doc.text(
-        formatAmount(item.balance || 0),
-        currentX + columns[8].width - 3,
-        y + 5,
-        { align: "right" },
-      );
-      currentX += columns[8].width;
-    }
+      const renderX = align === "right" ? currentX + col.width - 2 : currentX + 2;
+      doc.text(printText, renderX, y + 4.5, { align });
+      currentX += col.width;
+    });
 
     y += requiredHeight;
   });
@@ -1964,6 +1978,8 @@ export function generateInvoiceStyleSummaryPdf(params: {
     });
   }
 
+  // Pass columns down
+  (doc as any).__selectedColumns = params.selectedColumns;
   const items: SummaryReportItem[] = params.invoices.map((inv) => ({
     date: new Date(inv.createdAt).toLocaleDateString("en-GB"),
     documentNumber: inv.invoiceNumber,
@@ -3700,4 +3716,154 @@ export function generateTelesalesActivityPdf(params: {
   }
 
   return doc;
+}
+
+
+export function generatePurchaseOrderPdf(params: {
+  poNumber: string;
+  orderDate: string;
+  deliveryDate: string;
+  supplier: { name: string; email?: string; phone?: string; address?: string; taxPin?: string };
+  items: any[];
+  subTotal: number;
+  taxTotal: number;
+  grandTotal: number;
+  branding?: TenantBranding;
+  termsAndConditions?: string;
+  preparedBy?: string;
+  preparedBySignature?: string;
+}) {
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+
+  drawModernHeader(doc, {
+    title: "PURCHASE ORDER",
+    numberLabel: "PO No",
+    numberValue: params.poNumber,
+    createdAt: params.orderDate,
+    branding: params.branding,
+  });
+
+  const contactBottom = drawContactSlotBelowLogo(
+    doc,
+    params.branding,
+    {}
+  );
+
+  let tableY = drawPartiesSection(
+    doc,
+    { 
+      name: params.supplier.name, 
+      number: params.supplier.phone || "—", 
+      location: params.supplier.address || "—",
+      contactName: params.supplier.email || "—"
+    },
+    undefined,
+    params.branding,
+    "Supplier Info",
+    contactBottom + 1,
+  );
+  
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  setColorFromHex(doc, DEFAULT_GRAY, "text");
+  doc.text(`Expected Delivery: ${new Date(params.deliveryDate).toLocaleDateString()}`, 12, tableY + 2);
+  tableY += 8;
+
+  const endY = drawItemsTable(
+    doc,
+    tableY,
+    params.items.map(i => ({
+       productName: i.productName,
+       quantity: i.quantity,
+       unitPrice: i.unitPrice,
+       lineTotal: i.lineTotal,
+       taxAmount: i.lineTotal * (i.taxRate / 100)
+    })),
+    params.branding,
+    false,
+    true,
+  );
+
+  const totalsY = drawTotalsSection(
+    doc,
+    params.subTotal,
+    endY,
+    params.branding,
+    {},
+    false,
+    params.taxTotal,
+  );
+  
+  let termsEndY = totalsY + 10;
+  if (params.termsAndConditions) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.text("Terms & Conditions", 12, termsEndY);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    
+    const splitTerms = doc.splitTextToSize(params.termsAndConditions, 180);
+    doc.text(splitTerms, 12, termsEndY + 5);
+    termsEndY += 5 + (splitTerms.length * 4);
+  }
+
+  drawPreparedBySignatureBlock(
+    doc,
+    termsEndY + 5,
+    params.preparedBy || "Procurement Officer",
+    params.preparedBySignature,
+  );
+
+  doc.save(`PO-${params.poNumber}.pdf`);
+}
+
+
+export function generatePurchaseRequestPdf(params: {
+  requestNumber: string;
+  dateRequired: string;
+  department?: string;
+  purchaseType?: string;
+  items: any[];
+  totalEstimatedAmount: number;
+  branding?: TenantBranding;
+}) {
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  drawModernHeader(doc, { title: "PURCHASE REQUEST", numberLabel: "PR No", numberValue: params.requestNumber, createdAt: new Date().toISOString(), branding: params.branding });
+  const contactBottom = drawContactSlotBelowLogo(doc, params.branding, {});
+  doc.setFont("helvetica", "bold"); doc.setFontSize(9); setColorFromHex(doc, DEFAULT_GRAY, "text");
+  let tableY = contactBottom + 10;
+  doc.text(`Date Required: ${new Date(params.dateRequired).toLocaleDateString()}`, 12, tableY);
+  doc.text(`Type: ${params.purchaseType === 'department' ? 'Department Expense' : 'Product Purchase'}`, 12, tableY + 5);
+  if (params.department) doc.text(`Department: ${params.department}`, 12, tableY + 10);
+  tableY += 15;
+  const endY = drawItemsTable(doc, tableY, params.items.map(i => ({ productName: i.productName, quantity: i.quantity, unitPrice: i.estimatedUnitPrice || 0, lineTotal: (i.quantity * (i.estimatedUnitPrice || 0)), taxAmount: 0 })), params.branding, false, true);
+  drawTotalsSection(doc, params.totalEstimatedAmount, endY, params.branding, {}, false, 0);
+  doc.save(`PR-${params.requestNumber}.pdf`);
+}
+
+export function generateGrnPdf(params: {
+  grnNumber: string;
+  receiptDate: string;
+  deliveryNoteNumber?: string;
+  supplier: { name: string };
+  poNumber?: string;
+  items: any[];
+  branding?: TenantBranding;
+}) {
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  drawModernHeader(doc, { title: "GOODS RECEIPT NOTE", numberLabel: "GRN No", numberValue: params.grnNumber, createdAt: params.receiptDate, branding: params.branding });
+  const contactBottom = drawContactSlotBelowLogo(doc, params.branding, {});
+  let tableY = drawPartiesSection(doc, { name: params.supplier.name, number: "—", location: "—" }, undefined, params.branding, "Supplier Info", contactBottom + 1);
+  doc.setFont("helvetica", "bold"); doc.setFontSize(9); setColorFromHex(doc, DEFAULT_GRAY, "text");
+  if (params.poNumber) doc.text(`Against PO: ${params.poNumber}`, 12, tableY + 2);
+  if (params.deliveryNoteNumber) doc.text(`Delivery Note: ${params.deliveryNoteNumber}`, 12, tableY + 7);
+  tableY += 12;
+  // Custom simple table for GRN items
+  doc.setFillColor(hexToRgb(params.branding?.primaryColor || DEFAULT_PRIMARY).r, hexToRgb(params.branding?.primaryColor || DEFAULT_PRIMARY).g, hexToRgb(params.branding?.primaryColor || DEFAULT_PRIMARY).b);
+  doc.rect(12, tableY, 186, 8, "F"); doc.setTextColor(255, 255, 255); doc.text("Item Description", 14, tableY + 5); doc.text("Ordered", 100, tableY + 5); doc.text("Received", 140, tableY + 5); doc.text("Rejected", 170, tableY + 5);
+  tableY += 8; setColorFromHex(doc, DEFAULT_GRAY, "text"); doc.setFont("helvetica", "normal");
+  params.items.forEach(i => {
+    doc.text(i.productName || "", 14, tableY + 5); doc.text(String(i.orderedQuantity), 100, tableY + 5); doc.text(String(i.receivedQuantity), 140, tableY + 5); doc.text(String(i.rejectedQuantity), 170, tableY + 5); tableY += 8;
+  });
+  doc.save(`GRN-${params.grnNumber}.pdf`);
 }

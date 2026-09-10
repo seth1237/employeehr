@@ -73,6 +73,7 @@ import cftIngestRoutes from "./routes/cftIngest.routes"
 import exhibitionRoutes from "./routes/exhibition.routes"
 import glRoutes from "./routes/gl.routes"
 import projectRoutes from "./routes/project.routes"
+import procurementRoutes from "./routes/procurement.routes"
 import { startCftIngestScheduler } from "./services/cft/cftIngestScheduler"
 
 const app = express()
@@ -247,6 +248,7 @@ app.use("/api/ai-assistant", aiAssistantRoutes)
 app.use("/api/dashboard", dashboardRoutes)
 app.use("/api/gl", glRoutes)
 app.use("/api/projects", projectRoutes)
+app.use("/api/procurement", procurementRoutes)
 
 // 404 handler
 app.use((_req, res) => {

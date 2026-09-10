@@ -4,12 +4,14 @@ import type { NextRequest } from "next/server"
 const TOKEN_COOKIE = "elevate_auth_token"
 const ADMIN_ROLES = new Set(["company_admin", "admin", "hr", "super_admin"])
 const SALES_ROLES = new Set(["sales_rep"])
+const ENGINEER_ROLES = new Set(["technical_service_engineer"])
 
 function homeForRole(role: string): string {
   if (role === "super_admin") return "/owner"
   if (ADMIN_ROLES.has(role)) return "/admin"
   if (role === "manager") return "/manager"
   if (SALES_ROLES.has(role)) return "/sales"
+  if (ENGINEER_ROLES.has(role)) return "/engineer"
   if (role === "employee") return "/employee"
   return "/auth/login"
 }
@@ -50,7 +52,8 @@ export function middleware(request: NextRequest) {
     pathname.startsWith("/employee") ||
     pathname.startsWith("/manager") ||
     pathname.startsWith("/sales") ||
-    pathname.startsWith("/owner")
+    pathname.startsWith("/owner") ||
+    pathname.startsWith("/engineer")
 
   if (!isProtected) {
     return NextResponse.next()
@@ -82,6 +85,10 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL(homeForRole(role), request.url))
   }
 
+  if (pathname.startsWith("/engineer") && !ENGINEER_ROLES.has(role)) {
+    return NextResponse.redirect(new URL(homeForRole(role), request.url))
+  }
+
   // /owner: authenticated only — page + API enforce platform owner
   return NextResponse.next()
 }
@@ -96,5 +103,7 @@ export const config = {
     "/dashboard/:path*",
     "/owner",
     "/owner/:path*",
+    "/engineer",
+    "/engineer/:path*",
   ],
 }

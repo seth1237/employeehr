@@ -9,6 +9,7 @@ import { stockApi } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -138,33 +139,42 @@ function hexToRgba(hex: string, alpha: number) {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-function exportInvoiceCsv(invoices: Invoice[]) {
-  const headers = [
-    "Invoice Number",
-    "Delivery Note",
-    "Quotation",
-    "Client",
-    "Number",
-    "Location",
-    "Items",
-    "Products",
-    "Amount",
-    "Status",
-    "Date",
-  ];
-  const rows = invoices.map((invoice) => [
-    invoice.invoiceNumber,
-    invoice.deliveryNoteNumber,
-    invoice.quotationNumber || "",
-    invoice.client.name,
-    invoice.client.number,
-    invoice.client.location,
-    String(invoice.items.length),
-    invoice.items.map((i) => `${i.productName} (${i.quantity}x)`).join("; "),
-    invoice.subTotal.toFixed(2),
-    invoice.status,
-    new Date(invoice.createdAt).toISOString(),
-  ]);
+
+const EXPORT_COLUMNS = [
+  { key: "invoiceNumber", label: "Invoice Number" },
+  { key: "deliveryNoteNumber", label: "Delivery Note" },
+  { key: "quotationNumber", label: "Quotation" },
+  { key: "clientName", label: "Client" },
+  { key: "clientNumber", label: "Number" },
+  { key: "clientLocation", label: "Location" },
+  { key: "itemsCount", label: "Items" },
+  { key: "products", label: "Products" },
+  { key: "amount", label: "Amount" },
+  { key: "status", label: "Status" },
+  { key: "date", label: "Date" },
+];
+
+function exportInvoiceCsv(invoices: Invoice[], selectedColumns: string[] = EXPORT_COLUMNS.map(c => c.key)) {
+  const activeCols = EXPORT_COLUMNS.filter(c => selectedColumns.includes(c.key));
+  const headers = activeCols.map(c => c.label);
+  
+  const rows = invoices.map((invoice) => {
+    const rowObj: Record<string, string> = {
+      invoiceNumber: invoice.invoiceNumber,
+      deliveryNoteNumber: invoice.deliveryNoteNumber,
+      quotationNumber: invoice.quotationNumber || "",
+      clientName: invoice.client.name,
+      clientNumber: invoice.client.number,
+      clientLocation: invoice.client.location,
+      itemsCount: String(invoice.items.length),
+      products: invoice.items.map((i) => `${i.productName} (${i.quantity}x)`).join("; "),
+      amount: invoice.subTotal.toFixed(2),
+      status: invoice.status,
+      date: new Date(invoice.createdAt).toLocaleString("en-GB", { year: "numeric", month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" }),
+    };
+    return activeCols.map(c => rowObj[c.key]);
+  });
+
 
   const csv = [
     headers.join(","),
@@ -210,6 +220,7 @@ export default function InvoicesPage() {
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [deliveryStatusInvoice, setDeliveryStatusInvoice] = useState<Invoice | null>(null);
   const [exportType, setExportType] = useState<"pdf" | "excel" | null>(null);
+  const [selectedColumns, setSelectedColumns] = useState<string[]>(EXPORT_COLUMNS.map(c => c.key));
   const [exportStartDate, setExportStartDate] = useState("");
   const [exportEndDate, setExportEndDate] = useState("");
   const [dispatchUsers, setDispatchUsers] = useState<DispatchUser[]>([]);
@@ -791,6 +802,7 @@ export default function InvoicesPage() {
       branding,
       periodStr,
       autoSave: true,
+      selectedColumns,
     });
   };
 
@@ -798,6 +810,7 @@ export default function InvoicesPage() {
     setExportType(type);
     setExportStartDate("");
     setExportEndDate("");
+    setSelectedColumns(EXPORT_COLUMNS.map(c => c.key));
     setExportModalOpen(true);
   };
 
@@ -832,9 +845,9 @@ export default function InvoicesPage() {
     }
 
     if (exportType === "pdf") {
-      exportInvoicePdf(filtered, periodStr);
+      exportInvoicePdf(filtered, periodStr); // selectedColumns is now available in scope
     } else {
-      exportInvoiceCsv(filtered);
+      exportInvoiceCsv(filtered, selectedColumns);
     }
 
     setExportModalOpen(false);
@@ -1582,23 +1595,71 @@ export default function InvoicesPage() {
           <DialogHeader>
             <DialogTitle>Export Summary</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Start Date</Label>
-              <Input
-                type="date"
-                value={exportStartDate}
-                onChange={(e) => setExportStartDate(e.target.value)}
-              />
+                    <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Start Date</Label>
+                <Input
+                  type="date"
+                  value={exportStartDate}
+                  onChange={(e) => setExportStartDate(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>End Date</Label>
+                <Input
+                  type="date"
+                  value={exportEndDate}
+                  onChange={(e) => setExportEndDate(e.target.value)}
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>End Date</Label>
-              <Input
-                type="date"
-                value={exportEndDate}
-                onChange={(e) => setExportEndDate(e.target.value)}
-              />
-            </div>
+            
+            {(exportType === "excel" || exportType === "pdf") && (
+              <div className="space-y-2 pt-2 border-t">
+                <div className="flex items-center justify-between">
+                  <Label>Columns to Export</Label>
+                  <Button 
+                    type="button" 
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-6 text-xs"
+                    onClick={() => {
+                      if (selectedColumns.length === EXPORT_COLUMNS.length) {
+                        setSelectedColumns([]);
+                      } else {
+                        setSelectedColumns(EXPORT_COLUMNS.map(c => c.key));
+                      }
+                    }}
+                  >
+                    {selectedColumns.length === EXPORT_COLUMNS.length ? "Deselect All" : "Select All"}
+                  </Button>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
+                  {EXPORT_COLUMNS.map(col => (
+                    <div key={col.key} className="flex items-center space-x-2">
+                      <Checkbox 
+                        id={`col-${col.key}`} 
+                        checked={selectedColumns.includes(col.key)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setSelectedColumns([...selectedColumns, col.key]);
+                          } else {
+                            setSelectedColumns(selectedColumns.filter(c => c !== col.key));
+                          }
+                        }}
+                      />
+                      <label 
+                        htmlFor={`col-${col.key}`}
+                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                      >
+                        {col.label}
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setExportModalOpen(false)}>

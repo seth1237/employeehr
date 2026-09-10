@@ -28,8 +28,15 @@ const SALES_SUGGESTIONS = [
   "Which products are low on stock?",
 ]
 
+const ENGINEER_SUGGESTIONS = [
+  "What's on my planner this week?",
+  "How many pending machine services are there?",
+  "What machines are assigned to me?",
+  "Which products are low on stock?",
+]
+
 type AiAssistantChatProps = {
-  variant?: "default" | "sales"
+  variant?: "default" | "sales" | "engineer"
 }
 
 // ─── Minimal inline markdown renderer ────────────────────────────────────────
@@ -214,24 +221,28 @@ export function AiAssistantChat({ variant = "default" }: AiAssistantChatProps) {
     setError(null)
   }
 
-  const suggestions = variant === "sales" ? SALES_SUGGESTIONS : SUGGESTIONS
+  const suggestions = variant === "sales" ? SALES_SUGGESTIONS : variant === "engineer" ? ENGINEER_SUGGESTIONS : SUGGESTIONS
   const intro =
     variant === "sales"
       ? "Ask about your leave, planner, visits, quotes, or stock. Answers come from your own data."
-      : "Ask about your company's sales, stock, invoices, payroll, or HR metrics. All answers come from your own data."
+      : variant === "engineer"
+        ? "Ask about your planner, assigned duties, machine services, or stock. Answers come from your own data."
+        : "Ask about your company's sales, stock, invoices, payroll, or HR metrics. All answers come from your own data."
   const placeholder =
     variant === "sales"
       ? "Ask about leave, visits, quotes, stock…"
-      : enabled === false
-        ? "Not configured"
-        : "Ask about sales, stock, payroll…"
+      : variant === "engineer"
+        ? "Ask about planner, duties, services, stock…"
+        : enabled === false
+          ? "Not configured"
+          : "Ask about sales, stock, payroll…"
 
   return (
     <>
       <div
         className={cn(
           "fixed z-[60] flex flex-col items-end gap-3",
-          variant === "sales"
+          (variant === "sales" || variant === "engineer")
             ? "bottom-20 left-4 items-start lg:bottom-5 lg:left-auto lg:right-5 lg:items-end"
             : "bottom-5 right-5",
         )}

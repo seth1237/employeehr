@@ -39,6 +39,10 @@ router.post(
   StockController.requestWebsiteInvoice,
 );
 
+import { DeliveryFeedbackController } from "../controllers/deliveryFeedbackController";
+router.get("/public/delivery-feedback/:invoiceId", DeliveryFeedbackController.getDeliveryDetailsForFeedback);
+router.post("/public/delivery-feedback/:invoiceId", DeliveryFeedbackController.submitFeedback);
+
 router.use(authMiddleware, orgMiddleware, tenantIsolation);
 
 router.post("/categories", StockController.createCategory);

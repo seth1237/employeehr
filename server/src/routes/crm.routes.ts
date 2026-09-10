@@ -39,4 +39,7 @@ router.put("/tickets/:id", CrmController.updateTicket)
 router.patch("/tickets/:id", CrmController.updateTicket)
 router.post("/tickets/:id/resolve", CrmController.resolveTicket)
 
+// Delivery Feedback
+router.get("/delivery-feedback", CrmController.getDeliveryFeedbacks)
+
 export default router

@@ -8,10 +8,12 @@ import { Badge } from "@/components/ui/badge"
 import { DesktopTableShell } from "@/components/admin/ui/mobile-list"
 import { CheckCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { getUser } from "@/lib/auth"
 
 export default function PendingServicesPage() {
   const [loading, setLoading] = useState(true)
   const [services, setServices] = useState<any[]>([])
+  const user = getUser()
 
   useEffect(() => {
     loadData()
@@ -33,7 +35,7 @@ export default function PendingServicesPage() {
     }
   }
 
-  const pending = services.filter(s => !s.completedDate)
+  const pending = services.filter(s => !s.completedDate && (s.technicianId === user?._id || !s.technicianId))
 
   if (loading) return <PageLoadingSkeleton title="Pending Services" />
 
@@ -66,7 +68,10 @@ export default function PendingServicesPage() {
                 )}
                 {pending.map((s) => (
                   <tr key={s._id} className="hover:bg-muted/30 transition-colors">
-                    <td className="px-6 py-3 font-medium text-foreground">{s.machineId}</td>
+                    <td className="px-6 py-3 font-medium text-foreground">
+                      {s.machine?.productName || s.machineId}
+                      {s.machine?.serialNumber && <span className="block text-xs text-muted-foreground">{s.machine.serialNumber}</span>}
+                    </td>
                     <td className="px-6 py-3">{s.serviceType || "General Maintenance"}</td>
                     <td className="px-6 py-3">{s.scheduledDate ? new Date(s.scheduledDate).toLocaleDateString() : "—"}</td>
                     <td className="px-6 py-3">{s.technician || "—"}</td>

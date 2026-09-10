@@ -1316,7 +1316,7 @@ async function sendDeliveryNotificationForInvoice(params: {
   }
 
   const delivery = invoice.dispatch?.delivery || {};
-  const message = buildDeliveryClientMessage({
+  let message = buildDeliveryClientMessage({
     clientName: invoice.client?.name,
     invoiceNumber: invoice.invoiceNumber,
     deliveryNoteNumber: invoice.deliveryNoteNumber,
@@ -1328,6 +1328,9 @@ async function sendDeliveryNotificationForInvoice(params: {
     deliveryNote: delivery.note,
     messageTemplate: deliveryTemplate,
   });
+
+  const feedbackLink = `https://elevatehub.co.ke/feedback/delivery/${invoice._id}`;
+  message = `${message} Please rate our service: ${feedbackLink}`;
 
   const notification = await DispatchNotification.create({
     org_id: orgId,

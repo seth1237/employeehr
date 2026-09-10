@@ -264,6 +264,12 @@ const adminMenuItems = [
     section: "CLIENTS",
   },
   {
+    label: "Delivery Feedback",
+    icon: Star,
+    href: "/admin/clients/delivery-feedback",
+    section: "CLIENTS",
+  },
+  {
     label: "Exhibitions & Events",
     icon: Calendar,
     href: "/admin/clients/exhibitions",

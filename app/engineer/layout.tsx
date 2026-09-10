@@ -4,8 +4,8 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { getUser, postLoginPath } from "@/lib/auth"
 import { EngineerSidebar } from "@/components/engineer/sidebar"
-import { SalesTopNav } from "@/components/sales/top-nav"
-import { SalesMobileNav } from "@/components/sales/mobile-nav"
+import { EngineerTopNav } from "@/components/engineer/top-nav"
+import { EngineerMobileNav } from "@/components/engineer/mobile-nav"
 import { AiAssistantChat } from "@/components/ai/ai-assistant-chat"
 
 export default function EngineerLayout({ children }: { children: React.ReactNode }) {
@@ -39,9 +39,9 @@ export default function EngineerLayout({ children }: { children: React.ReactNode
     <div className="flex h-screen overflow-hidden bg-slate-50">
       <EngineerSidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(false)} />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <SalesTopNav onMenuClick={() => setSidebarOpen(true)} />
+        <EngineerTopNav onMenuClick={() => setSidebarOpen(true)} />
         <main className="flex-1 overflow-y-auto">{children}</main>
-        <SalesMobileNav />
+        <EngineerMobileNav />
       </div>
       <AiAssistantChat variant="engineer" />
     </div>

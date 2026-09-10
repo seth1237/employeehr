@@ -20,16 +20,12 @@ import {
 import { logout } from "@/lib/auth"
 
 const navigation = [
-  { name: "Today", href: "/sales", icon: LayoutDashboard },
-  { name: "Planner", href: "/sales/planner", icon: ClipboardList },
-  { name: "Calendar", href: "/sales/calendar", icon: CalendarDays },
-  { name: "Visit reports", href: "/sales/report", icon: ClipboardCheck },
-  { name: "Meetings", href: "/sales/meetings", icon: Video },
-  { name: "Clients", href: "/sales/clients", icon: BookUser },
-  { name: "Quotes", href: "/sales/quotes", icon: FileText },
-  { name: "Exhibitions", href: "/sales/exhibitions", icon: MapPin },
-  { name: "Leave", href: "/sales/leave", icon: Palmtree },
-  { name: "History", href: "/sales/history", icon: History },
+  { name: "Dashboard", href: "/engineer", icon: LayoutDashboard },
+  { name: "Machine Database", href: "/engineer/machines", icon: ClipboardList },
+  { name: "Pending Services", href: "/engineer/services", icon: ClipboardCheck },
+  { name: "Assigned Duties", href: "/engineer/duties", icon: ClipboardCheck },
+  { name: "Planner", href: "/engineer/planner", icon: CalendarDays },
+  { name: "Expenses", href: "/engineer/expenses", icon: FileText },
 ]
 
 export function EngineerSidebar({ isOpen = false, onToggle }: { isOpen?: boolean; onToggle?: () => void }) {
@@ -53,16 +49,16 @@ export function EngineerSidebar({ isOpen = false, onToggle }: { isOpen?: boolean
       >
         <div className="flex h-14 items-center justify-between border-b border-slate-200 px-4">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Field sales</p>
-            <p className="text-base font-semibold text-slate-900">Desk</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Service Engineer</p>
+            <p className="text-base font-semibold text-slate-900">Portal</p>
           </div>
           <button type="button" className="rounded-md p-2 lg:hidden" onClick={onToggle} aria-label="Close sidebar">
             <X className="h-5 w-5" />
           </button>
         </div>
-        <nav className="flex-1 space-y-0.5 overflow-y-auto p-3" aria-label="Sales pages">
+        <nav className="flex-1 space-y-0.5 overflow-y-auto p-3" aria-label="Engineer pages">
           {navigation.map((item) => {
-            const active = item.href === "/sales" ? pathname === "/sales" : pathname.startsWith(item.href)
+            const active = item.href === "/engineer" ? pathname === "/engineer" : pathname === item.href
             const Icon = item.icon
             return (
               <Link

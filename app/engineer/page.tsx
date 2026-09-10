@@ -7,11 +7,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Activity, Wrench, Briefcase, Plus } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import { getUser } from "@/lib/auth"
 
 export default function EngineerDashboard() {
   const [loading, setLoading] = useState(true)
   const [machines, setMachines] = useState([])
   const [services, setServices] = useState([])
+  const user = getUser()
 
   useEffect(() => {
     loadData()
@@ -34,6 +36,8 @@ export default function EngineerDashboard() {
 
   if (loading) return <PageLoadingSkeleton title="Engineer Dashboard" />
 
+  const myPendingServices = services.filter((s:any) => !s.completedDate && (s.technicianId === user?._id || !s.technicianId))
+
   return (
     <div className="p-4 md:p-8 space-y-6">
       <div>
@@ -53,11 +57,11 @@ export default function EngineerDashboard() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Pending Services</CardTitle>
+            <CardTitle className="text-sm font-medium">My Pending Services</CardTitle>
             <Activity className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{services.filter((s:any) => !s.completedDate).length}</div>
+            <div className="text-2xl font-bold">{myPendingServices.length}</div>
           </CardContent>
         </Card>
       </div>

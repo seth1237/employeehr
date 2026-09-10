@@ -8,6 +8,7 @@ export interface IMachineService {
   scheduledDate?: Date;
   completedDate?: Date | null;
   technician?: string;
+  technicianId?: string;
   cost?: number;
   notes?: string;
   createdAt?: Date;
@@ -22,6 +23,7 @@ const machineServiceSchema = new Schema<IMachineService>(
     scheduledDate: { type: Date },
     completedDate: { type: Date, default: null },
     technician: { type: String, default: "" },
+    technicianId: { type: String, default: "" },
     cost: { type: Number, default: 0 },
     notes: { type: String, default: "" },
   },

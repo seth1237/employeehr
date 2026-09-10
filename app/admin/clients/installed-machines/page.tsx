@@ -8,6 +8,7 @@ import { finishDataLoad, startDataLoad } from "@/lib/silent-load";
 import { useToast } from "@/hooks/use-toast";
 import { PageLoadingSkeleton } from "@/components/admin/ui/page-states";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DesktopTableShell, MobileCardList, MobileCard } from "@/components/admin/ui/mobile-list";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -34,6 +35,7 @@ import {
   FileText,
   Download,
   Upload,
+  Inbox,
 } from "lucide-react";
 import {
   Dialog,
@@ -201,6 +203,7 @@ interface ServiceFormState {
   serviceType: string;
   scheduledDate: string;
   technician: string;
+  technicianId: string;
   notes: string;
   cost: string;
   markCompleted: boolean;
@@ -216,6 +219,7 @@ const EMPTY_SERVICE_FORM: ServiceFormState = {
   serviceType: "",
   scheduledDate: "",
   technician: "",
+  technicianId: "",
   notes: "",
   cost: "",
   markCompleted: false,
@@ -323,13 +327,16 @@ interface EmployeeOption {
   name?: string;
   first_name?: string;
   last_name?: string;
+  firstName?: string;
+  lastName?: string;
   email?: string;
+  role?: string;
 }
 
 function getEmployeeLabel(employee: EmployeeOption) {
   if (employee.name) return employee.name;
-  const first = employee.first_name?.trim();
-  const last = employee.last_name?.trim();
+  const first = (employee.first_name || employee.firstName)?.trim();
+  const last = (employee.last_name || employee.lastName)?.trim();
   if (first || last) return [first, last].filter(Boolean).join(" ");
   return employee.email || "Unnamed employee";
 }
@@ -589,7 +596,7 @@ function ServiceCard({
  * Page
  * ==========================================================================*/
 
-export default function InstalledMachinesPage() {
+export default function InstalledMachinesPage({ isEngineerView = false }: { isEngineerView?: boolean }) {
   // Section navigation
   const [section, setSection] = useState<SectionKey>("machines");
   const [comingSoonPeriod, setComingSoonPeriod] =
@@ -1458,16 +1465,18 @@ export default function InstalledMachinesPage() {
   }, [reminderServices, selectedMachine]);
 
   const technicianOptions = useMemo(() => {
-    const options = employees.map((employee) => ({
+    const engineerEmployees = employees.filter(e => e.role === "technical_service_engineer" || e.role === "admin" || e.role === "company_admin" || e.role === "super_admin");
+    const options = engineerEmployees.map((employee) => ({
       value: getEmployeeLabel(employee),
-      label: getEmployeeLabel(employee),
+      label: getEmployeeLabel(employee) + (employee.role === "technical_service_engineer" ? " (Service Engineer)" : " (Admin)"),
+      original: employee
     }));
 
     if (
       serviceForm.technician &&
       !options.some((option) => option.value === serviceForm.technician)
     ) {
-      options.unshift({ value: serviceForm.technician, label: serviceForm.technician });
+      options.unshift({ value: serviceForm.technician, label: serviceForm.technician + " (Assigned)", original: null as any });
     }
 
     return options;
@@ -1478,6 +1487,7 @@ export default function InstalledMachinesPage() {
     label: string;
     icon: JSX.Element;
     count: number;
+    hiddenInEngineerView?: boolean;
   }[] = [
     {
       key: "machines",
@@ -1490,6 +1500,7 @@ export default function InstalledMachinesPage() {
       label: "Clients CRM",
       icon: <Users className="h-4 w-4" />,
       count: customers.length,
+      hiddenInEngineerView: true,
     },
     {
       key: "tickets",
@@ -1501,6 +1512,7 @@ export default function InstalledMachinesPage() {
           t.status !== "Dismissed" &&
           t.status !== "Resolved",
       ).length,
+      hiddenInEngineerView: true,
     },
     {
       key: "pending",
@@ -2457,6 +2469,7 @@ export default function InstalledMachinesPage() {
       serviceType: service.serviceType || "",
       scheduledDate: toInputDate(service.scheduledDate),
       technician: service.technician || "",
+      technicianId: (service as any).technicianId || "",
       notes: service.notes || "",
       cost: service.cost != null ? String(service.cost) : "",
       markCompleted: !!service.completedDate,
@@ -2535,6 +2548,7 @@ export default function InstalledMachinesPage() {
           ? new Date(serviceForm.scheduledDate).toISOString()
           : null,
         technician: serviceForm.technician,
+        technicianId: serviceForm.technicianId,
         notes: serviceForm.notes,
         cost: serviceForm.cost ? Number(serviceForm.cost) : undefined,
         completedDate: serviceForm.markCompleted
@@ -2584,6 +2598,7 @@ export default function InstalledMachinesPage() {
       serviceType: service.serviceType || "",
       scheduledDate: toInputDate(service.scheduledDate),
       technician: service.technician || "",
+      technicianId: (service as any).technicianId || "",
       notes: service.notes || "",
       cost: service.cost != null ? String(service.cost) : "",
       markCompleted: true,
@@ -2645,37 +2660,58 @@ export default function InstalledMachinesPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button
-              onClick={() => {
-                setSection("machines");
-                setShowSchedulePanel((v) => !v);
-                if (!showSchedulePanel) {
-                  setShowCandidates(false);
-                  setShowBulkUploadPanel(false);
-                  setShowManualAddDialog(false);
-                }
-              }}
-              className="flex items-center gap-2"
-            >
-              <CalendarClock className="h-4 w-4" />
-              {showSchedulePanel ? "Hide" : "Schedule"} Installation
-            </Button>
-            <Button
-              onClick={() => {
-                setSection("machines");
-                setShowCandidates((v) => !v);
-                if (!showCandidates) {
-                  setShowBulkUploadPanel(false);
-                  setShowSchedulePanel(false);
-                  setShowManualAddDialog(false);
-                }
-              }}
-              variant="outline"
-              className="flex items-center gap-2"
-            >
-              <Plus className="h-4 w-4" />
-              {showCandidates ? "Hide" : "Add"} Machines
-            </Button>
+            {!isEngineerView && (
+              <>
+                <Button
+                  onClick={() => {
+                    setSection("machines");
+                    setShowSchedulePanel((v) => !v);
+                    if (!showSchedulePanel) {
+                      setShowCandidates(false);
+                      setShowBulkUploadPanel(false);
+                      setShowManualAddDialog(false);
+                    }
+                  }}
+                  variant={showSchedulePanel ? "default" : "outline"}
+                  className="flex items-center gap-2"
+                >
+                  <CalendarClock className="h-4 w-4" />
+                  {showSchedulePanel ? "Hide" : "Schedule"} Installation
+                </Button>
+                <Button
+                  onClick={() => {
+                    setSection("machines");
+                    setShowCandidates((v) => !v);
+                    if (!showCandidates) {
+                      setShowBulkUploadPanel(false);
+                      setShowSchedulePanel(false);
+                      setShowManualAddDialog(false);
+                    }
+                  }}
+                  variant="outline"
+                  className="flex items-center gap-2 hidden sm:flex"
+                >
+                  <Inbox className="h-4 w-4" />
+                  Incoming candidates
+                </Button>
+                <Button
+                  onClick={() => {
+                    setSection("machines");
+                    setShowBulkUploadPanel((v) => !v);
+                    if (!showBulkUploadPanel) {
+                      setShowCandidates(false);
+                      setShowSchedulePanel(false);
+                      setShowManualAddDialog(false);
+                    }
+                  }}
+                  variant="outline"
+                  className="flex items-center gap-2 hidden sm:flex"
+                >
+                  <Upload className="h-4 w-4" />
+                  Bulk Upload
+                </Button>
+              </>
+            )}
             <Button
               variant="outline"
               className="flex items-center gap-2"
@@ -2683,22 +2719,6 @@ export default function InstalledMachinesPage() {
             >
               <Plus className="h-4 w-4" />
               Add Machine Manually
-            </Button>
-            <Button
-              variant={showBulkUploadPanel ? "default" : "outline"}
-              className="flex items-center gap-2"
-              onClick={() => {
-                setSection("machines");
-                setShowBulkUploadPanel((v) => !v);
-                if (!showBulkUploadPanel) {
-                  setShowCandidates(false);
-                  setShowSchedulePanel(false);
-                  setShowManualAddDialog(false);
-                }
-              }}
-            >
-              <Upload className="h-4 w-4" />
-              Bulk Upload
             </Button>
             <Button
               variant="outline"
@@ -2721,8 +2741,8 @@ export default function InstalledMachinesPage() {
         </div>
 
         {/* Stat cards */}
-        <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
-          <Card className="shadow-sm">
+        <div className={`mt-3 flex-row gap-2 overflow-x-auto snap-x snap-mandatory scrollbar-hide pb-2 ${isEngineerView ? "hidden sm:flex" : "flex"}`}>
+          <Card className="shadow-sm shrink-0 w-36 snap-start">
             <CardContent className="p-3">
               <div className="text-xs uppercase tracking-wide text-muted-foreground">
                 Machines
@@ -2730,7 +2750,7 @@ export default function InstalledMachinesPage() {
               <div className="mt-1 text-xl font-semibold">{machines.length}</div>
             </CardContent>
           </Card>
-          <Card className="shadow-sm">
+          <Card className="shadow-sm shrink-0 w-36 snap-start">
             <CardContent className="p-3">
               <div className="text-xs uppercase tracking-wide text-muted-foreground">
                 Pending services
@@ -2740,7 +2760,7 @@ export default function InstalledMachinesPage() {
               </div>
             </CardContent>
           </Card>
-          <Card className="shadow-sm">
+          <Card className="shadow-sm shrink-0 w-36 snap-start">
             <CardContent className="p-3">
               <div className="text-xs uppercase tracking-wide text-muted-foreground">
                 Due services
@@ -2750,7 +2770,7 @@ export default function InstalledMachinesPage() {
               </div>
             </CardContent>
           </Card>
-          <Card className="shadow-sm">
+          <Card className="shadow-sm shrink-0 w-36 snap-start">
             <CardContent className="p-3">
               <div className="text-xs uppercase tracking-wide text-muted-foreground">
                 Coming soon
@@ -2760,7 +2780,7 @@ export default function InstalledMachinesPage() {
               </div>
             </CardContent>
           </Card>
-          <Card className="shadow-sm">
+          <Card className="shadow-sm shrink-0 w-36 snap-start">
             <CardContent className="p-3">
               <div className="text-xs uppercase tracking-wide text-muted-foreground">
                 Done services
@@ -2773,13 +2793,13 @@ export default function InstalledMachinesPage() {
         </div>
 
         {/* Section navigation, styled as a pill toggle row */}
-        <div className="mt-3 flex flex-wrap gap-2 rounded-xl border bg-white/90 p-2 shadow-sm backdrop-blur-sm">
-          {sectionTabs.map((tab) => (
+        <div className="mt-3 flex flex-row flex-nowrap overflow-x-auto gap-2 rounded-xl border bg-white/90 p-2 shadow-sm backdrop-blur-sm scrollbar-hide">
+          {sectionTabs.filter(tab => !(isEngineerView && tab.hiddenInEngineerView)).map((tab) => (
             <Button
               key={tab.key}
               size="sm"
               variant={section === tab.key ? "default" : "outline"}
-              className="flex items-center gap-2"
+              className="flex items-center gap-2 whitespace-nowrap shrink-0"
               onClick={() => setSection(tab.key)}
             >
               {tab.icon}
@@ -3272,128 +3292,155 @@ export default function InstalledMachinesPage() {
                       </div>
                     </div>
                   ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full table-fixed text-[13px]">
-                        <thead className="sticky top-0 z-10 bg-muted/80 text-left text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
-                          <tr className="border-b">
-                            <th className="px-3 py-3 font-medium w-[38%]">Machine</th>
-                            <th className="px-3 py-3 font-medium w-[30%]">Client</th>
-                            <th className="px-3 py-3 font-medium w-[16%]">Status</th>
-                            <th className="px-3 py-3 font-medium w-[16%]">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {pagedMachines.map((m, index) => (
-                            <tr
-                              key={m._id}
-                              onClick={() => setSelectedMachine(m)}
-                              className={`cursor-pointer border-b align-top transition-colors hover:bg-muted/40 ${
-                                selectedMachine?._id === m._id
-                                  ? "bg-primary/10"
-                                  : index % 2 === 0
-                                    ? "bg-white"
-                                    : "bg-muted/20"
-                              }`}
-                            >
-                              <td className="px-3 py-2 align-top">
-                                <div className="min-w-0">
-                                  <div
-                                    className="truncate font-medium text-foreground"
-                                    title={m.productName}
-                                  >
-                                    {m.productName}
-                                  </div>
-                                  {m.serialNumber && (
-                                    <div className="truncate text-[11px] text-muted-foreground">
-                                      SN: {m.serialNumber}
-                                    </div>
-                                  )}
-                                </div>
-                              </td>
-                              <td className="px-3 py-2 align-top">
-                                <div className="min-w-0">
-                                  <div
-                                    className="truncate font-medium text-foreground"
-                                    title={m.client?.name}
-                                  >
-                                    {m.client?.name || "—"}
-                                  </div>
-                                  <div className="truncate text-[11px] text-muted-foreground">
-                                    {m.client?.location || "—"}
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="px-3 py-2 align-top">
-                                <Badge
-                                  variant="outline"
-                                  className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium capitalize ${machineStatusTone(
-                                    m.status,
-                                  )}`}
-                                >
-                                  {m.status || "active"}
-                                </Badge>
-                              </td>
-                              <td
-                                className="px-3 py-2 align-top"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="h-8 w-full whitespace-nowrap"
-                                    >
-                                      Actions
-                                    </Button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end" className="w-52">
-                                    <DropdownMenuItem
-                                      onClick={() => setSelectedMachine(m)}
-                                    >
-                                      View details
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      onClick={() => openDetailDialog(m)}
-                                    >
-                                      Edit machine
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      onClick={() => void openCallDialogForMachine(m)}
-                                    >
-                                      <PhoneCall className="mr-2 h-4 w-4" />
-                                      Log call
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      onClick={() => void openHistoryDialogForMachine(m)}
-                                    >
-                                      <MessageSquare className="mr-2 h-4 w-4" />
-                                      Call history
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      onClick={() => openLogServiceDialog(m)}
-                                    >
-                                      Log service
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      onClick={() => openRaiseTicketDialog(m)}
-                                    >
-                                      Raise a ticket
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      className="text-destructive focus:text-destructive"
-                                      onClick={() => deleteMachine(m._id)}
-                                    >
-                                      Delete machine
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              </td>
+                    <>
+                      <DesktopTableShell>
+                        <table className="w-full table-fixed text-[13px]">
+                          <thead className="sticky top-0 z-10 bg-muted/80 text-left text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
+                            <tr className="border-b">
+                              <th className="px-3 py-3 font-medium w-[38%]">Machine</th>
+                              <th className="px-3 py-3 font-medium w-[30%]">Client</th>
+                              <th className="px-3 py-3 font-medium w-[16%]">Status</th>
+                              <th className="px-3 py-3 font-medium w-[16%]">Actions</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                          </thead>
+                          <tbody>
+                            {pagedMachines.map((m, index) => (
+                              <tr
+                                key={m._id}
+                                onClick={() => setSelectedMachine(m)}
+                                className={`cursor-pointer border-b align-top transition-colors hover:bg-muted/40 ${
+                                  selectedMachine?._id === m._id
+                                    ? "bg-primary/10"
+                                    : index % 2 === 0
+                                      ? "bg-white"
+                                      : "bg-muted/20"
+                                }`}
+                              >
+                                <td className="px-3 py-2 align-top">
+                                  <div className="min-w-0">
+                                    <div
+                                      className="truncate font-medium text-foreground"
+                                      title={m.productName}
+                                    >
+                                      {m.productName}
+                                    </div>
+                                    {m.serialNumber && (
+                                      <div className="truncate text-[11px] text-muted-foreground">
+                                        SN: {m.serialNumber}
+                                      </div>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="px-3 py-2 align-top">
+                                  <div className="min-w-0">
+                                    <div
+                                      className="truncate font-medium text-foreground"
+                                      title={m.client?.name}
+                                    >
+                                      {m.client?.name || "—"}
+                                    </div>
+                                    <div className="truncate text-[11px] text-muted-foreground">
+                                      {m.client?.location || "—"}
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-3 py-2 align-top">
+                                  <Badge
+                                    variant="outline"
+                                    className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium capitalize ${machineStatusTone(
+                                      m.status,
+                                    )}`}
+                                  >
+                                    {m.status || "active"}
+                                  </Badge>
+                                </td>
+                                <td
+                                  className="px-3 py-2 align-top"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-8 w-full whitespace-nowrap"
+                                      >
+                                        Actions
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end" className="w-52">
+                                      <DropdownMenuItem
+                                        onClick={() => setSelectedMachine(m)}
+                                      >
+                                        View details
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        onClick={() => openDetailDialog(m)}
+                                      >
+                                        Edit machine
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        onClick={() => void openCallDialogForMachine(m)}
+                                      >
+                                        <PhoneCall className="mr-2 h-4 w-4" />
+                                        Log call
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        onClick={() => void openHistoryDialogForMachine(m)}
+                                      >
+                                        <MessageSquare className="mr-2 h-4 w-4" />
+                                        Call history
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        onClick={() => openLogServiceDialog(m)}
+                                      >
+                                        Log service
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        onClick={() => openRaiseTicketDialog(m)}
+                                      >
+                                        Raise a ticket
+                                      </DropdownMenuItem>
+                                      {!isEngineerView && (
+                                        <DropdownMenuItem
+                                          className="text-destructive focus:text-destructive"
+                                          onClick={() => deleteMachine(m._id)}
+                                        >
+                                          Delete machine
+                                        </DropdownMenuItem>
+                                      )}
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </DesktopTableShell>
+                      
+                      <MobileCardList>
+                        {pagedMachines.map((m) => (
+                          <MobileCard key={m._id} className="hover:bg-slate-50 cursor-pointer" aria-label="View Machine" onClick={() => setSelectedMachine(m)}>
+                            <div className="flex justify-between items-start mb-2">
+                              <div>
+                                <h3 className="font-medium text-foreground">{m.productName}</h3>
+                                {m.serialNumber && <p className="text-xs text-muted-foreground mt-0.5">SN: {m.serialNumber}</p>}
+                              </div>
+                              <Badge variant="outline" className={`rounded-full px-2 py-0 text-[10px] capitalize ${machineStatusTone(m.status)}`}>
+                                {m.status || "active"}
+                              </Badge>
+                            </div>
+                            <div className="flex items-center gap-2 mt-2 pt-2 border-t text-sm text-slate-600">
+                              <Users className="w-3.5 h-3.5" />
+                              <span className="truncate">{m.client?.name || "—"}</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
+                              <span className="truncate">{m.client?.location || "No Location"}</span>
+                            </div>
+                          </MobileCard>
+                        ))}
+                      </MobileCardList>
+                    </>
                   )}
                   {filteredMachines.length > 0 && (
                     <div className="flex flex-col gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
@@ -4615,15 +4662,21 @@ export default function InstalledMachinesPage() {
               <div>
                 <Label>Technician</Label>
                 <select
-                  value={serviceForm.technician}
-                  onChange={(e) =>
-                    setServiceForm({ ...serviceForm, technician: e.target.value })
-                  }
+                  value={serviceForm.technicianId || serviceForm.technician}
+                  onChange={(e) => {
+                    const selectedValue = e.target.value;
+                    const opt = technicianOptions.find(o => o.original?._id === selectedValue || o.value === selectedValue);
+                    setServiceForm({ 
+                      ...serviceForm, 
+                      technician: opt?.value || selectedValue,
+                      technicianId: opt?.original?._id || ""
+                    });
+                  }}
                   className="w-full rounded border px-3 py-2 mt-1"
                 >
                   <option value="">Select an employee</option>
                   {technicianOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
+                    <option key={option.original?._id || option.value} value={option.original?._id || option.value}>
                       {option.label}
                     </option>
                   ))}

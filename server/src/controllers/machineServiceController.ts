@@ -221,7 +221,7 @@ export class MachineServiceController {
         return res.status(401).json({ success: false, message: "Unauthorized" });
       }
 
-      const { machineId, serviceType, scheduledDate, completedDate, technician, cost, notes } = req.body || {};
+      const { machineId, serviceType, scheduledDate, completedDate, technician, technicianId, cost, notes } = req.body || {};
       if (!machineId) {
         return res.status(400).json({ success: false, message: "machineId is required" });
       }
@@ -238,6 +238,7 @@ export class MachineServiceController {
         scheduledDate: normalizeDate(scheduledDate),
         completedDate: normalizeDate(completedDate) ?? null,
         technician: technician ? String(technician).trim() : "",
+        technicianId: technicianId ? String(technicianId).trim() : "",
         cost: cost != null ? Number(cost) : 0,
         notes: notes ? String(notes).trim() : "",
       });
@@ -270,7 +271,7 @@ export class MachineServiceController {
         return res.status(400).json({ success: false, message: "Service id required" });
       }
 
-      const allowed = ["machineId", "serviceType", "scheduledDate", "completedDate", "technician", "cost", "notes"];
+      const allowed = ["machineId", "serviceType", "scheduledDate", "completedDate", "technician", "technicianId", "cost", "notes"];
       const update: any = {};
       for (const key of allowed) {
         if (req.body[key] !== undefined) {

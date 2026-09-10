@@ -15,6 +15,7 @@ import { StockServiceJob } from "../models/StockServiceJob"
 import { User } from "../models/User"
 import { Types } from "mongoose"
 import { Company } from "../models/Company"
+import { CustomerDeliveryFeedback } from "../models/CustomerDeliveryFeedback"
 import { buildQuotationItems, generateDocumentNumber, summarizeDocumentTotals } from "./stock/stockShared"
 import "../models/Ticket"
 
@@ -1869,6 +1870,22 @@ export class CrmController {
       console.error("getTelesalesActivity failed:", error)
       const message =
         error instanceof Error ? error.message : "Failed to load telesales activity"
+      return res.status(500).json({ success: false, message })
+    }
+  }
+
+  static async getDeliveryFeedbacks(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.org_id
+      if (!org_id) return res.status(401).json({ success: false, message: "Unauthorized" })
+      
+      const feedbacks = await CustomerDeliveryFeedback.find({ org_id })
+        .sort({ submittedAt: -1 })
+        .lean()
+        
+      return res.status(200).json({ success: true, data: feedbacks })
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to load delivery feedbacks"
       return res.status(500).json({ success: false, message })
     }
   }

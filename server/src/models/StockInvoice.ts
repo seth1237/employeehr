@@ -92,6 +92,8 @@ export interface IStockInvoice {
   createdBy: string
   createdAt?: Date
   updatedAt?: Date
+  dataLakeSynced?: boolean
+  isArchived?: boolean
 }
 
 const invoiceItemSchema = new Schema<IInvoiceItem>(
@@ -203,6 +205,8 @@ const stockInvoiceSchema = new Schema<IStockInvoice>(
       },
     },
     createdBy: { type: String, required: true },
+    dataLakeSynced: { type: Boolean, default: false },
+    isArchived: { type: Boolean, default: false }
   },
   { timestamps: true },
 )

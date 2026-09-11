@@ -144,7 +144,7 @@ export default function AdminDashboard() {
       return
     }
     setWidgetOrder(getDashboardWidgetOrder())
-  }, [currentUser, router])
+  }, [currentUser?.role, router])
 
   const leftWidgets = useMemo(() => {
     const leftIds: DashboardWidgetId[] = [

@@ -7,6 +7,8 @@ import morgan from "morgan"
 import path from "path"
 import { fileURLToPath } from "url"
 import { connectDB } from "./config/database"
+import { initDataLake } from "./config/mysql"
+import { startDataLakeJobs } from "./jobs/archiveCron"
 import { errorHandler } from "./middleware/errorHandler"
 import { sanitizeInput } from "./middleware/sanitization.middleware"
 import { apiLimiter } from "./middleware/rateLimit.middleware"
@@ -268,6 +270,13 @@ async function startServer() {
     console.log("🔌 Connecting to MongoDB...")
     await connectDB()
     console.log("✅ MongoDB connection established")
+
+    // Initialize MySQL DataLake
+    console.log("🔌 Initializing MySQL Data Lake...")
+    await initDataLake()
+    
+    // Start Data Lake Cron Jobs
+    startDataLakeJobs()
 
     // MySQL is secondary (Mongo→MySQL sync). Do not block API startup on migrate errors.
     if (!process.env.MYSQL_DATABASE_URL?.trim()) {

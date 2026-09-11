@@ -45,6 +45,8 @@ export interface IStockQuotation {
   convertedInvoiceId?: string
   createdAt?: Date
   updatedAt?: Date
+  dataLakeSynced?: boolean
+  isArchived?: boolean
 }
 
 const quotationItemSchema = new Schema<IQuotationItem>(
@@ -92,9 +94,10 @@ const stockQuotationSchema = new Schema<IStockQuotation>(
     createdBy: { type: String, required: true },
     ownerUserId: { type: String, index: true },
     branchId: { type: String, index: true },
-    approvedBy: { type: String },
     approvedAt: { type: Date },
     convertedInvoiceId: { type: String },
+    dataLakeSynced: { type: Boolean, default: false },
+    isArchived: { type: Boolean, default: false }
   },
   { timestamps: true },
 )

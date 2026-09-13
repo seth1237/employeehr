@@ -104,7 +104,7 @@ export function DispatchWorkflow({ invoiceId, allowBackTo }: DispatchWorkflowPro
         fetch(`${API_URL}/api/stock/couriers`, { headers }),
       ])
       const [invoiceJson, courierJson] = await Promise.all([invoiceRes.json(), courierRes.json()])
-      if (!invoiceRes.ok) throw new Error(invoiceJson.message || "Failed to load invoice")
+      if (!invoiceRes.ok) throw new Error(invoiceJson.message || "Failed to load dispatch record")
 
       setInvoice(invoiceJson.data)
       setPackingItems(invoiceJson.data?.dispatch?.packingItems || [])
@@ -157,19 +157,13 @@ export function DispatchWorkflow({ invoiceId, allowBackTo }: DispatchWorkflowPro
       setSuccess("")
 
       // Validate required fields
-      if (!transportMeans || transportMeans.trim() === "") {
-        setError("Transport means/courier type is required")
-        setSaving(false)
-        return
-      }
-
       if (!selectedCourierId && (!newCourier.name || !newCourier.contactName || !newCourier.contactNumber)) {
         setError("Either select a courier or fill in all new courier details")
         setSaving(false)
         return
       }
 
-      const payload: any = { transportMeans: transportMeans.trim() }
+      const payload: any = { transportMeans: transportMeans?.trim() || "Not recorded" }
       if (selectedCourierId) {
         payload.courierId = selectedCourierId
       } else {
@@ -189,12 +183,12 @@ export function DispatchWorkflow({ invoiceId, allowBackTo }: DispatchWorkflowPro
       const smsSuccess = json?.smsNotification?.success
       const smsMessage = json?.smsNotification?.message
       if (smsSuccess === false) {
-        setSuccess("Invoice marked as dispatched")
+        setSuccess("Dispatch marked as complete")
         setError(`SMS not sent: ${smsMessage || "Dispatch SMS failed"}`)
       } else if (smsMessage) {
-        setSuccess(`Invoice marked as dispatched. SMS: ${smsMessage}`)
+        setSuccess(`Dispatch marked as complete. SMS: ${smsMessage}`)
       } else {
-        setSuccess("Invoice marked as dispatched")
+        setSuccess("Dispatch marked as complete")
       }
     } catch (dispatchError: any) {
       setError(dispatchError.message || "Failed to mark dispatched")
@@ -289,7 +283,7 @@ export function DispatchWorkflow({ invoiceId, allowBackTo }: DispatchWorkflowPro
         : "bg-yellow-100 text-yellow-700"
 
   if (loading) return <div className="p-4">Loading dispatch workflow...</div>
-  if (!invoice) return <div className="p-4">Invoice not found.</div>
+  if (!invoice) return <div className="p-4">Dispatch record not found.</div>
 
   return (
     <div className="min-h-screen bg-slate-50/50 pb-8">
@@ -415,7 +409,7 @@ export function DispatchWorkflow({ invoiceId, allowBackTo }: DispatchWorkflowPro
               </CardHeader>
                 <CardContent className="grid gap-4 lg:grid-cols-[1fr_280px]">
                   <div className="space-y-3">
-                    <div>
+                    <div className="hidden">
                       <Label>Courier Means / Transport</Label>
                       <Input value={transportMeans} onChange={(event) => setTransportMeans(event.target.value)} placeholder="Motorbike, Van, Bus, etc" />
                     </div>
@@ -447,14 +441,14 @@ export function DispatchWorkflow({ invoiceId, allowBackTo }: DispatchWorkflowPro
                       <div className="space-y-2">
                         <Button
                           onClick={markDispatched}
-                          disabled={saving || !transportMeans.trim() || (!selectedCourierId && (!newCourier.name || !newCourier.contactName || !newCourier.contactNumber))}
+                          disabled={saving || (!selectedCourierId && (!newCourier.name || !newCourier.contactName || !newCourier.contactNumber))}
                           className="w-full lg:w-auto"
                         >
                           {saving ? "Processing..." : "Mark as Dispatched"}
                         </Button>
-                        {(!transportMeans.trim() || (!selectedCourierId && (!newCourier.name || !newCourier.contactName || !newCourier.contactNumber))) && (
+                        {((!selectedCourierId && (!newCourier.name || !newCourier.contactName || !newCourier.contactNumber))) && (
                           <p className="rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-700">
-                            ⚠️ Fill in transport means and courier details to continue
+                            ⚠️ Fill in courier details to continue
                           </p>
                         )}
                       </div>
@@ -490,7 +484,7 @@ export function DispatchWorkflow({ invoiceId, allowBackTo }: DispatchWorkflowPro
                     <p className="text-xs text-muted-foreground">
                       Courier: {invoice.dispatch?.courier?.name || "Unassigned"}
                     </p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-muted-foreground hidden">
                       Transport: {transportMeans || "Not recorded"}
                     </p>
                   </div>

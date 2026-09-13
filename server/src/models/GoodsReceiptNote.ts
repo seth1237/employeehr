@@ -7,6 +7,7 @@ export interface IGoodsReceiptNote extends Document {
   supplierId: string
   receiptDate: Date
   deliveryNoteNumber?: string // Supplier's DN number
+  warehouseId?: string // NEW: Receiving location
   items: {
     productId?: string
     productName: string
@@ -14,9 +15,17 @@ export interface IGoodsReceiptNote extends Document {
     receivedQuantity: number
     rejectedQuantity: number
     rejectionReason?: string
+    batchNumber?: string // NEW: Medicine tracking
+    expiryDate?: Date // NEW: Consumables tracking
+    serialNumber?: string // NEW: Equipment tracking
   }[]
   receivedBy: string // user id
-  status: "draft" | "confirmed" // once confirmed, stock is updated
+  // NEW: Quality Inspection Workflow
+  inspectionStatus: "pending" | "accepted" | "accepted_with_remarks" | "rejected" | "quarantined"
+  inspectedBy?: string // Quality Officer ID
+  inspectionDate?: Date
+  inspectionRemarks?: string
+  status: "draft" | "pending_inspection" | "confirmed" // UPDATED: once confirmed, stock is updated
   stockUpdated: boolean
   createdAt: Date
   updatedAt: Date
@@ -25,11 +34,12 @@ export interface IGoodsReceiptNote extends Document {
 const goodsReceiptNoteSchema = new Schema<IGoodsReceiptNote>(
   {
     org_id: { type: String, required: true },
-    grnNumber: { type: String, required: true, unique: true },
+    grnNumber: { type: String, required: true },
     purchaseOrderId: { type: String, required: true },
     supplierId: { type: String, required: true },
     receiptDate: { type: Date, default: Date.now },
     deliveryNoteNumber: { type: String },
+    warehouseId: { type: String },
     items: [
       {
         productId: { type: String },
@@ -38,13 +48,26 @@ const goodsReceiptNoteSchema = new Schema<IGoodsReceiptNote>(
         receivedQuantity: { type: Number, required: true, min: 0 },
         rejectedQuantity: { type: Number, default: 0 },
         rejectionReason: { type: String },
+        batchNumber: { type: String },
+        expiryDate: { type: Date },
+        serialNumber: { type: String }
       },
     ],
     receivedBy: { type: String, required: true },
-    status: { type: String, enum: ["draft", "confirmed"], default: "draft" },
+    inspectionStatus: { 
+      type: String, 
+      enum: ["pending", "accepted", "accepted_with_remarks", "rejected", "quarantined"], 
+      default: "pending" 
+    },
+    inspectedBy: { type: String },
+    inspectionDate: { type: Date },
+    inspectionRemarks: { type: String },
+    status: { type: String, enum: ["draft", "pending_inspection", "confirmed"], default: "draft" },
     stockUpdated: { type: Boolean, default: false },
   },
   { timestamps: true }
 )
+
+goodsReceiptNoteSchema.index({ org_id: 1, grnNumber: 1 }, { unique: true })
 
 export const GoodsReceiptNote = mongoose.models.GoodsReceiptNote || mongoose.model<IGoodsReceiptNote>("GoodsReceiptNote", goodsReceiptNoteSchema)

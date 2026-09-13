@@ -744,7 +744,7 @@ export default function AdminDispatchManagementPage() {
               className="pl-9 h-9 sm:h-10 text-xs sm:text-sm"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search invoice, client, courier..."
+              placeholder="Search dispatch ID, client, courier..."
             />
           </div>
         </div>
@@ -843,7 +843,7 @@ export default function AdminDispatchManagementPage() {
           </CardHeader>
         <CardContent className="space-y-3">
           <div className="hidden lg:grid grid-cols-7 text-xs font-semibold uppercase tracking-wide text-muted-foreground border-b pb-2">
-            <span>Invoice ID</span>
+            <span>Dispatch ID</span>
             <span>Client</span>
             <span>Courier</span>
             <span>Status</span>

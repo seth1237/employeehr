@@ -11,10 +11,9 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  // <CHANGE> Updated metadata for HR Performance SaaS
-  title: "Elevate - Employee Performance & Development Platform",
+  title: "Elevate — Turn Manual Tasks into Automations",
   description:
-    "Automate performance management, drive employee growth, and recognize top talent with our integrated HR platform.",
+    "Elevate ERP: inventory, payroll, procurement, and manufacturing workflows flowing into one automation hub. Signup or login to your company system.",
   generator: "v0.app",
   icons: {
     icon: [

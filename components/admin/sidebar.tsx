@@ -39,6 +39,10 @@ import {
   FolderKanban,
   ShoppingCart,
   ReceiptText,
+  Scale,
+  Undo2,
+  CreditCard,
+  ScrollText,
 } from "lucide-react";
 import { getUser, logout } from "@/lib/auth";
 import { getToken } from "@/lib/auth";
@@ -85,36 +89,66 @@ const adminMenuItems = [
         section: "PROJECT MANAGEMENT",
       },
       // Procurement & P2P
-      {
-        label: "Vendors & Suppliers",
-        icon: Truck,
-        href: "/admin/procurement/suppliers",
-        section: "PROCUREMENT (P2P)",
-      },
-      {
-        label: "Purchase Requests",
-        icon: FileText,
-        href: "/admin/procurement/requests",
-        section: "PROCUREMENT (P2P)",
-      },
-      {
-        label: "Purchase Orders",
-        icon: ShoppingCart,
-        href: "/admin/procurement/orders",
-        section: "PROCUREMENT (P2P)",
-      },
-      {
-        label: "Goods Receipt Note",
-        icon: FileCheck,
-        href: "/admin/procurement/grns",
-        section: "PROCUREMENT (P2P)",
-      },
-      {
-        label: "Supplier Bills (AP)",
-        icon: ReceiptText,
-        href: "/admin/procurement/invoices",
-        section: "PROCUREMENT (P2P)",
-      },
+  {
+    label: "Vendors & Suppliers",
+    icon: Truck,
+    href: "/admin/procurement/suppliers",
+    section: "PROCUREMENT (P2P)",
+  },
+  {
+    label: "Budgets",
+    icon: Wallet,
+    href: "/admin/procurement/budgets",
+    section: "PROCUREMENT (P2P)",
+  },
+  {
+    label: "Purchase Requests",
+    icon: FileText,
+    href: "/admin/procurement/requests",
+    section: "PROCUREMENT (P2P)",
+  },
+  {
+    label: "RFQs & Tenders",
+    icon: Scale,
+    href: "/admin/procurement/rfq",
+    section: "PROCUREMENT (P2P)",
+  },
+  {
+    label: "Purchase Orders",
+    icon: ShoppingCart,
+    href: "/admin/procurement/orders",
+    section: "PROCUREMENT (P2P)",
+  },
+  {
+    label: "Goods Receipt Note",
+    icon: FileCheck,
+    href: "/admin/procurement/grns",
+    section: "PROCUREMENT (P2P)",
+  },
+  {
+    label: "Purchase Returns",
+    icon: Undo2,
+    href: "/admin/procurement/returns",
+    section: "PROCUREMENT (P2P)",
+  },
+  {
+    label: "Supplier Bills (AP)",
+    icon: ReceiptText,
+    href: "/admin/procurement/invoices",
+    section: "PROCUREMENT (P2P)",
+  },
+  {
+    label: "Payments",
+    icon: CreditCard,
+    href: "/admin/procurement/payments",
+    section: "PROCUREMENT (P2P)",
+  },
+  {
+    label: "Contracts",
+    icon: ScrollText,
+    href: "/admin/procurement/contracts",
+    section: "PROCUREMENT (P2P)",
+  },
 
   // Recruitment & Jobs
   {
@@ -688,7 +722,6 @@ export default function AdminSidebar({
         "/admin/stock/add-inventory",
         "/admin/stock/wms",
         "/admin/stock/stock-check",
-        "/admin/stock/invoices",
         "/admin/stock/dispatch",
         "/admin/stock/status",
         "/admin/stock/history"
@@ -729,7 +762,6 @@ export default function AdminSidebar({
             "/admin/stock/add-inventory",
             "/admin/stock/wms",
             "/admin/stock/stock-check",
-            "/admin/stock/invoices",
             "/admin/stock/dispatch",
             "/admin/stock/status",
             "/admin/stock/history"

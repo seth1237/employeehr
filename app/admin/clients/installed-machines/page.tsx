@@ -677,6 +677,8 @@ export default function InstalledMachinesPage({ isEngineerView = false }: { isEn
   // Machine list / detail
   const [machineSearch, setMachineSearch] = useState("");
   const [machineCategoryFilter, setMachineCategoryFilter] = useState("");
+  const [machineYearFilter, setMachineYearFilter] = useState("");
+  const [machineSortBy, setMachineSortBy] = useState("installationDate_desc");
   const [machinePage, setMachinePage] = useState(1);
   const machinePageSize = 20;
   const [selectedMachine, setSelectedMachine] =
@@ -1301,12 +1303,26 @@ export default function InstalledMachinesPage({ isEngineerView = false }: { isEn
     return Array.from(categories).sort((a, b) => a.localeCompare(b));
   }, [machines]);
 
+  const machineYearOptions = useMemo(() => {
+    const years = new Set<string>();
+    for (const machine of machines) {
+      if (machine.installationDate) {
+        const year = String(machine.installationDate).split("-")[0];
+        if (year && year.length === 4) years.add(year);
+      }
+    }
+    return Array.from(years).sort((a, b) => b.localeCompare(a)); // Newest first
+  }, [machines]);
+
   const filteredMachines = useMemo(() => {
     const query = machineSearch.trim().toLowerCase();
-    return machines.filter((m) => {
+    let result = machines.filter((m) => {
       if (machineCategoryFilter) {
         const category = String(m.category || "").trim();
         if (category !== machineCategoryFilter) return false;
+      }
+      if (machineYearFilter) {
+        if (!m.installationDate || !String(m.installationDate).startsWith(machineYearFilter)) return false;
       }
       if (!query) return true;
       return (
@@ -1319,11 +1335,26 @@ export default function InstalledMachinesPage({ isEngineerView = false }: { isEn
           .includes(query)
       );
     });
-  }, [machines, machineSearch, machineCategoryFilter]);
+
+    result.sort((a, b) => {
+      if (machineSortBy === "installationDate_asc") {
+        return (a.installationDate || "").localeCompare(b.installationDate || "");
+      } else if (machineSortBy === "installationDate_desc") {
+        return (b.installationDate || "").localeCompare(a.installationDate || "");
+      } else if (machineSortBy === "name_asc") {
+        return a.productName.localeCompare(b.productName);
+      } else if (machineSortBy === "name_desc") {
+        return b.productName.localeCompare(a.productName);
+      }
+      return 0;
+    });
+
+    return result;
+  }, [machines, machineSearch, machineCategoryFilter, machineYearFilter, machineSortBy]);
 
   useEffect(() => {
     setMachinePage(1);
-  }, [machineSearch, machineCategoryFilter]);
+  }, [machineSearch, machineCategoryFilter, machineYearFilter]);
 
   const machineTotalPages = Math.max(
     1,
@@ -2446,6 +2477,33 @@ export default function InstalledMachinesPage({ isEngineerView = false }: { isEn
     }
   };
 
+  const flagMachineOkayAndActive = async (id: string) => {
+    try {
+      setSaving(true);
+      const res = await stockApi.updateInstalledMachine(id, { status: "active", notes: "Flagged as OK and active." });
+      const updated = res?.data || { status: "active" };
+      setMachines((prev) =>
+        prev.map((m) => (m._id === id ? { ...m, ...updated } : m)),
+      );
+      setSelectedMachine((prev) =>
+        prev?._id === id ? { ...prev, ...updated } : prev,
+      );
+      toast({
+        title: "Machine status updated",
+        description: "The machine has been flagged as OK and active.",
+      });
+    } catch (err: any) {
+      console.error(err);
+      toast({
+        title: "Failed to update machine",
+        description: err?.message || "Something went wrong.",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const openLogServiceDialog = (machine?: InstalledMachine) => {
     const target = machine || selectedMachine;
     setEditingService(null);
@@ -3246,9 +3304,35 @@ export default function InstalledMachinesPage({ isEngineerView = false }: { isEn
                     </div>
                     <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
                       <select
+                        value={machineSortBy}
+                        onChange={(e) => setMachineSortBy(e.target.value)}
+                        className="w-full rounded border bg-background px-3 py-2 text-sm sm:w-48"
+                        aria-label="Sort machines"
+                      >
+                        <option value="installationDate_desc">Newest Installed</option>
+                        <option value="installationDate_asc">Oldest Installed</option>
+                        <option value="name_asc">Machine Name (A-Z)</option>
+                        <option value="name_desc">Machine Name (Z-A)</option>
+                      </select>
+                      {(machineSortBy === "installationDate_desc" || machineSortBy === "installationDate_asc") && (
+                        <select
+                          value={machineYearFilter}
+                          onChange={(e) => setMachineYearFilter(e.target.value)}
+                          className="w-full rounded border bg-background px-3 py-2 text-sm sm:w-32"
+                          aria-label="Filter by installation year"
+                        >
+                          <option value="">All Years</option>
+                          {machineYearOptions.map((year) => (
+                            <option key={year} value={year}>
+                              {year}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                      <select
                         value={machineCategoryFilter}
                         onChange={(e) => setMachineCategoryFilter(e.target.value)}
-                        className="w-full rounded border bg-background px-3 py-2 text-sm sm:w-52"
+                        className="w-full rounded border bg-background px-3 py-2 text-sm sm:w-48"
                         aria-label="Filter by machine type"
                       >
                         <option value="">All machines</option>
@@ -3395,6 +3479,12 @@ export default function InstalledMachinesPage({ isEngineerView = false }: { isEn
                                         onClick={() => openLogServiceDialog(m)}
                                       >
                                         Log service
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        onClick={() => flagMachineOkayAndActive(m._id)}
+                                      >
+                                        <CheckCircle2 className="mr-2 h-4 w-4 text-green-600" />
+                                        Flag OK & Active
                                       </DropdownMenuItem>
                                       <DropdownMenuItem
                                         onClick={() => openRaiseTicketDialog(m)}
@@ -3672,6 +3762,14 @@ export default function InstalledMachinesPage({ isEngineerView = false }: { isEn
                         onClick={() => openLogServiceDialog(selectedMachine)}
                       >
                         Log Service
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => flagMachineOkayAndActive(selectedMachine._id)}
+                      >
+                        <CheckCircle2 className="mr-1.5 h-3.5 w-3.5 text-green-600" />
+                        Flag OK
                       </Button>
                       <Button
                         size="sm"

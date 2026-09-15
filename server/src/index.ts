@@ -320,7 +320,7 @@ async function startServer() {
       }, expiryCheckIntervalMs)
 
       // CFT website → cft_raw → Accord ERP (enabled when CFT_IP_SESSION is set)
-      startCftIngestScheduler()
+      // startCftIngestScheduler()
 
     })
   } catch (error) {

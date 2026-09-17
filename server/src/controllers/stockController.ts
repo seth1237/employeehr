@@ -17,6 +17,7 @@ import { StockCourier } from "../models/StockCourier";
 import { StockClient, DEFAULT_CONTACT_ROLES } from "../models/StockClient";
 import { StockClientGroup } from "../models/StockClientGroup";
 import { StockExpense } from "../models/StockExpense";
+import mongoose from "mongoose";
 import {
   StockExpenseCategory,
   DEFAULT_EXPENSE_CATEGORIES,
@@ -506,6 +507,7 @@ async function buildBulkSmsAudience(
   ).trim();
   const branchId = String(filters.branchId || "").trim();
   const inactiveDays = Math.max(1, Number(filters.inactiveDays || 90));
+  const exhibitionId = String(filters.exhibitionId || "").trim();
   const inactiveCutoff = new Date();
   inactiveCutoff.setDate(inactiveCutoff.getDate() - inactiveDays);
 
@@ -571,6 +573,44 @@ async function buildBulkSmsAudience(
       (client) =>
         !client.lastPurchaseAt || client.lastPurchaseAt < inactiveCutoff,
     );
+  } else if (audienceType === "exhibition") {
+    // Override the generic sales/invoices map entirely and fetch directly from exhibition leads
+    const ExhibitionLead = mongoose.model("ExhibitionLead")
+    let leadQuery: any = { org_id: orgId }
+    if (exhibitionId) leadQuery.exhibitionId = exhibitionId
+    
+    const rawLeads = await ExhibitionLead.find(leadQuery).lean()
+    const exhibitionClients: BulkSmsAudienceClient[] = []
+    
+    for (const lead of rawLeads as any[]) {
+      const phone = String(lead.phoneNumber || "").trim()
+      if (!hasValidSmsPhone(phone)) continue
+      
+      const facilityName = String(lead.facility || "Unknown").trim()
+      const location = String(lead.location || "Unknown").trim()
+      const contactName = String(lead.name || "Unknown").trim()
+      const roleLabel = String(lead.role || "Lead").trim()
+      
+      exhibitionClients.push({
+        key: buildBulkSmsClientKey(phone, facilityName, location),
+        name: facilityName,
+        phone,
+        location,
+        contactPerson: contactName,
+        contactName,
+        contactRole: roleLabel,
+        branchId: "",
+        quotationsCount: 0,
+        pendingQuotationsCount: 0,
+        quotationNumbers: [],
+        quotedProductIds: [],
+        invoicesCount: 0,
+        purchasesValue: 0,
+        sources: ["exhibition_lead"],
+      })
+    }
+    
+    clients = exhibitionClients
   }
 
   if (search) {

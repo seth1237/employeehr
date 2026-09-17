@@ -71,7 +71,7 @@ export default function ExhibitionsPage() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {exhibitions.map((exhibition) => (
-            <Link key={exhibition._id} href={`/admin/clients/exhibitions/${exhibition._id}`}>
+            <Link key={exhibition._id} href={`/admin/clients/exhibitions/${encodeURIComponent(exhibition.name)}`}>
               <Card className="transition-all hover:bg-slate-50 hover:border-teal-200 hover:shadow-sm">
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between">

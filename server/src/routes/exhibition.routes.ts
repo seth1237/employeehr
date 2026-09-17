@@ -14,7 +14,11 @@ router.get("/:id", ExhibitionController.getExhibition)
 router.put("/:id", ExhibitionController.updateExhibition)
 
 // Leads
+router.get("/leads/all", ExhibitionController.getAllLeads)
 router.post("/:id/collect", ExhibitionController.collectLead)
+router.post("/:id/import-leads", ExhibitionController.bulkImportLeads)
 router.get("/:id/leads", ExhibitionController.getExhibitionLeads)
+router.put("/:id/leads/:leadId", ExhibitionController.updateLead)
+router.post("/:id/leads/delete", ExhibitionController.deleteLeads)
 
 export default router

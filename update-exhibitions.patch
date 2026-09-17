@@ -1,0 +1,131 @@
+--- app/admin/clients/exhibitions/[id]/page.tsx
++++ app/admin/clients/exhibitions/[id]/page.tsx
+@@ -2,12 +2,15 @@
+ 
+-import { useEffect, useState } from "react"
++import { useEffect, useState, useRef } from "react"
+ import { useParams } from "next/navigation"
+ import Link from "next/link"
+ import { getToken } from "@/lib/auth"
+ import API_URL from "@/lib/apiBase"
+ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+ import { Button } from "@/components/ui/button"
+-import { ArrowLeft, Calendar, MapPin, Download, Users } from "lucide-react"
++import { ArrowLeft, Calendar, MapPin, Download, Users, Upload, FileDown } from "lucide-react"
++import * as XLSX from "xlsx"
++import { useToast } from "@/hooks/use-toast"
+ 
+ export default function ExhibitionDetailsPage() {
+   const { id } = useParams()
+   const [exhibition, setExhibition] = useState<any>(null)
+   const [leads, setLeads] = useState<any[]>([])
+   const [loading, setLoading] = useState(true)
+   const [error, setError] = useState<string | null>(null)
++  const [isImporting, setIsImporting] = useState(false)
++  const fileInputRef = useRef<HTMLInputElement>(null)
++  const { toast } = useToast()
+ 
+   useEffect(() => {
+     const fetchData = async () => {
+@@ -95,6 +98,71 @@
+     URL.revokeObjectURL(url)
+   }
+ 
++  const handleDownloadTemplate = () => {
++    const headers = [
++      "Name",
++      "Facility",
++      "Role",
++      "Location",
++      "Phone",
++      "Email",
++      "Product of Interest",
++      "Notes"
++    ]
++    
++    const csvContent = [headers.join(",")].join("\n")
++    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
++    const url = URL.createObjectURL(blob)
++    const a = document.createElement("a")
++    a.href = url
++    a.download = `leads-template.csv`
++    a.click()
++    URL.revokeObjectURL(url)
++  }
++
++  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
++    const file = e.target.files?.[0]
++    if (!file) return
++
++    setIsImporting(true)
++    try {
++      const data = await file.arrayBuffer()
++      const workbook = XLSX.read(data)
++      const worksheet = workbook.Sheets[workbook.SheetNames[0]]
++      const jsonData = XLSX.utils.sheet_to_json(worksheet)
++
++      if (jsonData.length === 0) {
++        throw new Error("The uploaded file is empty.")
++      }
++
++      const res = await fetch(`${API_URL}/api/exhibitions/${id}/import-leads`, {
++        method: "POST",
++        headers: {
++          "Content-Type": "application/json",
++          Authorization: `Bearer ${getToken()}`,
++        },
++        body: JSON.stringify({ leads: jsonData }),
++      })
++
++      const result = await res.json()
++      if (!result.success) throw new Error(result.message)
++
++      toast({
++        title: "Import Successful",
++        description: result.message || `Successfully imported leads.`,
++      })
++      
++      // Reload leads
++      const leadsRes = await fetch(`${API_URL}/api/exhibitions/${id}/leads`, { headers: { Authorization: `Bearer ${getToken()}` } })
++      const leadsData = await leadsRes.json()
++      if (leadsData.success) setLeads(leadsData.data)
++    } catch (err: any) {
++      toast({ title: "Import Failed", description: err.message, variant: "destructive" })
++    } finally {
++      setIsImporting(false)
++      if (fileInputRef.current) fileInputRef.current.value = ""
++    }
++  }
++
+   if (loading) {
+     return <div className="p-8 text-center text-slate-500">Loading exhibition data...</div>
+@@ -128,8 +196,25 @@
+           </div>
+         </div>
+-        <Button onClick={handleExportCSV} variant="outline" disabled={leads.length === 0}>
+-          <Download className="mr-2 h-4 w-4" />
+-          Export Leads (CSV)
+-        </Button>
++        
++        <div className="flex items-center gap-2">
++          <input 
++            type="file" 
++            accept=".csv, .xlsx, .xls" 
++            className="hidden" 
++            ref={fileInputRef}
++            onChange={handleFileUpload}
++          />
++          <Button onClick={handleDownloadTemplate} variant="outline" size="sm">
++            <FileDown className="mr-2 h-4 w-4" />
++            Template
++          </Button>
++          <Button onClick={() => fileInputRef.current?.click()} variant="secondary" size="sm" disabled={isImporting}>
++            <Upload className="mr-2 h-4 w-4" />
++            {isImporting ? "Importing..." : "Import Leads"}
++          </Button>
++          <Button onClick={handleExportCSV} variant="outline" size="sm" disabled={leads.length === 0}>
++            <Download className="mr-2 h-4 w-4" />
++            Export Data
++          </Button>
++        </div>
+       </div>

@@ -21,7 +21,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox"
 import Link from "next/link"
 
-type AudienceType = "all" | "pending_quotations" | "quotation_product" | "branch" | "inactive"
+type AudienceType = "all" | "pending_quotations" | "quotation_product" | "branch" | "inactive" | "exhibition"
 
 interface BulkSmsClient {
   key: string
@@ -226,6 +226,7 @@ export default function BulkSmsPage() {
     quotationProductId: "",
     branchId: "",
     inactiveDays: "90",
+    exhibitionId: "",
   })
 
   const [products, setProducts] = useState<any[]>([])
@@ -233,6 +234,7 @@ export default function BulkSmsPage() {
   const [branches, setBranches] = useState<any[]>([])
   const [contactRoles, setContactRoles] = useState<string[]>([])
   const [clientGroups, setClientGroups] = useState<ClientGroupOption[]>([])
+  const [exhibitions, setExhibitions] = useState<any[]>([])
 
   const [campaign, setCampaign] = useState({
     name: "",
@@ -301,6 +303,7 @@ export default function BulkSmsPage() {
     }
     if (filters.audienceType === "branch" && filters.branchId.trim()) params.set("branchId", filters.branchId.trim())
     if (filters.inactiveDays.trim()) params.set("inactiveDays", filters.inactiveDays.trim())
+    if (filters.audienceType === "exhibition" && filters.exhibitionId.trim()) params.set("exhibitionId", filters.exhibitionId.trim())
     return params.toString()
   }, [filters])
 
@@ -391,13 +394,14 @@ export default function BulkSmsPage() {
   useEffect(() => {
     const loadMetadata = async () => {
       try {
-        const [productsRes, branchesRes, brandingRes, rolesRes, groupsRes, categoriesRes] = await Promise.all([
+        const [productsRes, branchesRes, brandingRes, rolesRes, groupsRes, categoriesRes, exhibitionsRes] = await Promise.all([
           fetch(`${API_URL}/api/stock/products`, { headers }),
           fetch(`${API_URL}/api/branches`, { headers }),
           fetch(`${API_URL}/api/company/branding`, { headers }),
           fetch(`${API_URL}/api/stock/clients/contact-roles`, { headers }),
           fetch(`${API_URL}/api/stock/clients/groups`, { headers }),
           fetch(`${API_URL}/api/stock/categories`, { headers }),
+          fetch(`${API_URL}/api/exhibitions`, { headers }),
         ])
         if (productsRes.ok) {
           const productsJson = await productsRes.json()
@@ -429,6 +433,10 @@ export default function BulkSmsPage() {
               name: String(category.name || "Untitled category"),
             })),
           )
+        }
+        if (exhibitionsRes.ok) {
+          const exhibitionsJson = await exhibitionsRes.json()
+          setExhibitions(exhibitionsJson.data || [])
         }
       } catch (err) {
         console.error("Failed to load metadata", err)
@@ -564,6 +572,7 @@ export default function BulkSmsPage() {
                   quotationProductId:
                     event.target.value === "quotation_product" ? prev.quotationProductId : "",
                   branchId: event.target.value === "branch" ? prev.branchId : "",
+                  exhibitionId: event.target.value === "exhibition" ? prev.exhibitionId : "",
                 }))
               }
             >
@@ -572,6 +581,7 @@ export default function BulkSmsPage() {
               <option value="quotation_product">Specific Quotation Product</option>
               <option value="branch">Clients of a certain branch</option>
               <option value="inactive">Long since purchase</option>
+              <option value="exhibition">Exhibition Leads</option>
             </select>
 
             <select
@@ -667,6 +677,21 @@ export default function BulkSmsPage() {
                 value={filters.inactiveDays}
                 onChange={(event) => setFilters((prev) => ({ ...prev, inactiveDays: event.target.value }))}
               />
+            ) : null}
+
+            {filters.audienceType === "exhibition" ? (
+              <select
+                className="h-10 rounded-md border bg-background px-3 text-sm"
+                value={filters.exhibitionId}
+                onChange={(event) => setFilters((prev) => ({ ...prev, exhibitionId: event.target.value }))}
+              >
+                <option value="">Select an exhibition...</option>
+                {exhibitions.map((exhibition) => (
+                  <option key={exhibition._id} value={exhibition._id}>
+                    {exhibition.name} ({new Date(exhibition.date).getFullYear()})
+                  </option>
+                ))}
+              </select>
             ) : null}
 
             <div className="relative md:col-span-2">

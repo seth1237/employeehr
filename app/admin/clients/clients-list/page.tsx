@@ -166,6 +166,9 @@ type MissingPhoneEntry = {
 };
 
 export default function AccountsClientsPage() {
+  const [viewMode, setViewMode] = useState<"standard" | "exhibition">("standard");
+  const [exhibitionFilter, setExhibitionFilter] = useState<string>("");
+  const [exhibitionsList, setExhibitionsList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
@@ -466,6 +469,67 @@ export default function AccountsClientsPage() {
   const loadData = async (opts?: SilentLoadOptions) => {
     const generation = ++clientLoadGeneration.current;
     try {
+      if (viewMode === "exhibition") {
+        await runDataLoad(
+          setLoading,
+          async () => {
+            const query = exhibitionFilter ? `?exhibitionId=${exhibitionFilter}` : "";
+            const res = await fetch(`${API_URL}/api/exhibitions/leads/all${query}`, {
+              headers: { Authorization: `Bearer ${getToken()}` }
+            });
+            const data = await res.json();
+            if (!data.success) throw new Error(data.message);
+            
+            const leads = data.data || [];
+            const mappedRows: SavedClientRow[] = leads.map((lead: any) => {
+              const key = `exhibition|${lead._id}`;
+              return {
+                key,
+                isSavedClient: true,
+                client: {
+                  name: lead.facility || lead.name || "Exhibition Lead",
+                  number: lead.phoneNumber || "",
+                  location: lead.location || "",
+                  contactPerson: lead.name,
+                  email: lead.email || "",
+                },
+                contacts: [
+                  {
+                    role: lead.role || "Lead",
+                    name: lead.name || "",
+                    phone: lead.phoneNumber || "",
+                    email: lead.email || "",
+                    notes: lead.notes || `Product of interest: ${lead.productOfInterest}`,
+                    isActive: true,
+                  }
+                ],
+                quotationsCount: 0,
+                quotationsValue: 0,
+                invoicesCount: 0,
+                purchasesValue: 0,
+                paidAmount: 0,
+                debtAmount: 0,
+                salesCount: 0,
+                salesValue: 0,
+                activities: [],
+                groupIds: [],
+                originalLead: lead,
+              };
+            });
+            
+            if (generation === clientLoadGeneration.current) {
+              setRows(mappedRows);
+              if (!selectedClientKey && mappedRows.length > 0) {
+                setSelectedClientKey(mappedRows[0].key);
+              }
+            }
+          },
+          opts,
+          setRefreshing
+        );
+        return;
+      }
+
       await runDataLoad(
         setLoading,
         async () => {
@@ -590,8 +654,26 @@ export default function AccountsClientsPage() {
   };
 
   useEffect(() => {
-    loadData();
+    // Load exhibitions list once for the dropdown
+    const fetchExhibitions = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/exhibitions`, {
+          headers: { Authorization: `Bearer ${getToken()}` },
+        });
+        const data = await res.json();
+        if (data.success) {
+          setExhibitionsList(data.data || []);
+        }
+      } catch (err) {
+        console.error("Failed to load exhibitions:", err);
+      }
+    };
+    fetchExhibitions();
   }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [viewMode, exhibitionFilter]);
 
   const locationOptions = useMemo(() => {
     const set = new Set<string>();
@@ -1927,9 +2009,41 @@ export default function AccountsClientsPage() {
             >
               Accounts & CRM
             </p>
-            <h1 className="text-xl font-semibold tracking-tight text-foreground">
-              Client CRM
-            </h1>
+            <div className="flex flex-wrap items-center gap-4">
+              <h1 className="text-xl font-semibold tracking-tight text-foreground">
+                Client CRM
+              </h1>
+              <div className="flex bg-slate-100 p-1 rounded-md text-sm border border-slate-200">
+                <button 
+                  className={`px-3 py-1 rounded-md transition-colors ${viewMode === "standard" ? "bg-white shadow-sm font-medium text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                  onClick={() => setViewMode("standard")}
+                >
+                  All Clients
+                </button>
+                <button 
+                  className={`px-3 py-1 rounded-md transition-colors ${viewMode === "exhibition" ? "bg-white shadow-sm font-medium text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                  onClick={() => setViewMode("exhibition")}
+                >
+                  Exhibition Leads
+                </button>
+              </div>
+              
+              {viewMode === "exhibition" && (
+                <select
+                  value={exhibitionFilter}
+                  onChange={(e) => setExhibitionFilter(e.target.value)}
+                  className="h-8 rounded-md border border-slate-200 bg-white px-2 py-1 text-sm text-slate-700 shadow-sm outline-none"
+                  aria-label="Filter by exhibition"
+                >
+                  <option value="">All Exhibitions</option>
+                  {exhibitionsList.map((ex) => (
+                    <option key={ex._id} value={ex._id}>
+                      {ex.name} ({new Date(ex.date).getFullYear()})
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
             <p className="text-sm text-muted-foreground">
               Manage the client directory, contacts, calls, groups, and
               financial activity in one place.
@@ -2501,6 +2615,21 @@ export default function AccountsClientsPage() {
                   >
                     <FileText className="mr-2 h-4 w-4" />
                     Request Quote
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      // Navigate to Bulk SMS history specifically for this client's phone number
+                      if (selectedClient.client.number) {
+                        window.location.href = `/admin/clients/bulk-sms/history?phone=${encodeURIComponent(selectedClient.client.number)}`;
+                      } else {
+                        window.alert("Client has no phone number recorded for SMS history.");
+                      }
+                    }}
+                  >
+                    <MessageSquare className="mr-2 h-4 w-4" />
+                    SMS History
                   </Button>
                   <Button
                     size="sm"

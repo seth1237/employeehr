@@ -69,6 +69,9 @@ export interface ICompany {
   email: string;
   phone: string;
   website?: string;
+  instagram?: string;
+  facebook?: string;
+  linkedin?: string;
   industry: string;
   employeeCount: number;
   logo?: string;

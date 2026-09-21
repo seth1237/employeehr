@@ -159,3 +159,9 @@ export const uploadExpenseProof = multer({
   fileFilter: applicationFileFilter,
   limits: { fileSize: 10 * 1024 * 1024 },
 })
+
+export const uploadEmailAsset = multer({
+  storage: multer.memoryStorage(),
+  fileFilter,
+  limits: { fileSize: 8 * 1024 * 1024 },
+})

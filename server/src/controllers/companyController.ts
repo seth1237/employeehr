@@ -903,7 +903,7 @@ export class CompanyController {
           .json({ success: false, message: "Organization context required" });
       }
       const company = await Company.findById(req.org_id).select(
-        "logo primaryColor secondaryColor accentColor backgroundColor textColor borderRadius fontFamily buttonStyle glassEnabled glassOpacity glassBlur glassTint buttonShadow hoverAnimation buttonGradient glowEffect transparency rippleEffect animationSpeed cardStyle sidebarStyle borderStyle cornerStyle pageBackground iconStyle buttonSize buttonPadding navigationAnimation themePreset name slug email phone website city state country salesNightOutAmount",
+        "logo primaryColor secondaryColor accentColor backgroundColor textColor borderRadius fontFamily buttonStyle glassEnabled glassOpacity glassBlur glassTint buttonShadow hoverAnimation buttonGradient glowEffect transparency rippleEffect animationSpeed cardStyle sidebarStyle borderStyle cornerStyle pageBackground iconStyle buttonSize buttonPadding navigationAnimation themePreset name slug email phone website instagram facebook linkedin city state country salesNightOutAmount",
       );
       if (!company)
         return res
@@ -1039,7 +1039,7 @@ export class CompanyController {
         { $set: updateFields },
         { new: true, runValidators: true },
       ).select(
-        "logo primaryColor secondaryColor accentColor backgroundColor textColor borderRadius fontFamily buttonStyle glassEnabled glassOpacity glassBlur glassTint buttonShadow hoverAnimation buttonGradient glowEffect transparency rippleEffect animationSpeed cardStyle sidebarStyle borderStyle cornerStyle pageBackground iconStyle buttonSize buttonPadding navigationAnimation themePreset name slug email phone website city state country salesNightOutAmount",
+        "logo primaryColor secondaryColor accentColor backgroundColor textColor borderRadius fontFamily buttonStyle glassEnabled glassOpacity glassBlur glassTint buttonShadow hoverAnimation buttonGradient glowEffect transparency rippleEffect animationSpeed cardStyle sidebarStyle borderStyle cornerStyle pageBackground iconStyle buttonSize buttonPadding navigationAnimation themePreset name slug email phone website instagram facebook linkedin city state country salesNightOutAmount",
       );
 
       if (!company) {

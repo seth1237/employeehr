@@ -8,12 +8,14 @@ import {
   uploadProductImage,
   uploadLogo,
   uploadExpenseProof,
+  uploadEmailAsset,
 } from "../middleware/upload.middleware";
 import WarehouseController from "../controllers/warehouseController";
 import { InstalledMachineController } from "../controllers/installedMachineController";
 import { MachineServiceController } from "../controllers/machineServiceController";
 import { TenderController } from "../controllers/tenderController";
 import { ClientCrmController } from "../controllers/clientCrmController";
+import { EmailMarketingController } from "../controllers/emailMarketingController";
 
 const router = Router();
 
@@ -42,6 +44,14 @@ router.post(
 import { DeliveryFeedbackController } from "../controllers/deliveryFeedbackController";
 router.get("/public/delivery-feedback/:invoiceId", DeliveryFeedbackController.getDeliveryDetailsForFeedback);
 router.post("/public/delivery-feedback/:invoiceId", DeliveryFeedbackController.submitFeedback);
+router.get(
+  "/public/email/open/:campaignId/:recipientKey",
+  EmailMarketingController.trackOpen,
+);
+router.get(
+  "/public/email/click/:campaignId/:recipientKey",
+  EmailMarketingController.trackClick,
+);
 
 router.use(authMiddleware, orgMiddleware, tenantIsolation);
 
@@ -119,6 +129,21 @@ router.post(
 router.get("/bulk-sms/audience", StockController.getBulkSmsAudience);
 router.get("/bulk-sms/campaigns", StockController.getBulkSmsCampaigns);
 router.post("/bulk-sms/campaigns", StockController.sendBulkSmsCampaign);
+
+// Email Marketing
+router.get("/bulk-email/audience", StockController.getBulkEmailAudience);
+router.get("/bulk-email/campaigns", StockController.getBulkEmailCampaigns);
+router.post("/bulk-email/campaigns", StockController.sendBulkEmailCampaign);
+router.post("/bulk-email/preview", EmailMarketingController.preview);
+router.post("/bulk-email/test", EmailMarketingController.sendTest);
+router.put("/bulk-email/social-profiles", EmailMarketingController.saveSocialProfiles);
+router.get("/bulk-email/assets", EmailMarketingController.listAssets);
+router.post(
+  "/bulk-email/assets",
+  uploadEmailAsset.single("file"),
+  EmailMarketingController.uploadAsset,
+);
+router.delete("/bulk-email/assets/:id", EmailMarketingController.deleteAsset);
 
 router.get("/global-search", StockController.globalSearch);
 

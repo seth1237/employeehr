@@ -43,6 +43,7 @@ import {
   Undo2,
   CreditCard,
   ScrollText,
+  MessageSquare,
 } from "lucide-react";
 import { getUser, logout } from "@/lib/auth";
 import { getToken } from "@/lib/auth";
@@ -280,8 +281,14 @@ const adminMenuItems = [
     section: "CLIENTS",
   },
   {
-    label: "Bulk SMS",
+    label: "Email Marketing",
     icon: Mail,
+    href: "/admin/clients/email-marketing",
+    section: "CLIENTS",
+  },
+  {
+    label: "Bulk SMS",
+    icon: MessageSquare,
     href: "/admin/clients/bulk-sms",
     section: "CLIENTS",
   },

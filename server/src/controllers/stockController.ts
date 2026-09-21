@@ -30,11 +30,19 @@ import { DebitNote } from "../models/DebitNote";
 import { InstalledMachine } from "../models/InstalledMachine";
 import { DispatchNotification } from "../models/DispatchNotification";
 import { BulkSmsCampaign } from "../models/BulkSmsCampaign";
+import { EmailCampaign } from "../models/EmailCampaign";
 import { Task } from "../models/Task";
 import { Company } from "../models/Company";
 import { Branch } from "../models/Branch";
 import { User } from "../models/User";
 import emailService from "../services/email.service";
+import { personalizeMarketingText } from "../lib/marketing-email";
+import {
+  companyBranding,
+  publicApiBase,
+  renderCampaignHtml,
+  sanitizeBlocks,
+} from "./emailMarketingController";
 import {
   documentAttachmentEmail,
   ELEVATE_EMAIL,
@@ -225,32 +233,34 @@ function parseBulkSmsFilterList(value: unknown): string[] {
   return uniqueStrings(String(value).split(/[;,]/));
 }
 
-type BulkSmsAudienceClient = {
-  key: string;
-  name: string;
-  phone: string;
-  location: string;
-  contactPerson?: string;
-  contactRole?: string;
-  contactName?: string;
-  branchId?: string;
-  groupIds?: string[];
-  memberKey?: string;
+export interface BulkSmsAudienceClient {
+  key: string
+  name: string
+  phone: string
+  email?: string
+  location: string
+  contactPerson?: string
+  contactRole?: string
+  contactName?: string
+  branchId?: string
+  groupIds?: string[]
+  memberKey?: string
   contacts?: Array<{
-    role?: string;
-    name?: string;
-    phone?: string;
-    isActive?: boolean;
-  }>;
-  quotationsCount: number;
-  pendingQuotationsCount: number;
-  quotationNumbers: string[];
-  quotedProductIds: string[];
-  invoicesCount: number;
-  purchasesValue: number;
-  lastPurchaseAt?: Date;
-  sources: string[];
-};
+    role?: string
+    name?: string
+    phone?: string
+    email?: string
+    isActive?: boolean
+  }>
+  quotationsCount: number
+  pendingQuotationsCount: number
+  quotationNumbers: string[]
+  quotedProductIds: string[]
+  invoicesCount: number
+  purchasesValue: number
+  lastPurchaseAt?: Date
+  sources: string[]
+}
 
 function getTenantFromRequest(req: AuthenticatedRequest | any) {
   const candidates = [
@@ -325,29 +335,44 @@ async function ensureWebsitePortalUser(orgId: string, payload: any) {
   return createdUser;
 }
 
+function hasValidEmail(raw?: string | null) {
+  if (!raw) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw.trim());
+}
+
 function upsertBulkSmsClient(
   map: Map<string, BulkSmsAudienceClient>,
   client: {
     name?: string;
     number?: string;
+    email?: string;
     location?: string;
     contactPerson?: string;
     branchId?: string;
   },
   source: string,
+  mode: "sms" | "email" = "sms"
 ) {
   const phone = String(client?.number || "").trim();
   const name = String(client?.name || "").trim();
   const location = String(client?.location || "").trim();
-  if (!hasValidSmsPhone(phone) || !name) return null;
+  const email = String(client?.email || "").trim().toLowerCase();
+  
+  if (mode === "sms" && !hasValidSmsPhone(phone)) return null;
+  if (mode === "email" && !hasValidEmail(email)) return null;
+  if (!name) return null;
 
-  const key = buildBulkSmsClientKey(phone, name, location);
+  const key = buildBulkSmsClientKey(mode === "sms" ? phone : email, name, location);
   const existing = map.get(key);
   if (existing) {
     if (client?.contactPerson && !existing.contactPerson)
       existing.contactPerson = String(client.contactPerson).trim();
     if (client?.branchId && !existing.branchId)
       existing.branchId = String(client.branchId).trim();
+    if (mode === "sms" && email && !existing.email)
+      existing.email = email;
+    if (mode === "email" && phone && !existing.phone)
+      existing.phone = phone;
     if (!existing.sources.includes(source)) existing.sources.push(source);
     return existing;
   }
@@ -356,6 +381,7 @@ function upsertBulkSmsClient(
     key,
     name,
     phone,
+    email,
     location,
     contactPerson: client?.contactPerson
       ? String(client.contactPerson).trim()
@@ -376,6 +402,7 @@ function upsertBulkSmsClient(
 async function buildBulkSmsAudience(
   orgId: string,
   filters: Record<string, any> = {},
+  mode: "sms" | "email" = "sms"
 ) {
   const [savedClients, quotations, invoices, sales] = await Promise.all([
     StockClient.find({ org_id: orgId }).lean(),
@@ -402,11 +429,13 @@ async function buildBulkSmsAudience(
       {
         name: client.sourceName || client.legalName,
         number: client.sourceNumber,
+        email: client.email,
         location: client.sourceLocation,
         contactPerson: client.contactPerson,
         branchId: String(client.branchId || ""),
       },
       "saved_client",
+      mode
     );
     if (!row) return;
     row.contacts = Array.isArray(client.contacts) ? client.contacts : [];
@@ -424,7 +453,7 @@ async function buildBulkSmsAudience(
   });
 
   quotations.forEach((quotation: any) => {
-    const row = upsertBulkSmsClient(map, quotation.client, "quotation");
+    const row = upsertBulkSmsClient(map, quotation.client, "quotation", mode);
     if (!row) return;
     row.quotationsCount += 1;
     if (quotation.status === "draft" || quotation.status === "pending_approval")
@@ -448,7 +477,7 @@ async function buildBulkSmsAudience(
   });
 
   invoices.forEach((invoice: any) => {
-    const row = upsertBulkSmsClient(map, invoice.client, "invoice");
+    const row = upsertBulkSmsClient(map, invoice.client, "invoice", mode);
     if (!row) return;
     row.invoicesCount += 1;
     row.purchasesValue += Number(invoice.subTotal || 0);
@@ -474,6 +503,7 @@ async function buildBulkSmsAudience(
         location: sale.buyerLocation,
       },
       "sale",
+      mode
     );
     if (!row) return;
     row.invoicesCount += 1;
@@ -584,7 +614,9 @@ async function buildBulkSmsAudience(
     
     for (const lead of rawLeads as any[]) {
       const phone = String(lead.phoneNumber || "").trim()
-      if (!hasValidSmsPhone(phone)) continue
+      const email = String(lead.email || "").trim().toLowerCase()
+      if (mode === "sms" && !hasValidSmsPhone(phone)) continue
+      if (mode === "email" && !hasValidEmail(email)) continue
       
       const facilityName = String(lead.facility || "Unknown").trim()
       const location = String(lead.location || "Unknown").trim()
@@ -592,9 +624,10 @@ async function buildBulkSmsAudience(
       const roleLabel = String(lead.role || "Lead").trim()
       
       exhibitionClients.push({
-        key: buildBulkSmsClientKey(phone, facilityName, location),
+        key: buildBulkSmsClientKey(mode === "sms" ? phone : email, facilityName, location),
         name: facilityName,
         phone,
+        email,
         location,
         contactPerson: contactName,
         contactName,
@@ -649,19 +682,23 @@ async function buildBulkSmsAudience(
 
       for (const contact of matchingContacts) {
         const contactName = String(contact.name || "").trim();
-        // Only message contacts that have their own phone number on file.
         const phone = String(contact.phone || "").trim();
-        if (!hasValidSmsPhone(phone) || !contactName) continue;
+        const email = String(contact.email || "").trim().toLowerCase();
+        
+        if (mode === "sms" && !hasValidSmsPhone(phone)) continue;
+        if (mode === "email" && !hasValidEmail(email)) continue;
+        if (!contactName) continue;
 
         const roleLabel = String(contact.role || "").trim();
         expanded.push({
           ...facility,
           key: [
-            buildBulkSmsClientKey(phone, facility.name, facility.location),
+            buildBulkSmsClientKey(mode === "sms" ? phone : email, facility.name, facility.location),
             normalizeClientValue(roleLabel),
             normalizeClientValue(contactName),
           ].join("|"),
           phone,
+          email,
           contactPerson: contactName,
           contactName,
           contactRole: roleLabel,
@@ -672,8 +709,12 @@ async function buildBulkSmsAudience(
     clients = expanded;
   }
 
-  // Final safety: never list / send to recipients without a sendable number.
-  clients = clients.filter((client) => hasValidSmsPhone(client.phone));
+  // Final safety: never list / send to recipients without a valid endpoint.
+  if (mode === "sms") {
+    clients = clients.filter((client) => hasValidSmsPhone(client.phone));
+  } else {
+    clients = clients.filter((client) => hasValidEmail(client.email));
+  }
 
   clients = clients.sort((a, b) => {
     const byName = a.name.localeCompare(b.name);
@@ -696,6 +737,7 @@ async function buildBulkSmsAudience(
       key: client.key,
       name: client.name,
       phone: client.phone,
+      email: client.email,
       location: client.location,
       contactPerson: client.contactPerson,
       contactRole: client.contactRole,
@@ -4728,6 +4770,257 @@ export class StockController {
       return res.status(500).json({
         success: false,
         message: error.message || "Failed to build SMS audience",
+      });
+    }
+  }
+
+  static async getBulkEmailAudience(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id;
+      if (!org_id)
+        return res
+          .status(401)
+          .json({ success: false, message: "Unauthorized" });
+      if (!isAdminRole(req.user?.role)) {
+        return res
+          .status(403)
+          .json({ success: false, message: "Only admin/HR can use bulk email" });
+      }
+
+      const audience = await buildBulkSmsAudience(org_id, req.query || {}, "email");
+      return res
+        .status(200)
+        .json({ success: true, data: audience.clients, meta: audience.meta });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to build Email audience",
+      });
+    }
+  }
+
+  static async getBulkEmailCampaigns(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id;
+      if (!org_id)
+        return res
+          .status(401)
+          .json({ success: false, message: "Unauthorized" });
+      if (!isAdminRole(req.user?.role)) {
+        return res.status(403).json({
+          success: false,
+          message: "Only admin/HR can view bulk email campaigns",
+        });
+      }
+
+      const campaigns = await EmailCampaign.find({ org_id })
+        .sort({ createdAt: -1 })
+        .limit(30)
+        .lean();
+      return res.status(200).json({ success: true, data: campaigns });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to fetch Email campaigns",
+      });
+    }
+  }
+
+  static async sendBulkEmailCampaign(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id;
+      const userId = req.user?.userId;
+      if (!org_id || !userId)
+        return res
+          .status(401)
+          .json({ success: false, message: "Unauthorized" });
+      if (!isAdminRole(req.user?.role)) {
+        return res.status(403).json({
+          success: false,
+          message: "Only admin/HR can send bulk email campaigns",
+        });
+      }
+
+      const name = String(req.body?.name || "").trim();
+      const subject = String(req.body?.subject || "").trim();
+      const htmlBody = String(req.body?.htmlBody || "").trim();
+      const blocks = sanitizeBlocks(req.body?.blocks);
+      const templateId = String(req.body?.templateId || "").trim();
+      const filters = req.body?.filters || {};
+      const selectedRecipientKeys = Array.isArray(
+        req.body?.selectedRecipientKeys,
+      )
+        ? req.body.selectedRecipientKeys.map((key: any) => String(key))
+        : [];
+
+      if (!name)
+        return res
+          .status(400)
+          .json({ success: false, message: "Campaign name is required" });
+      if (!subject)
+        return res
+          .status(400)
+          .json({ success: false, message: "Subject is required" });
+      if (!htmlBody && blocks.length === 0)
+        return res
+          .status(400)
+          .json({ success: false, message: "Email content is required" });
+      if (name.length > 120)
+        return res.status(400).json({
+          success: false,
+          message: "Campaign name is too long (max 120 characters)",
+        });
+
+      const audience = await buildBulkSmsAudience(org_id, filters, "email");
+      let recipients = audience.clients;
+
+      if (selectedRecipientKeys.length > 0) {
+        const selected = new Set(selectedRecipientKeys);
+        recipients = recipients.filter((r) => selected.has(r.key));
+      }
+
+      if (recipients.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "No valid email recipients found in audience",
+        });
+      }
+
+      const assetBaseUrl = publicApiBase(req);
+      const branding = await companyBranding(org_id, assetBaseUrl);
+      const renderedHtml = renderCampaignHtml({
+        blocks,
+        htmlBody,
+        branding,
+        subject,
+        assetBaseUrl,
+      });
+
+      const campaign = await EmailCampaign.create({
+        org_id,
+        name,
+        subject,
+        htmlBody: renderedHtml,
+        blocks,
+        templateId: templateId || undefined,
+        filters,
+        audienceCount: recipients.length,
+        status: "sending",
+        createdBy: String(userId),
+        recipients: recipients.map((r) => ({
+          key: r.key,
+          name: r.name,
+          email: r.email,
+          location: r.location,
+          contactName: r.contactName || r.contactPerson,
+          contactRole: r.contactRole,
+          status: "skipped",
+          skipReason: "other",
+        })),
+      });
+
+      setTimeout(async () => {
+        try {
+          const doc = await EmailCampaign.findById(campaign._id);
+          if (!doc) return;
+
+          let sentCount = 0;
+          let failedCount = 0;
+          let duplicateCount = 0;
+          const seenEmails = new Set<string>();
+
+          for (let index = 0; index < doc.recipients.length; index += 1) {
+            const recipient = doc.recipients[index];
+            const lowerEmail = String(recipient.email || "").toLowerCase();
+
+            if (seenEmails.has(lowerEmail)) {
+              recipient.status = "skipped";
+              recipient.skipReason = "duplicate";
+              duplicateCount += 1;
+              continue;
+            }
+            seenEmails.add(lowerEmail);
+
+            try {
+              const contactName = String(
+                recipient.contactName || recipient.name || "Customer",
+              );
+              const vars = {
+                contactName,
+                firstName: contactName.split(/\s+/).filter(Boolean)[0] || contactName,
+                clientName: recipient.name || "",
+                location: recipient.location || "",
+                role: String(recipient.contactRole || "Contact"),
+                email: lowerEmail,
+              };
+              const trackingBase = `${assetBaseUrl}/api/stock/public/email`;
+              const encodedKey = encodeURIComponent(recipient.key);
+              const html = personalizeMarketingText(
+                renderCampaignHtml({
+                  blocks,
+                  htmlBody: doc.htmlBody,
+                  branding,
+                  subject: doc.subject,
+                  assetBaseUrl,
+                  trackingPixelUrl: `${trackingBase}/open/${doc._id}/${encodedKey}`,
+                  wrapLink: (url) =>
+                    `${trackingBase}/click/${doc._id}/${encodedKey}?u=${encodeURIComponent(url)}`,
+                }),
+                vars,
+              );
+              const personalizedSubject = personalizeMarketingText(doc.subject, vars);
+
+              const isSent = await emailService.sendEmail({
+                to: lowerEmail,
+                subject: personalizedSubject,
+                html,
+                companyId: org_id,
+              });
+
+              if (isSent) {
+                recipient.status = "sent";
+                recipient.sentAt = new Date();
+                recipient.deliveredAt = new Date();
+                recipient.skipReason = undefined;
+                sentCount += 1;
+                console.log(`[EmailMarketing] Sent via SMTP to ${lowerEmail}`);
+              } else {
+                throw new Error("SMTP did not accept the message");
+              }
+            } catch (err: any) {
+              recipient.status = "failed";
+              recipient.errorMessage = err.message || "Provider error";
+              recipient.skipReason = undefined;
+              failedCount += 1;
+              console.error(`[EmailMarketing] Failed ${lowerEmail}:`, err.message || err);
+            }
+          }
+
+          console.log(
+            `[EmailMarketing] Campaign ${campaign._id} finished. Sent: ${sentCount}, Failed: ${failedCount}, Duplicates: ${duplicateCount}`,
+          );
+
+          doc.sentCount = sentCount;
+          doc.failedCount = failedCount;
+          doc.duplicateCount = duplicateCount;
+          doc.skippedCount = duplicateCount;
+          doc.deliveredCount = sentCount;
+          doc.status = failedCount > 0 ? "completed_with_errors" : "completed";
+          await doc.save();
+        } catch (error) {
+          console.error(`[EmailMarketing] Background job error:`, error);
+        }
+      }, 0);
+
+      return res.status(201).json({
+        success: true,
+        message: `Campaign queued for ${recipients.length} recipient${recipients.length === 1 ? "" : "s"}`,
+        data: campaign,
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to launch email campaign",
       });
     }
   }

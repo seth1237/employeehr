@@ -12,13 +12,13 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
+import { Mail, 
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
+import { Mail, 
   Dialog,
   DialogContent,
   DialogHeader,
@@ -26,7 +26,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { generateStatementOfAccountPdf } from "@/lib/stock-document-pdf";
-import {
+import { Mail, 
   Download,
   FileText,
   MapPin,
@@ -37,6 +37,7 @@ import {
   RefreshCw,
   Trash2,
   Users,
+  Mail,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 
@@ -2622,7 +2623,7 @@ export default function AccountsClientsPage() {
                     onClick={() => {
                       // Navigate to Bulk SMS history specifically for this client's phone number
                       if (selectedClient.client.number) {
-                        window.location.href = `/admin/clients/bulk-sms/history?phone=${encodeURIComponent(selectedClient.client.number)}`;
+                        window.location.href = `/admin/clients/bulk-sms/history?search=${encodeURIComponent(selectedClient.client.number)}`;
                       } else {
                         window.alert("Client has no phone number recorded for SMS history.");
                       }
@@ -2630,6 +2631,20 @@ export default function AccountsClientsPage() {
                   >
                     <MessageSquare className="mr-2 h-4 w-4" />
                     SMS History
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      if (selectedClient.client.email) {
+                        window.location.href = `/admin/clients/email-marketing/history?search=${encodeURIComponent(selectedClient.client.email)}`;
+                      } else {
+                        window.alert("Client has no email address recorded for Email history.");
+                      }
+                    }}
+                  >
+                    <Mail className="mr-2 h-4 w-4" />
+                    Email History
                   </Button>
                   <Button
                     size="sm"

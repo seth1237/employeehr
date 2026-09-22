@@ -1,6 +1,6 @@
 import { StockInvoice } from '../../models/StockInvoice';
 import { StockQuotation } from '../../models/StockQuotation';
-import datalakePool from '../../config/mysql';
+import datalakePool, { isDataLakeReady } from '../../config/mysql';
 
 /**
  * Service to sync and archive data from MongoDB (Operational DB) 
@@ -12,6 +12,7 @@ export class DataLakeService {
    * Syncs new/updated invoices to MySQL Data Lake.
    */
   static async syncInvoices() {
+    if (!isDataLakeReady()) return;
     console.log('[DataLake] Starting Invoices Sync...');
     try {
       // Find invoices that haven't been synced to the Data Lake yet
@@ -76,6 +77,7 @@ export class DataLakeService {
    * Syncs new/updated quotations to MySQL Data Lake.
    */
   static async syncQuotations() {
+    if (!isDataLakeReady()) return;
     console.log('[DataLake] Starting Quotations Sync...');
     try {
       const unsyncedQuotes = await StockQuotation.find({ 
@@ -140,6 +142,7 @@ export class DataLakeService {
    * Runs daily.
    */
   static async archiveOldRecords(daysOld: number = 90) {
+    if (!isDataLakeReady()) return;
     console.log(`[DataLake] Archiving records older than ${daysOld} days...`);
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - daysOld);

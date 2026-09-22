@@ -66,7 +66,7 @@ const emailRecipientSchema = new Schema<IEmailRecipient>(
     skipReason: { type: String, enum: ["duplicate", "invalid_email", "other"] },
     duplicateOfKey: { type: String },
     duplicateOfName: { type: String },
-    providerMessageId: { type: String, index: true },
+    providerMessageId: { type: String },
     providerRawResponse: { type: String },
     errorMessage: { type: String },
     sentAt: { type: Date },

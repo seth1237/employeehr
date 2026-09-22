@@ -276,10 +276,10 @@ async function startServer() {
 
     // Initialize MySQL DataLake
     console.log("🔌 Initializing MySQL Data Lake...")
-    await initDataLake()
-    
-    // Start Data Lake Cron Jobs
-    startDataLakeJobs()
+    const ready = await initDataLake()
+    if (ready) {
+      startDataLakeJobs()
+    }
     startMaintenanceScheduler()
 
     // MySQL is secondary (Mongo→MySQL sync). Do not block API startup on migrate errors.

@@ -3,27 +3,34 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-// Create a connection pool for the Data Lake
+let dataLakeReady = false;
+
 const datalakePool = mysql.createPool({
   host: process.env.MYSQL_HOST || 'localhost',
   user: process.env.MYSQL_USER || 'elevat10_datalake',
-  password: process.env.MYSQL_PASSWORD || 'seth123qP1!',
+  password: process.env.MYSQL_PASSWORD || '',
   database: process.env.MYSQL_DATABASE || 'elevat10_datalake',
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
   enableKeepAlive: true,
-  keepAliveInitialDelay: 0
+  keepAliveInitialDelay: 0,
 });
 
-// Initialize tables if they don't exist
+export function isDataLakeReady() {
+  return dataLakeReady;
+}
+
 export const initDataLake = async () => {
+  if (process.env.MYSQL_DATALAKE_ENABLED === "false") {
+    console.log("[DataLake] Disabled (MYSQL_DATALAKE_ENABLED=false).");
+    return false;
+  }
+
   try {
     const connection = await datalakePool.getConnection();
-    
-    console.log('[DataLake] Connected to MySQL Data Lake successfully.');
+    console.log("[DataLake] Connected to MySQL Data Lake successfully.");
 
-    // 1. Invoices Archive Table
     await connection.query(`
       CREATE TABLE IF NOT EXISTS dl_invoices (
         id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -40,7 +47,6 @@ export const initDataLake = async () => {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
 
-    // 2. Quotations Archive Table
     await connection.query(`
       CREATE TABLE IF NOT EXISTS dl_quotations (
         id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -57,11 +63,16 @@ export const initDataLake = async () => {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
 
-    console.log('[DataLake] Core archive tables initialized.');
+    console.log("[DataLake] Core archive tables initialized.");
     connection.release();
+    dataLakeReady = true;
+    return true;
   } catch (error: any) {
-    console.error('[DataLake] Failed to initialize MySQL Data Lake:', error.message);
-    // Don't crash the server if datalake is unreachable, just log it.
+    dataLakeReady = false;
+    console.warn(
+      `[DataLake] MySQL archive is unavailable (${error.message}). Invoice/quotation archive sync is skipped.`,
+    );
+    return false;
   }
 };
 

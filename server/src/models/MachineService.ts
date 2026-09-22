@@ -142,7 +142,6 @@ const machineServiceSchema = new Schema<IMachineService>(
   { timestamps: true },
 );
 
-machineServiceSchema.index({ machineId: 1 });
 machineServiceSchema.index({ completedDate: 1 });
 machineServiceSchema.index({ scheduledDate: 1 });
 machineServiceSchema.index({ org_id: 1, woNumber: 1 }, { unique: true, sparse: true });

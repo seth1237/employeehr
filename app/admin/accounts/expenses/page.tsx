@@ -9,6 +9,7 @@ import { FinanceDocumentShell, FinanceTableCard } from "@/components/accounts/fi
 import { PageLoadingSkeleton } from "@/components/admin/ui/page-states"
 import { stockApi } from "@/lib/api"
 import { runDataLoad, type SilentLoadOptions } from "@/lib/silent-load"
+import { EngineerFieldCostsCard } from "@/components/accounts/engineer-field-costs"
 import {
   CheckCircle2,
   Download,
@@ -16,6 +17,7 @@ import {
   Plus,
   Receipt,
   Truck,
+  Wrench,
 } from "lucide-react"
 
 type ExpensesSummary = {
@@ -108,6 +110,12 @@ export default function AccountsExpensesPage() {
             <Link href="/admin/accounts/expenses/claims">
               <Receipt className="h-4 w-4 mr-1" />
               Claims
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/admin/accounts/expenses/claims?source=engineer">
+              <Wrench className="h-4 w-4 mr-1" />
+              Engineer claims
             </Link>
           </Button>
         </div>
@@ -225,6 +233,10 @@ export default function AccountsExpensesPage() {
             </table>
           </div>
         </FinanceTableCard>
+      </div>
+
+      <div className="mt-4">
+        <EngineerFieldCostsCard />
       </div>
 
       <div className="mt-4">

@@ -55,6 +55,7 @@ class ApiClient {
     try {
       const response = await fetch(`${this.baseURL}${endpoint}`, {
         ...options,
+        cache: "no-store",
         headers,
       });
 
@@ -1267,8 +1268,13 @@ export const stockApi = {
   deleteExpenseCategory: (categoryId: string) =>
     client.delete<any>(`/api/stock/accounts/expenses/categories/${categoryId}`),
 
-  getExpenseClaims: () =>
-    client.get<any[]>("/api/stock/accounts/expenses/claims"),
+  getExpenseClaims: (params?: { source?: string; employeeId?: string }) => {
+    const search = new URLSearchParams()
+    if (params?.source) search.set("source", params.source)
+    if (params?.employeeId) search.set("employeeId", params.employeeId)
+    const query = search.toString()
+    return client.get<any[]>(`/api/stock/accounts/expenses/claims${query ? `?${query}` : ""}`)
+  },
 
   createExpenseClaim: (data: {
     employeeId: string;
@@ -1277,6 +1283,8 @@ export const stockApi = {
     purpose: string;
     receiptNote?: string;
     status?: string;
+    woId?: string;
+    source?: string;
   }) => client.post<any>("/api/stock/accounts/expenses/claims", data),
 
   updateExpenseClaimStatus: (
@@ -1788,6 +1796,94 @@ export const crmApi = {
   },
 };
 
+export const engineeringApi = {
+  getDashboard: () => client.get<any>("/api/engineering/dashboard"),
+  getWorkOrders: (params?: {
+    filter?: string
+    status?: string
+    assetId?: string
+    type?: string
+    from?: string
+    to?: string
+  }) => {
+    const search = new URLSearchParams()
+    if (params?.filter) search.set("filter", params.filter)
+    if (params?.status) search.set("status", params.status)
+    if (params?.assetId) search.set("assetId", params.assetId)
+    if (params?.type) search.set("type", params.type)
+    if (params?.from) search.set("from", params.from)
+    if (params?.to) search.set("to", params.to)
+    const query = search.toString()
+    return client.get<any[]>(`/api/engineering/work-orders${query ? `?${query}` : ""}`)
+  },
+  getWorkOrder: (id: string) => client.get<any>(`/api/engineering/work-orders/${id}`),
+  createWorkOrder: (data: any) => client.post<any>("/api/engineering/work-orders", data),
+  updateWorkOrder: (id: string, data: any) =>
+    client.patch<any>(`/api/engineering/work-orders/${id}`, data),
+  startWorkOrder: (id: string, data?: any) =>
+    client.post<any>(`/api/engineering/work-orders/${id}/start`, data || {}),
+  completeWorkOrder: (id: string, data?: any, photo?: File | null) => {
+    if (photo) {
+      const form = new FormData()
+      Object.entries(data || {}).forEach(([key, value]) => {
+        if (value == null || value === "") return
+        form.append(
+          key,
+          typeof value === "object" ? JSON.stringify(value) : String(value),
+        )
+      })
+      form.append("photo", photo)
+      return client.post<any>(`/api/engineering/work-orders/${id}/complete`, form)
+    }
+    return client.post<any>(`/api/engineering/work-orders/${id}/complete`, data || {})
+  },
+  getRequests: (filter?: string) =>
+    client.get<any[]>(
+      `/api/engineering/requests${filter ? `?filter=${encodeURIComponent(filter)}` : ""}`,
+    ),
+  convertRequestToWorkOrder: (id: string, data?: any) =>
+    client.post<any>(`/api/engineering/requests/${id}/convert-to-wo`, data || {}),
+  getAssetHistory: (id: string) =>
+    client.get<any>(`/api/engineering/assets/${id}/history`),
+  getMaintenancePlans: (assetId?: string) =>
+    client.get<any[]>(
+      `/api/engineering/maintenance-plans${assetId ? `?assetId=${encodeURIComponent(assetId)}` : ""}`,
+    ),
+  createMaintenancePlan: (data: any) =>
+    client.post<any>("/api/engineering/maintenance-plans", data),
+  updateMaintenancePlan: (id: string, data: any) =>
+    client.patch<any>(`/api/engineering/maintenance-plans/${id}`, data),
+  getCalibration: (assetId?: string) =>
+    client.get<any[]>(
+      `/api/engineering/calibration${assetId ? `?assetId=${encodeURIComponent(assetId)}` : ""}`,
+    ),
+  createCalibration: (data: any) =>
+    client.post<any>("/api/engineering/calibration", data),
+  getContracts: (assetId?: string) =>
+    client.get<any[]>(
+      `/api/engineering/contracts${assetId ? `?assetId=${encodeURIComponent(assetId)}` : ""}`,
+    ),
+  createContract: (data: any) => client.post<any>("/api/engineering/contracts", data),
+  getExpenses: () => client.get<any[]>("/api/engineering/expenses"),
+  getReport: (params?: { from?: string; to?: string; engineerId?: string; limit?: number }) => {
+    const search = new URLSearchParams()
+    if (params?.from) search.set("from", params.from)
+    if (params?.to) search.set("to", params.to)
+    if (params?.engineerId) search.set("engineerId", params.engineerId)
+    if (params?.limit) search.set("limit", String(params.limit))
+    const query = search.toString()
+    return client.get<any>(`/api/engineering/reports${query ? `?${query}` : ""}`)
+  },
+  exportReport: (params?: { from?: string; to?: string; engineerId?: string }) => {
+    const search = new URLSearchParams()
+    if (params?.from) search.set("from", params.from)
+    if (params?.to) search.set("to", params.to)
+    if (params?.engineerId) search.set("engineerId", params.engineerId)
+    const query = search.toString()
+    return client.get<any>(`/api/engineering/reports/export${query ? `?${query}` : ""}`)
+  },
+}
+
 export const salesApi = {
   getDashboard: (date?: string) =>
     client.get<any>(`/api/sales/dashboard${date ? `?date=${encodeURIComponent(date)}` : ""}`),
@@ -1990,6 +2086,7 @@ export const api = {
   aiAssistant: aiAssistantApi,
   crm: crmApi,
   sales: salesApi,
+  engineering: engineeringApi,
   etims: etimsApi,
   dashboard: {
     getStats: () => client.get<any>("/api/dashboard/stats"),

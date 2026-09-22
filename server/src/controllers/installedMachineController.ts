@@ -7,6 +7,7 @@ import { CreditNote } from "../models/CreditNote";
 import { StockInvoice } from "../models/StockInvoice";
 import { StockProduct } from "../models/StockProduct";
 import { MachineService } from "../models/MachineService";
+import { nextWoNumber } from "../lib/workOrder";
 import { isAdminRole } from "./stock/stockShared";
 
 function parseCsvLine(line: string, delimiter: string = ","): string[] {
@@ -347,6 +348,14 @@ export class InstalledMachineController {
         attendantRole,
         nextServiceDate,
         isTrained,
+        assetTag,
+        assetClass,
+        criticality,
+        manufacturer,
+        model,
+        commissionedDate,
+        parentAssetId,
+        technicianId,
       } = req.body || {};
 
       if (!client || !client.name || !productId || !productName) {
@@ -381,6 +390,8 @@ export class InstalledMachineController {
         "maintenance",
         "ended",
         "installation_pending",
+        "decommissioned",
+        "in_workshop",
       ];
       const resolvedStatus = allowedStatus.includes(String(status || ""))
         ? String(status)
@@ -409,6 +420,7 @@ export class InstalledMachineController {
         notes,
         status: resolvedStatus,
         installedBy: installedBy ? String(installedBy).trim() : undefined,
+        technicianId: technicianId ? String(technicianId).trim() : undefined,
         attendant: attendant ? String(attendant).trim() : undefined,
         attendantNumber: attendantNumber
           ? String(attendantNumber).trim()
@@ -420,11 +432,51 @@ export class InstalledMachineController {
           ? new Date(nextServiceDate)
           : undefined,
         isTrained: Boolean(isTrained),
+        assetTag: assetTag ? String(assetTag).trim() : undefined,
+        assetClass: assetClass || "client_equipment",
+        criticality: criticality || "B",
+        manufacturer: manufacturer ? String(manufacturer).trim() : undefined,
+        model: model ? String(model).trim() : undefined,
+        commissionedDate: commissionedDate ? new Date(commissionedDate) : undefined,
+        parentAssetId: parentAssetId ? String(parentAssetId).trim() : undefined,
         createdBy: actorId,
         isActive: true,
       });
 
-      return res.status(201).json({ success: true, data: doc });
+      let workOrder = null;
+      const assignedTechnicianId = String(technicianId || "").trim();
+      if (resolvedStatus === "installation_pending" && assignedTechnicianId) {
+        try {
+          const woNumber = await nextWoNumber(org_id);
+          const contactName = String(client?.contactPerson || "").trim();
+          workOrder = await MachineService.create({
+            org_id,
+            machineId: String(doc._id),
+            woNumber,
+            type: "installation",
+            status: "assigned",
+            priority: "medium",
+            serviceType: "Installation",
+            scheduledDate: installationDate ? new Date(installationDate) : new Date(),
+            technician: installedBy ? String(installedBy).trim() : "",
+            technicianId: assignedTechnicianId,
+            notes: contactName ? `Site contact: ${contactName}` : "",
+            checklist: [
+              { item: "Record machine serial number", done: false },
+              { item: "Record person left in charge of the machine", done: false },
+              { item: "Photograph and upload the job card", done: false },
+            ],
+          });
+        } catch (error) {
+          console.error("Failed to create installation work order", error);
+        }
+      }
+
+      return res.status(201).json({
+        success: true,
+        data: doc,
+        workOrder,
+      });
     } catch (error: any) {
       return res.status(500).json({
         success: false,
@@ -462,10 +514,19 @@ export class InstalledMachineController {
         "notes",
         "nextServiceDate",
         "installedBy",
+        "technicianId",
         "attendant",
         "attendantNumber",
         "attendantRole",
         "isTrained",
+        "photoUrl",
+        "assetTag",
+        "assetClass",
+        "criticality",
+        "manufacturer",
+        "model",
+        "commissionedDate",
+        "parentAssetId",
       ];
       const updates: any = {};
       for (const key of allowed) {
@@ -489,6 +550,8 @@ export class InstalledMachineController {
         updates.warrantyUntil = new Date(updates.warrantyUntil);
       if (updates.nextServiceDate)
         updates.nextServiceDate = new Date(updates.nextServiceDate);
+      if (updates.commissionedDate)
+        updates.commissionedDate = new Date(updates.commissionedDate);
 
       const updated = await InstalledMachine.findOneAndUpdate(
         { _id: id, org_id },

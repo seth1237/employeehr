@@ -19,6 +19,9 @@ import { StockTender } from "../models/StockTender"
 import { StockServiceJob } from "../models/StockServiceJob"
 import { StockService } from "../models/StockService"
 import { MachineService } from "../models/MachineService"
+import { MaintenancePlan } from "../models/MaintenancePlan"
+import { CalibrationRecord } from "../models/CalibrationRecord"
+import { VendorContract } from "../models/VendorContract"
 import { InstalledMachine } from "../models/InstalledMachine"
 import { StockProductLocation } from "../models/StockProductLocation"
 import { ProductLocation } from "../models/ProductLocation"
@@ -146,6 +149,9 @@ export async function permanentlyDeleteCompany(companyId: string) {
     ["StockServiceJob", StockServiceJob],
     ["StockService", StockService],
     ["MachineService", MachineService],
+    ["MaintenancePlan", MaintenancePlan],
+    ["CalibrationRecord", CalibrationRecord],
+    ["VendorContract", VendorContract],
     ["InstalledMachine", InstalledMachine],
     ["StockProductLocation", StockProductLocation],
     ["ProductLocation", ProductLocation],

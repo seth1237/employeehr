@@ -1,6 +1,8 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
+import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -17,7 +19,7 @@ import { FinanceDocumentShell, FinanceTableCard } from "@/components/accounts/fi
 import { PageLoadingSkeleton } from "@/components/admin/ui/page-states"
 import { api, stockApi } from "@/lib/api"
 import { runDataLoad, type SilentLoadOptions } from "@/lib/silent-load"
-import { Plus } from "lucide-react"
+import { Plus, Wrench } from "lucide-react"
 
 type ClaimItem = {
   description: string
@@ -25,7 +27,11 @@ type ClaimItem = {
   category?: string
 }
 
-export default function ExpenseClaimsPage() {
+function ExpenseClaimsInner() {
+  const searchParams = useSearchParams()
+  const sourceFilter = searchParams.get("source") || ""
+  const employeeFilter = searchParams.get("employeeId") || ""
+  const engineerView = sourceFilter === "engineer"
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -34,7 +40,7 @@ export default function ExpenseClaimsPage() {
   const [categories, setCategories] = useState<any[]>([])
   const [claimItems, setClaimItems] = useState<ClaimItem[]>([])
   const [form, setForm] = useState({
-    employeeId: "",
+    employeeId: employeeFilter,
     purpose: "",
     receiptNote: "",
     itemDescription: "",
@@ -47,17 +53,21 @@ export default function ExpenseClaimsPage() {
       setLoading,
       async () => {
         const [claimRes, catRes, usersRes] = await Promise.all([
-          stockApi.getExpenseClaims(),
+          stockApi.getExpenseClaims({
+            source: sourceFilter || undefined,
+            employeeId: employeeFilter || undefined,
+          }),
           stockApi.getExpenseCategories(),
           api.users.getAll(),
         ])
         setClaims(claimRes.data || [])
         setCategories(catRes.data || [])
         if (usersRes.success) {
+          const roles = engineerView
+            ? ["technical_service_engineer"]
+            : ["employee", "sales_rep", "technical_service_engineer"]
           setEmployees(
-            (usersRes.data || []).filter((u: any) =>
-              ["employee", "sales_rep"].includes(String(u.role || "")),
-            ),
+            (usersRes.data || []).filter((u: any) => roles.includes(String(u.role || ""))),
           )
         }
       },
@@ -68,7 +78,7 @@ export default function ExpenseClaimsPage() {
 
   useEffect(() => {
     loadAll()
-  }, [])
+  }, [sourceFilter, employeeFilter])
 
   const addClaimItem = () => {
     if (!form.itemDescription.trim() || !form.itemAmount) return
@@ -103,9 +113,10 @@ export default function ExpenseClaimsPage() {
         purpose: form.purpose.trim(),
         receiptNote: form.receiptNote.trim() || undefined,
         status: asDraft ? "draft" : "submitted",
+        source: engineerView ? "engineer" : undefined,
       })
       setForm({
-        employeeId: "",
+        employeeId: employeeFilter,
         purpose: "",
         receiptNote: "",
         itemDescription: "",
@@ -137,11 +148,25 @@ export default function ExpenseClaimsPage() {
 
   return (
     <FinanceDocumentShell
-      eyebrow="Accounts · Expenses"
-      title="Expense Claims"
-      description="Employee expense claims and sales planner budgets. Settling a claim posts it as a company expense."
+      eyebrow={engineerView ? "Accounts · Technical Service" : "Accounts · Expenses"}
+      title={engineerView ? "Engineer Expense Claims" : "Expense Claims"}
+      description={
+        engineerView
+          ? "Field claims from service engineers. Approving and settling posts them as company expenses."
+          : "Employee expense claims and sales planner budgets. Settling a claim posts it as a company expense."
+      }
       onRefresh={() => loadAll({ silent: true })}
       refreshing={refreshing}
+      actions={
+        engineerView ? (
+          <Button asChild variant="outline" size="sm">
+            <Link href="/admin/clients/technical-service/expenses">
+              <Wrench className="h-4 w-4 mr-1" />
+              Technical Service
+            </Link>
+          </Button>
+        ) : null
+      }
       kpis={[
         { label: "Total Claims", value: claims.length },
         { label: "Open Claims", value: openClaims, accent: "danger" },
@@ -152,13 +177,13 @@ export default function ExpenseClaimsPage() {
         <FinanceTableCard title="New claim">
           <div className="space-y-3 p-4">
             <div>
-              <Label>Employee</Label>
+              <Label>{engineerView ? "Engineer" : "Employee"}</Label>
               <Select
                 value={form.employeeId}
                 onValueChange={(v) => setForm((p) => ({ ...p, employeeId: v }))}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select employee" />
+                  <SelectValue placeholder={engineerView ? "Select engineer" : "Select employee"} />
                 </SelectTrigger>
                 <SelectContent>
                   {employees.map((emp) => (
@@ -247,7 +272,7 @@ export default function ExpenseClaimsPage() {
               <thead className="bg-muted/80">
                 <tr className="text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                   <th className="py-2 px-3">Claim</th>
-                  <th className="py-2 px-3">Sales rep / employee</th>
+                  <th className="py-2 px-3">{engineerView ? "Engineer" : "Sales rep / employee"}</th>
                   <th className="py-2 px-3">Purpose</th>
                   <th className="py-2 px-3 text-right">Amount</th>
                   <th className="py-2 px-3">Status</th>
@@ -258,7 +283,9 @@ export default function ExpenseClaimsPage() {
                 {claims.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="py-8 text-center text-muted-foreground">
-                      No claims yet. Approving a sales planner with a day budget creates a claim here.
+                      {engineerView
+                        ? "No engineer claims yet."
+                        : "No claims yet. Approving a sales planner with a day budget creates a claim here."}
                     </td>
                   </tr>
                 ) : (
@@ -269,6 +296,11 @@ export default function ExpenseClaimsPage() {
                         {claim.source === "sales_planner" ? (
                           <Badge variant="secondary" className="mt-1 text-[10px]">
                             Planner {claim.plannerDate || ""}
+                          </Badge>
+                        ) : null}
+                        {claim.source === "engineer" ? (
+                          <Badge variant="secondary" className="mt-1 text-[10px]">
+                            Engineer
                           </Badge>
                         ) : null}
                       </td>
@@ -329,5 +361,13 @@ export default function ExpenseClaimsPage() {
         </FinanceTableCard>
       </div>
     </FinanceDocumentShell>
+  )
+}
+
+export default function ExpenseClaimsPage() {
+  return (
+    <Suspense fallback={<PageLoadingSkeleton title="Loading claims" rows={6} />}>
+      <ExpenseClaimsInner />
+    </Suspense>
   )
 }

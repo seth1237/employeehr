@@ -58,3 +58,5 @@ export function useSalesBranding(): SalesBranding {
 
   return branding
 }
+
+export const useCompanyBranding = useSalesBranding

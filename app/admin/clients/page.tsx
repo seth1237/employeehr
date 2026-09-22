@@ -297,6 +297,12 @@ export default function ClientsHubPage() {
       icon: Zap,
     },
     {
+      title: "Technical Service",
+      description: "Engineer reports, installations, and job activity",
+      href: "/admin/clients/technical-service",
+      icon: Wrench,
+    },
+    {
       title: "Bulk SMS",
       description: "Send campaigns to selected client groups",
       href: "/admin/clients/bulk-sms",

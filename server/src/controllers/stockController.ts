@@ -3973,7 +3973,12 @@ export class StockController {
       if (!org_id)
         return res.status(401).json({ success: false, message: "Unauthorized" });
 
-      const claims = await StockExpenseClaim.find({ org_id })
+      const source = String(req.query.source || "").trim();
+      const employeeId = String(req.query.employeeId || "").trim();
+      const query: Record<string, unknown> = { org_id };
+      if (source) query.source = source;
+      if (employeeId) query.employeeId = employeeId;
+      const claims = await StockExpenseClaim.find(query)
         .sort({ createdAt: -1 })
         .lean();
       return res.status(200).json({ success: true, data: claims });
@@ -3992,7 +3997,7 @@ export class StockController {
       if (!org_id || !actorId)
         return res.status(401).json({ success: false, message: "Unauthorized" });
 
-      const { employeeId, employeeName, items, purpose, receiptNote, status } = req.body || {};
+      const { employeeId, employeeName, items, purpose, receiptNote, status, woId, source } = req.body || {};
       if (!employeeId || !employeeName || !Array.isArray(items) || !items.length || !purpose) {
         return res.status(400).json({
           success: false,
@@ -4022,6 +4027,8 @@ export class StockController {
         receiptNote: receiptNote ? String(receiptNote).trim() : undefined,
         status: claimStatus,
         submittedAt: claimStatus === "submitted" ? new Date() : undefined,
+        source: source === "engineer" || source === "sales_planner" ? source : "manual",
+        woId: woId ? String(woId) : undefined,
       });
 
       return res.status(201).json({ success: true, data: claim });

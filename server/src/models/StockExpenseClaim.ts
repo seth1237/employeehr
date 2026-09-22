@@ -23,7 +23,8 @@ export interface IStockExpenseClaim {
   receiptNote?: string
   plannerId?: string
   plannerDate?: string
-  source?: "manual" | "sales_planner"
+  source?: "manual" | "sales_planner" | "engineer"
+  woId?: string
   createdAt?: Date
   updatedAt?: Date
 }
@@ -60,9 +61,10 @@ const stockExpenseClaimSchema = new Schema<IStockExpenseClaim>(
     plannerDate: { type: String },
     source: {
       type: String,
-      enum: ["manual", "sales_planner"],
+      enum: ["manual", "sales_planner", "engineer"],
       default: "manual",
     },
+    woId: { type: String, index: true },
   },
   { timestamps: true },
 )

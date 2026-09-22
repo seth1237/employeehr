@@ -17,13 +17,27 @@ interface IInstalledMachine {
   installationDepartment?: string;
   installationDate?: Date;
   warrantyUntil?: Date;
-  status?: "active" | "maintenance" | "ended" | "installation_pending";
+  status?:
+    | "active"
+    | "maintenance"
+    | "ended"
+    | "installation_pending"
+    | "decommissioned"
+    | "in_workshop";
+  assetTag?: string;
+  assetClass?: "client_equipment" | "infrastructure" | "tool";
+  criticality?: "A" | "B" | "C";
+  manufacturer?: string;
+  model?: string;
+  commissionedDate?: Date;
+  parentAssetId?: string;
   invoiceId?: string;
   quotationId?: string;
   isActive?: boolean;
   notes?: string;
   nextServiceDate?: Date;
   installedBy?: string;
+  technicianId?: string;
   attendant?: string;
   attendantNumber?: string;
   attendantRole?: string;
@@ -57,15 +71,39 @@ const installedMachineSchema = new Schema<IInstalledMachine>(
     warrantyUntil: { type: Date },
     status: {
       type: String,
-      enum: ["active", "maintenance", "ended", "installation_pending"],
+      enum: [
+        "active",
+        "maintenance",
+        "ended",
+        "installation_pending",
+        "decommissioned",
+        "in_workshop",
+      ],
       default: "active",
     },
+    assetTag: { type: String, index: true },
+    assetClass: {
+      type: String,
+      enum: ["client_equipment", "infrastructure", "tool"],
+      default: "client_equipment",
+      index: true,
+    },
+    criticality: {
+      type: String,
+      enum: ["A", "B", "C"],
+      default: "B",
+    },
+    manufacturer: { type: String },
+    model: { type: String },
+    commissionedDate: { type: Date },
+    parentAssetId: { type: String },
     invoiceId: { type: String, index: true },
     quotationId: { type: String, index: true },
     isActive: { type: Boolean, default: true, index: true },
     notes: { type: String },
     nextServiceDate: { type: Date },
     installedBy: { type: String },
+    technicianId: { type: String, index: true },
     attendant: { type: String },
     attendantNumber: { type: String },
     attendantRole: { type: String },

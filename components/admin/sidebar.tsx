@@ -44,6 +44,7 @@ import {
   CreditCard,
   ScrollText,
   MessageSquare,
+  Wrench,
 } from "lucide-react";
 import { getUser, logout } from "@/lib/auth";
 import { getToken } from "@/lib/auth";
@@ -296,6 +297,12 @@ const adminMenuItems = [
     label: "Installed Machines",
     icon: Package,
     href: "/admin/clients/installed-machines",
+    section: "CLIENTS",
+  },
+  {
+    label: "Technical Service",
+    icon: Wrench,
+    href: "/admin/clients/technical-service",
     section: "CLIENTS",
   },
   {

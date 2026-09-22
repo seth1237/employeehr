@@ -1,6 +1,5 @@
-"use client"
-import SalesPlannerPage from "@/app/sales/planner/page"
+import { redirect } from "next/navigation"
 
-export default function PlannerPage() {
-  return <SalesPlannerPage />
+export default function PlannerRedirect() {
+  redirect("/engineer/calendar")
 }

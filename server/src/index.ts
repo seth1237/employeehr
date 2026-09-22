@@ -76,7 +76,9 @@ import exhibitionRoutes from "./routes/exhibition.routes"
 import glRoutes from "./routes/gl.routes"
 import projectRoutes from "./routes/project.routes"
 import procurementRoutes from "./routes/procurement.routes"
+import engineeringRoutes from "./routes/engineering.routes"
 import { startCftIngestScheduler } from "./services/cft/cftIngestScheduler"
+import { startMaintenanceScheduler } from "./jobs/maintenanceScheduler"
 
 const app = express()
 const server = createServer(app)
@@ -251,6 +253,7 @@ app.use("/api/dashboard", dashboardRoutes)
 app.use("/api/gl", glRoutes)
 app.use("/api/projects", projectRoutes)
 app.use("/api/procurement", procurementRoutes)
+app.use("/api/engineering", engineeringRoutes)
 
 // 404 handler
 app.use((_req, res) => {
@@ -277,6 +280,7 @@ async function startServer() {
     
     // Start Data Lake Cron Jobs
     startDataLakeJobs()
+    startMaintenanceScheduler()
 
     // MySQL is secondary (Mongo→MySQL sync). Do not block API startup on migrate errors.
     if (!process.env.MYSQL_DATABASE_URL?.trim()) {

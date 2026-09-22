@@ -14,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { EngineerFieldCostsCard } from "@/components/accounts/engineer-field-costs"
 import { 
   ArrowUpRight, 
   ArrowDownRight, 
@@ -179,6 +180,29 @@ export default function FinancialBreakdownPage() {
     )
   }, [data?.breakdown, search])
 
+  const engineerPeriod = useMemo(() => {
+    const now = new Date()
+    if (period === "this-month") {
+      return {
+        from: new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10),
+        to: now.toISOString().slice(0, 10),
+      }
+    }
+    if (period === "last-30") {
+      return {
+        from: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+        to: now.toISOString().slice(0, 10),
+      }
+    }
+    if (period === "this-year") {
+      return {
+        from: new Date(now.getFullYear(), 0, 1).toISOString().slice(0, 10),
+        to: now.toISOString().slice(0, 10),
+      }
+    }
+    return { from: undefined as string | undefined, to: undefined as string | undefined }
+  }, [period])
+
   const primaryColor = branding.primaryColor || "#0f766e"
   const secondaryColor = branding.secondaryColor || "#0ea5e9"
   const primarySoftColor = hexToRgba(primaryColor, 0.08)
@@ -316,6 +340,12 @@ export default function FinancialBreakdownPage() {
           ))}
         </div>
       </div>
+
+      <EngineerFieldCostsCard
+        from={engineerPeriod.from}
+        to={engineerPeriod.to}
+        employeeId={selectedEmployee !== "all" ? selectedEmployee : undefined}
+      />
 
       <div className="grid gap-6 lg:grid-cols-12">
         {/* Category Performance */}

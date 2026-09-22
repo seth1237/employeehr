@@ -3,15 +3,31 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { getUser, postLoginPath } from "@/lib/auth"
+import { EngineerBrandProvider } from "@/components/engineer/branding"
 import { EngineerSidebar } from "@/components/engineer/sidebar"
 import { EngineerTopNav } from "@/components/engineer/top-nav"
 import { EngineerMobileNav } from "@/components/engineer/mobile-nav"
 import { AiAssistantChat } from "@/components/ai/ai-assistant-chat"
 
+function EngineerShell({ children }: { children: React.ReactNode }) {
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  return (
+    <div className="flex h-screen overflow-hidden bg-slate-50">
+      <EngineerSidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(false)} />
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <EngineerTopNav onMenuClick={() => setSidebarOpen(true)} />
+        <main className="flex-1 overflow-y-auto pb-16 lg:pb-0">{children}</main>
+        <EngineerMobileNav />
+      </div>
+      <AiAssistantChat variant="engineer" />
+    </div>
+  )
+}
+
 export default function EngineerLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
-  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   useEffect(() => {
     const user = getUser()
@@ -36,14 +52,8 @@ export default function EngineerLayout({ children }: { children: React.ReactNode
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50">
-      <EngineerSidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(false)} />
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <EngineerTopNav onMenuClick={() => setSidebarOpen(true)} />
-        <main className="flex-1 overflow-y-auto">{children}</main>
-        <EngineerMobileNav />
-      </div>
-      <AiAssistantChat variant="engineer" />
-    </div>
+    <EngineerBrandProvider>
+      <EngineerShell>{children}</EngineerShell>
+    </EngineerBrandProvider>
   )
 }

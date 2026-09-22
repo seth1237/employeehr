@@ -6,30 +6,28 @@ import { cn } from "@/lib/utils"
 import {
   LayoutDashboard,
   ClipboardList,
-  ClipboardCheck,
-  FileText,
-  History,
-  BookUser,
+  Inbox,
+  Wrench,
   CalendarDays,
+  FileText,
   LogOut,
-  Palmtree,
-  Video,
   X,
-  MapPin,
 } from "lucide-react"
 import { logout } from "@/lib/auth"
+import { useEngineerBranding } from "@/components/engineer/branding"
 
 const navigation = [
   { name: "Dashboard", href: "/engineer", icon: LayoutDashboard },
-  { name: "Machine Database", href: "/engineer/machines", icon: ClipboardList },
-  { name: "Pending Services", href: "/engineer/services", icon: ClipboardCheck },
-  { name: "Assigned Duties", href: "/engineer/duties", icon: ClipboardCheck },
-  { name: "Planner", href: "/engineer/planner", icon: CalendarDays },
+  { name: "Work orders", href: "/engineer/work-orders", icon: ClipboardList },
+  { name: "Requests", href: "/engineer/requests", icon: Inbox },
+  { name: "Machines", href: "/engineer/machines", icon: Wrench },
+  { name: "Calendar", href: "/engineer/calendar", icon: CalendarDays },
   { name: "Expenses", href: "/engineer/expenses", icon: FileText },
 ]
 
 export function EngineerSidebar({ isOpen = false, onToggle }: { isOpen?: boolean; onToggle?: () => void }) {
   const pathname = usePathname()
+  const branding = useEngineerBranding()
 
   return (
     <>
@@ -49,8 +47,13 @@ export function EngineerSidebar({ isOpen = false, onToggle }: { isOpen?: boolean
       >
         <div className="flex h-14 items-center justify-between border-b border-slate-200 px-4">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Service Engineer</p>
-            <p className="text-base font-semibold text-slate-900">Portal</p>
+            <p
+              className="text-[11px] font-semibold uppercase tracking-wider"
+              style={{ color: branding.primaryColor }}
+            >
+              Technical service
+            </p>
+            <p className="text-base font-semibold text-slate-900">Engineer</p>
           </div>
           <button type="button" className="rounded-md p-2 lg:hidden" onClick={onToggle} aria-label="Close sidebar">
             <X className="h-5 w-5" />
@@ -58,7 +61,7 @@ export function EngineerSidebar({ isOpen = false, onToggle }: { isOpen?: boolean
         </div>
         <nav className="flex-1 space-y-0.5 overflow-y-auto p-3" aria-label="Engineer pages">
           {navigation.map((item) => {
-            const active = item.href === "/engineer" ? pathname === "/engineer" : pathname === item.href
+            const active = item.href === "/engineer" ? pathname === "/engineer" : pathname.startsWith(item.href)
             const Icon = item.icon
             return (
               <Link
@@ -66,9 +69,14 @@ export function EngineerSidebar({ isOpen = false, onToggle }: { isOpen?: boolean
                 href={item.href}
                 onClick={onToggle}
                 className={cn(
-                  "flex min-h-11 items-center gap-3 rounded-md px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700",
-                  active ? "bg-teal-50 text-teal-900" : "text-slate-600 hover:bg-slate-50",
+                  "flex min-h-11 items-center gap-3 rounded-md px-3 text-sm font-medium",
+                  active ? "" : "text-slate-600 hover:bg-slate-50",
                 )}
+                style={
+                  active
+                    ? { backgroundColor: branding.primarySoft, color: branding.primaryColor }
+                    : undefined
+                }
                 aria-current={active ? "page" : undefined}
               >
                 <Icon className="h-4 w-4" aria-hidden />

@@ -3,6 +3,7 @@ import type { AuthenticatedRequest } from "../middleware/auth";
 import { InstalledMachine } from "../models/InstalledMachine";
 import { MachineService } from "../models/MachineService";
 import { StockInvoice } from "../models/StockInvoice";
+import { nextWoNumber } from "../lib/workOrder";
 
 function daysUntil(date?: Date | string | null): number | null {
   if (!date) return null;
@@ -221,7 +222,7 @@ export class MachineServiceController {
         return res.status(401).json({ success: false, message: "Unauthorized" });
       }
 
-      const { machineId, serviceType, scheduledDate, completedDate, technician, technicianId, cost, notes } = req.body || {};
+      const { machineId, serviceType, scheduledDate, completedDate, technician, technicianId, cost, notes, type, status, priority, requestId, planId, checklist, parts, downtimeMinutes } = req.body || {};
       if (!machineId) {
         return res.status(400).json({ success: false, message: "machineId is required" });
       }
@@ -234,6 +235,10 @@ export class MachineServiceController {
       const created = await MachineService.create({
         org_id,
         machineId: String(machineId).trim(),
+        woNumber: await nextWoNumber(org_id),
+        type: type || "corrective",
+        status: completedDate ? "completed" : technicianId ? "assigned" : "open",
+        priority: priority || "medium",
         serviceType: serviceType ? String(serviceType).trim() : "",
         scheduledDate: normalizeDate(scheduledDate),
         completedDate: normalizeDate(completedDate) ?? null,
@@ -241,6 +246,11 @@ export class MachineServiceController {
         technicianId: technicianId ? String(technicianId).trim() : "",
         cost: cost != null ? Number(cost) : 0,
         notes: notes ? String(notes).trim() : "",
+        requestId: requestId ? String(requestId) : undefined,
+        planId: planId ? String(planId) : undefined,
+        downtimeMinutes: downtimeMinutes != null ? Number(downtimeMinutes) : 0,
+        checklist: Array.isArray(checklist) ? checklist : [],
+        parts: Array.isArray(parts) ? parts : [],
       });
 
       try {
@@ -271,23 +281,47 @@ export class MachineServiceController {
         return res.status(400).json({ success: false, message: "Service id required" });
       }
 
-      const allowed = ["machineId", "serviceType", "scheduledDate", "completedDate", "technician", "technicianId", "cost", "notes"];
+      const allowed = [
+        "machineId",
+        "serviceType",
+        "scheduledDate",
+        "completedDate",
+        "startedAt",
+        "technician",
+        "technicianId",
+        "cost",
+        "notes",
+        "type",
+        "status",
+        "priority",
+        "requestId",
+        "planId",
+        "downtimeMinutes",
+        "checklist",
+        "parts",
+        "attachments",
+        "failureCode",
+        "causeCode",
+      ];
       const update: any = {};
       for (const key of allowed) {
         if (req.body[key] !== undefined) {
-          if (key === "scheduledDate" || key === "completedDate") {
+          if (key === "scheduledDate" || key === "completedDate" || key === "startedAt") {
             if (req.body[key] === null) {
               update[key] = null;
             } else {
               update[key] = normalizeDate(req.body[key]);
             }
-          } else if (key === "cost") {
+          } else if (key === "cost" || key === "downtimeMinutes") {
             update[key] = req.body[key] != null ? Number(req.body[key]) : 0;
+          } else if (key === "checklist" || key === "parts" || key === "attachments") {
+            update[key] = req.body[key];
           } else {
             update[key] = String(req.body[key]).trim();
           }
         }
       }
+      if (update.completedDate && !update.status) update.status = "completed";
 
       if (Object.keys(update).length === 0) {
         return res.status(400).json({ success: false, message: "No updates provided" });

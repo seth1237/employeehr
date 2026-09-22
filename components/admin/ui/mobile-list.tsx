@@ -40,12 +40,19 @@ export function MobileCardList({
 export function MobileCard({
   children,
   className,
+  onClick,
+  ...props
 }: {
   children: React.ReactNode
   className?: string
-}) {
+  onClick?: () => void
+} & Omit<React.HTMLAttributes<HTMLLIElement>, "onClick">) {
   return (
-    <li className={cn("bg-background px-4 py-3 space-y-2", className)}>
+    <li
+      className={cn("bg-background px-4 py-3 space-y-2", onClick && "cursor-pointer", className)}
+      onClick={onClick}
+      {...props}
+    >
       {children}
     </li>
   )

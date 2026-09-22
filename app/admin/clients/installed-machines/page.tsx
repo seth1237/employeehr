@@ -36,6 +36,7 @@ import {
   Download,
   Upload,
   Inbox,
+  Search,
 } from "lucide-react";
 import {
   Dialog,
@@ -622,6 +623,8 @@ export default function InstalledMachinesPage({ isEngineerView = false }: { isEn
   const [showManualAddDialog, setShowManualAddDialog] = useState(false);
   const [manualAddForm, setManualAddForm] =
     useState<ManualAddForm>(EMPTY_MANUAL_ADD_FORM);
+  const [facilitySearchQuery, setFacilitySearchQuery] = useState("");
+  const [facilitySearchOpen, setFacilitySearchOpen] = useState(false);
   const [products, setProducts] = useState<any[]>([]);
   const [showSchedulePanel, setShowSchedulePanel] = useState(false);
   const [scheduleForm, setScheduleForm] =
@@ -951,6 +954,34 @@ export default function InstalledMachinesPage({ isEngineerView = false }: { isEn
 
     return result;
   }, [customers, clientSearch, clientSortBy, groupFilter, clientGroups]);
+
+  const selectedManualFacility = useMemo(
+    () => customers.find((c) => c.key === manualAddForm.clientKey) || null,
+    [customers, manualAddForm.clientKey],
+  );
+
+  const manualAddFacilityMatches = useMemo(() => {
+    const q = facilitySearchQuery.trim().toLowerCase();
+    let result = [...customers];
+    if (q) {
+      result = result.filter((c: any) => {
+        const name = String(c.client?.name || "").toLowerCase();
+        const location = String(c.client?.location || "").toLowerCase();
+        const number = String(c.client?.number || "").toLowerCase();
+        const contact = String(c.client?.contactPerson || "").toLowerCase();
+        return (
+          name.includes(q) ||
+          location.includes(q) ||
+          number.includes(q) ||
+          contact.includes(q)
+        );
+      });
+    }
+    result.sort((a: any, b: any) =>
+      String(a.client?.name || "").localeCompare(String(b.client?.name || "")),
+    );
+    return result.slice(0, 80);
+  }, [customers, facilitySearchQuery]);
 
   const openContactsDialog = (clientRow: any) => {
     setActiveCRMClient(clientRow);
@@ -2281,6 +2312,8 @@ export default function InstalledMachinesPage({ isEngineerView = false }: { isEn
     setShowBulkUploadPanel(false);
     setShowSchedulePanel(false);
     setManualAddForm(EMPTY_MANUAL_ADD_FORM);
+    setFacilitySearchQuery("");
+    setFacilitySearchOpen(false);
     setShowManualAddDialog(true);
   };
 
@@ -2293,19 +2326,19 @@ export default function InstalledMachinesPage({ isEngineerView = false }: { isEn
     };
 
     if (manualAddForm.facilityMode === "existing") {
-      if (!manualAddForm.clientKey) {
-        toast({
-          title: "Facility required",
-          description: "Select a facility or switch to enter a new one.",
-          variant: "destructive",
-        });
-        return;
-      }
-      const customer = customers.find((c) => c.key === manualAddForm.clientKey);
+      const typedName = facilitySearchQuery.trim().toLowerCase();
+      const exactNameMatches = typedName
+        ? customers.filter((c) =>
+            namesMatch(c.client?.name, typedName),
+          )
+        : [];
+      const customer =
+        customers.find((c) => c.key === manualAddForm.clientKey) ||
+        (exactNameMatches.length === 1 ? exactNameMatches[0] : undefined);
       if (!customer) {
         toast({
-          title: "Facility not found",
-          description: "Please select a valid facility.",
+          title: "Facility required",
+          description: "Type a facility name and select it from the list.",
           variant: "destructive",
         });
         return;
@@ -2391,6 +2424,8 @@ export default function InstalledMachinesPage({ isEngineerView = false }: { isEn
       });
       setShowManualAddDialog(false);
       setManualAddForm(EMPTY_MANUAL_ADD_FORM);
+      setFacilitySearchQuery("");
+      setFacilitySearchOpen(false);
     } catch (err: any) {
       toast({
         title: "Save failed",
@@ -4134,7 +4169,9 @@ export default function InstalledMachinesPage({ isEngineerView = false }: { isEn
               <select
                 className="mt-1 w-full rounded border px-3 py-2 text-sm"
                 value={manualAddForm.facilityMode}
-                onChange={(e) =>
+                onChange={(e) => {
+                  setFacilitySearchQuery("");
+                  setFacilitySearchOpen(false);
                   setManualAddForm((prev) => ({
                     ...prev,
                     facilityMode: e.target.value as "existing" | "custom",
@@ -4143,8 +4180,8 @@ export default function InstalledMachinesPage({ isEngineerView = false }: { isEn
                     customFacilityLocation: "",
                     customFacilityPhone: "",
                     customContactPerson: "",
-                  }))
-                }
+                  }));
+                }}
               >
                 <option value="existing">Select existing facility</option>
                 <option value="custom">Enter new facility</option>
@@ -4152,26 +4189,78 @@ export default function InstalledMachinesPage({ isEngineerView = false }: { isEn
             </div>
 
             {manualAddForm.facilityMode === "existing" ? (
-              <div>
+              <div className="relative">
                 <Label>Facility *</Label>
-                <select
-                  className="mt-1 w-full rounded border px-3 py-2 text-sm"
-                  value={manualAddForm.clientKey}
-                  onChange={(e) =>
-                    setManualAddForm((prev) => ({
-                      ...prev,
-                      clientKey: e.target.value,
-                    }))
-                  }
-                >
-                  <option value="">Select facility…</option>
-                  {customers.map((c) => (
-                    <option key={c.key} value={c.key}>
-                      {c.client?.name}
-                      {c.client?.location ? ` · ${c.client.location}` : ""}
-                    </option>
-                  ))}
-                </select>
+                <div className="relative mt-1">
+                  <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={facilitySearchQuery}
+                    autoComplete="off"
+                    placeholder="Type a facility name…"
+                    className="pl-8"
+                    onFocus={() => setFacilitySearchOpen(true)}
+                    onChange={(e) => {
+                      const q = e.target.value;
+                      setFacilitySearchQuery(q);
+                      setFacilitySearchOpen(true);
+                      setManualAddForm((prev) => ({ ...prev, clientKey: "" }));
+                    }}
+                    onBlur={() => {
+                      window.setTimeout(() => setFacilitySearchOpen(false), 150);
+                    }}
+                  />
+                </div>
+                {facilitySearchOpen ? (
+                  <div className="mt-1 max-h-56 overflow-y-auto rounded-md border bg-background shadow-sm">
+                    {manualAddFacilityMatches.length === 0 ? (
+                      <div className="px-3 py-2.5 text-sm text-muted-foreground">
+                        {facilitySearchQuery.trim()
+                          ? "No matching facilities"
+                          : "No facilities available"}
+                      </div>
+                    ) : (
+                      manualAddFacilityMatches.map((c: any) => (
+                        <button
+                          key={c.key}
+                          type="button"
+                          className={`block w-full px-3 py-2.5 text-left text-sm hover:bg-muted ${
+                            manualAddForm.clientKey === c.key ? "bg-muted" : ""
+                          }`}
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => {
+                            setManualAddForm((prev) => ({
+                              ...prev,
+                              clientKey: c.key,
+                            }));
+                            setFacilitySearchQuery(c.client?.name || "");
+                            setFacilitySearchOpen(false);
+                          }}
+                        >
+                          <span className="font-medium">
+                            {c.client?.name || "Unnamed facility"}
+                          </span>
+                          <span className="mt-0.5 block text-xs text-muted-foreground">
+                            {[c.client?.location, c.client?.number]
+                              .filter(Boolean)
+                              .join(" · ") || "No location"}
+                          </span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                ) : null}
+                {selectedManualFacility?.client?.name ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Selected: {selectedManualFacility.client.name}
+                    {selectedManualFacility.client.location
+                      ? ` · ${selectedManualFacility.client.location}`
+                      : ""}
+                  </p>
+                ) : (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Type the facility name to list matching facilities.
+                  </p>
+                )}
               </div>
             ) : (
               <div className="space-y-3 rounded-lg border bg-muted/20 p-3">

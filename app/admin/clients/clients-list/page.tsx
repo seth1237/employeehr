@@ -12,13 +12,13 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Mail, 
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Mail, 
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -26,7 +26,7 @@ import { Mail,
   DialogFooter,
 } from "@/components/ui/dialog";
 import { generateStatementOfAccountPdf } from "@/lib/stock-document-pdf";
-import { Mail, 
+import {
   Download,
   FileText,
   MapPin,

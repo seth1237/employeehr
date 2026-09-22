@@ -9,6 +9,7 @@ import {
   uploadLogo,
   uploadExpenseProof,
   uploadEmailAsset,
+  uploadServiceContract,
 } from "../middleware/upload.middleware";
 import WarehouseController from "../controllers/warehouseController";
 import { InstalledMachineController } from "../controllers/installedMachineController";
@@ -426,6 +427,15 @@ router.patch(
 router.delete(
   "/installed-machines/:id",
   InstalledMachineController.deleteInstalledMachine,
+);
+router.post(
+  "/installed-machines/:id/service-contract",
+  uploadServiceContract.single("file"),
+  InstalledMachineController.uploadServiceContract,
+);
+router.delete(
+  "/installed-machines/:id/service-contract",
+  InstalledMachineController.deleteServiceContract,
 );
 
 // Candidates: products from converted & delivered invoices eligible to be marked as Installed

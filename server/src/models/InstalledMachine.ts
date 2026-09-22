@@ -29,6 +29,9 @@ interface IInstalledMachine {
   attendantRole?: string;
   isTrained?: boolean;
   photoUrl?: string;
+  serviceContractUrl?: string;
+  serviceContractName?: string;
+  serviceContractUploadedAt?: Date;
   visitId?: string;
   createdBy?: string;
   createdAt?: Date;
@@ -68,6 +71,9 @@ const installedMachineSchema = new Schema<IInstalledMachine>(
     attendantRole: { type: String },
     isTrained: { type: Boolean, default: false },
     photoUrl: { type: String },
+    serviceContractUrl: { type: String },
+    serviceContractName: { type: String },
+    serviceContractUploadedAt: { type: Date },
     visitId: { type: String, index: true },
     createdBy: { type: String },
   },

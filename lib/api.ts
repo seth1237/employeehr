@@ -967,6 +967,30 @@ export const stockApi = {
     client.patch<any>(`/api/stock/installed-machines/${id}`, data),
   deleteInstalledMachine: (id: string) =>
     client.delete<any>(`/api/stock/installed-machines/${id}`),
+  uploadMachineServiceContract: async (id: string, file: File) => {
+    const token = getToken();
+    const headers: Record<string, string> = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const form = new FormData();
+    form.append("file", file);
+    const response = await fetch(
+      `${API_URL}/api/stock/installed-machines/${id}/service-contract`,
+      { method: "POST", headers, body: form },
+    );
+    const data = await response.text().then((text) => {
+      try {
+        return text ? JSON.parse(text) : null;
+      } catch {
+        return null;
+      }
+    });
+    if (!response.ok) {
+      throw new Error(data?.message || "Failed to upload service contract");
+    }
+    return data;
+  },
+  deleteMachineServiceContract: (id: string) =>
+    client.delete<any>(`/api/stock/installed-machines/${id}/service-contract`),
   bulkUploadInstalledMachines: async (file: File) => {
     const token = getToken();
     const headers: Record<string, string> = {};

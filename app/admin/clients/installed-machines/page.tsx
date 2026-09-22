@@ -37,6 +37,7 @@ import {
   Upload,
   Inbox,
   Search,
+  Trash2,
 } from "lucide-react";
 import {
   Dialog,
@@ -71,6 +72,9 @@ interface InstalledMachine {
   attendantRole?: string;
   isTrained?: boolean;
   photoUrl?: string;
+  serviceContractUrl?: string;
+  serviceContractName?: string;
+  serviceContractUploadedAt?: string;
   notes?: string;
   invoiceId?: string;
   quotationId?: string;
@@ -387,6 +391,12 @@ function formatDate(dateStr?: string) {
   return new Date(dateStr).toLocaleDateString();
 }
 
+function resolvePublicFileUrl(url?: string) {
+  if (!url) return "";
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  return `${API_URL}${url.startsWith("/") ? url : `/${url}`}`;
+}
+
 function toInputDate(dateStr?: string) {
   if (!dateStr) return "";
   return new Date(dateStr).toISOString().split("T")[0];
@@ -630,7 +640,9 @@ export default function InstalledMachinesPage({ isEngineerView = false }: { isEn
   const [scheduleForm, setScheduleForm] =
     useState<ScheduleInstallationForm>(EMPTY_SCHEDULE_FORM);
   const [uploadingMachines, setUploadingMachines] = useState(false);
+  const [uploadingContract, setUploadingContract] = useState(false);
   const machineFileInputRef = useRef<HTMLInputElement | null>(null);
+  const contractFileInputRef = useRef<HTMLInputElement | null>(null);
   const [hoveredCandidate, setHoveredCandidate] = useState<string | null>(null);
 
   // Clients CRM
@@ -2271,6 +2283,71 @@ export default function InstalledMachinesPage({ isEngineerView = false }: { isEn
     }
   };
 
+  const applyMachineUpdate = (updated: InstalledMachine) => {
+    const next: InstalledMachine = {
+      ...updated,
+      serviceContractUrl: updated.serviceContractUrl,
+      serviceContractName: updated.serviceContractName,
+      serviceContractUploadedAt: updated.serviceContractUploadedAt,
+    };
+    setMachines((prev) =>
+      prev.map((m) => (m._id === next._id ? { ...m, ...next } : m)),
+    );
+    setSelectedMachine((prev) =>
+      prev?._id === next._id ? { ...prev, ...next } : prev,
+    );
+  };
+
+  const uploadServiceContract = async (machine: InstalledMachine, file: File) => {
+    if (!machine._id) return;
+    setUploadingContract(true);
+    try {
+      const res = await stockApi.uploadMachineServiceContract(machine._id, file);
+      if (res?.data) applyMachineUpdate(res.data);
+      toast({
+        title: "Service contract saved",
+        description: file.name,
+      });
+    } catch (err: any) {
+      toast({
+        title: "Upload failed",
+        description: err?.message || "Could not save the service contract.",
+        variant: "destructive",
+      });
+    } finally {
+      setUploadingContract(false);
+      if (contractFileInputRef.current) contractFileInputRef.current.value = "";
+    }
+  };
+
+  const removeServiceContract = async (machine: InstalledMachine) => {
+    if (!machine._id) return;
+    if (!window.confirm("Remove the service contract from this machine?")) return;
+    setUploadingContract(true);
+    try {
+      const res = await stockApi.deleteMachineServiceContract(machine._id);
+      if (res?.data) {
+        applyMachineUpdate(res.data);
+      } else {
+        applyMachineUpdate({
+          ...machine,
+          serviceContractUrl: undefined,
+          serviceContractName: undefined,
+          serviceContractUploadedAt: undefined,
+        });
+      }
+      toast({ title: "Service contract removed" });
+    } catch (err: any) {
+      toast({
+        title: "Remove failed",
+        description: err?.message || "Could not remove the service contract.",
+        variant: "destructive",
+      });
+    } finally {
+      setUploadingContract(false);
+    }
+  };
+
   const saveSelectedCandidates = async () => {
     const keys = Object.keys(selectedItems);
     if (!keys.length) return alert("Select machines to save");
@@ -3448,6 +3525,12 @@ export default function InstalledMachinesPage({ isEngineerView = false }: { isEn
                                         SN: {m.serialNumber}
                                       </div>
                                     )}
+                                    {m.serviceContractUrl ? (
+                                      <div className="mt-0.5 flex items-center gap-1 text-[11px] text-teal-700">
+                                        <FileText className="h-3 w-3" />
+                                        Contract
+                                      </div>
+                                    ) : null}
                                   </div>
                                 </td>
                                 <td className="px-3 py-2 align-top">
@@ -3562,6 +3645,12 @@ export default function InstalledMachinesPage({ isEngineerView = false }: { isEn
                             <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
                               <span className="truncate">{m.client?.location || "No Location"}</span>
                             </div>
+                            {m.serviceContractUrl ? (
+                              <div className="mt-1 flex items-center gap-1 text-[11px] text-teal-700">
+                                <FileText className="h-3 w-3" />
+                                Service contract on file
+                              </div>
+                            ) : null}
                           </MobileCard>
                         ))}
                       </MobileCardList>
@@ -3766,6 +3855,85 @@ export default function InstalledMachinesPage({ isEngineerView = false }: { isEn
                         <p className="text-sm mt-1">{selectedMachine.notes}</p>
                       </div>
                     )}
+
+                    <div className="rounded-xl border p-3 space-y-3">
+                      <div>
+                        <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                          Service contract
+                        </Label>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Upload a PDF, Word document, or image and save it on this machine.
+                        </p>
+                      </div>
+                      <input
+                        ref={contractFileInputRef}
+                        type="file"
+                        className="hidden"
+                        accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.webp,application/pdf"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) void uploadServiceContract(selectedMachine, file);
+                        }}
+                      />
+                      {selectedMachine.serviceContractUrl ? (
+                        <div className="space-y-2">
+                          <div className="flex items-start gap-2 rounded-lg bg-muted/50 px-3 py-2">
+                            <FileText className="mt-0.5 h-4 w-4 shrink-0 text-teal-700" />
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium">
+                                {selectedMachine.serviceContractName || "Service contract"}
+                              </p>
+                              {selectedMachine.serviceContractUploadedAt ? (
+                                <p className="text-xs text-muted-foreground">
+                                  Saved {formatDate(selectedMachine.serviceContractUploadedAt)}
+                                </p>
+                              ) : null}
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Button size="sm" variant="outline" asChild>
+                              <a
+                                href={resolvePublicFileUrl(selectedMachine.serviceContractUrl)}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                <Download className="mr-1.5 h-3.5 w-3.5" />
+                                View / Download
+                              </a>
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={uploadingContract}
+                              onClick={() => contractFileInputRef.current?.click()}
+                            >
+                              <Upload className="mr-1.5 h-3.5 w-3.5" />
+                              {uploadingContract ? "Uploading..." : "Replace"}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-destructive hover:text-destructive"
+                              disabled={uploadingContract}
+                              onClick={() => void removeServiceContract(selectedMachine)}
+                            >
+                              <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                              Remove
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={uploadingContract}
+                          onClick={() => contractFileInputRef.current?.click()}
+                        >
+                          <Upload className="mr-1.5 h-3.5 w-3.5" />
+                          {uploadingContract ? "Uploading..." : "Upload service contract"}
+                        </Button>
+                      )}
+                    </div>
 
                     <div className="flex flex-wrap gap-2 pt-2">
                       <Button

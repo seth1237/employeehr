@@ -165,3 +165,26 @@ export const uploadEmailAsset = multer({
   fileFilter,
   limits: { fileSize: 8 * 1024 * 1024 },
 })
+
+const serviceContractsDir = path.join(process.cwd(), "uploads/service-contracts")
+if (!fs.existsSync(serviceContractsDir)) {
+  fs.mkdirSync(serviceContractsDir, { recursive: true })
+}
+
+const serviceContractStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, serviceContractsDir)
+  },
+  filename: (_req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9)
+    const ext = path.extname(file.originalname)
+    const name = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9]/g, "_")
+    cb(null, `${name}-${uniqueSuffix}${ext}`)
+  },
+})
+
+export const uploadServiceContract = multer({
+  storage: serviceContractStorage,
+  fileFilter: applicationFileFilter,
+  limits: { fileSize: 15 * 1024 * 1024 },
+})

@@ -1,5 +1,6 @@
 import type { Response } from "express";
 import fs from "fs/promises";
+import path from "path";
 import type { AuthenticatedRequest } from "../middleware/auth";
 import { InstalledMachine } from "../models/InstalledMachine";
 import { CreditNote } from "../models/CreditNote";
@@ -116,6 +117,22 @@ function parseFlexibleDate(value: string): Date | undefined {
 function looksLikePhone(value: string) {
   const digits = String(value || "").replace(/\D/g, "");
   return digits.length >= 7;
+}
+
+const SERVICE_CONTRACTS_DIR = path.join(process.cwd(), "uploads/service-contracts");
+
+function serviceContractFilePath(url?: string | null) {
+  const raw = String(url || "").trim();
+  if (!raw.includes("/uploads/service-contracts/")) return null;
+  const filename = path.basename(raw);
+  if (!filename || filename.includes("..")) return null;
+  return path.join(SERVICE_CONTRACTS_DIR, filename);
+}
+
+async function removeServiceContractFile(url?: string | null) {
+  const diskPath = serviceContractFilePath(url);
+  if (!diskPath) return;
+  await fs.unlink(diskPath).catch(() => undefined);
 }
 
 export class InstalledMachineController {
@@ -515,6 +532,7 @@ export class InstalledMachineController {
         return res
           .status(404)
           .json({ success: false, message: "Installed machine not found" });
+      await removeServiceContractFile((deleted as any).serviceContractUrl);
       return res
         .status(200)
         .json({ success: true, message: "Machine deleted" });
@@ -522,6 +540,98 @@ export class InstalledMachineController {
       return res.status(500).json({
         success: false,
         message: error.message || "Failed to delete installed machine",
+      });
+    }
+  }
+
+  static async uploadServiceContract(
+    req: AuthenticatedRequest,
+    res: Response,
+  ) {
+    const file = req.file as Express.Multer.File | undefined;
+    try {
+      const org_id = req.user?.org_id;
+      if (!org_id) {
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+      }
+      const id = String(req.params.id || "").trim();
+      if (!id) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Installed machine id required" });
+      }
+      if (!file?.filename) {
+        return res.status(400).json({
+          success: false,
+          message: "Choose a contract file to upload (PDF, Word, or image).",
+        });
+      }
+
+      const machine = await InstalledMachine.findOne({ _id: id, org_id });
+      if (!machine) {
+        await fs.unlink(file.path).catch(() => undefined);
+        return res
+          .status(404)
+          .json({ success: false, message: "Installed machine not found" });
+      }
+
+      await removeServiceContractFile(machine.serviceContractUrl);
+      machine.serviceContractUrl = `/uploads/service-contracts/${file.filename}`;
+      machine.serviceContractName = file.originalname || file.filename;
+      machine.serviceContractUploadedAt = new Date();
+      await machine.save();
+
+      return res.status(200).json({ success: true, data: machine.toObject() });
+    } catch (error: any) {
+      if (file?.path) await fs.unlink(file.path).catch(() => undefined);
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to upload service contract",
+      });
+    }
+  }
+
+  static async deleteServiceContract(
+    req: AuthenticatedRequest,
+    res: Response,
+  ) {
+    try {
+      const org_id = req.user?.org_id;
+      if (!org_id) {
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+      }
+      const id = String(req.params.id || "").trim();
+      if (!id) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Installed machine id required" });
+      }
+
+      const machine = await InstalledMachine.findOne({ _id: id, org_id });
+      if (!machine) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Installed machine not found" });
+      }
+
+      await removeServiceContractFile(machine.serviceContractUrl);
+      const updated = await InstalledMachine.findOneAndUpdate(
+        { _id: id, org_id },
+        {
+          $unset: {
+            serviceContractUrl: 1,
+            serviceContractName: 1,
+            serviceContractUploadedAt: 1,
+          },
+        },
+        { new: true },
+      ).lean();
+
+      return res.status(200).json({ success: true, data: updated });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to remove service contract",
       });
     }
   }

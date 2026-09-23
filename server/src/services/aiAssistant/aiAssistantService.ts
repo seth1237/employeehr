@@ -1,6 +1,7 @@
 // server/src/services/aiAssistant/aiAssistantService.ts
 
 import { ChatOpenAI } from "@langchain/openai";
+import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import {
   AIMessage,
   HumanMessage,
@@ -35,13 +36,33 @@ function getMaxTokens() {
   return Math.min(Math.max(Math.floor(configured), 256), 2500);
 }
 
-function getModel(maxTokens = getMaxTokens()): ChatOpenAI {
+function getGeminiApiKey() {
+  return (
+    process.env.GEMINI_API_KEY ||
+    process.env.GOOGLE_AI_API_KEY ||
+    process.env.GOOGLE_GENERATIVE_AI_API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    ""
+  ).trim();
+}
+
+function getModel(maxTokens = getMaxTokens()) {
+  const geminiKey = getGeminiApiKey();
+  if (geminiKey) {
+    return new ChatGoogleGenerativeAI({
+      model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
+      apiKey: geminiKey,
+      temperature: 0.1,
+      maxOutputTokens: maxTokens,
+    });
+  }
+
   const openRouterKey = process.env.OPENROUTER_API_KEY;
   const openAiKey = process.env.OPENAI_API_KEY;
 
   if (!openRouterKey && !openAiKey) {
     throw new Error(
-      "AI assistant is not configured. Add OPENROUTER_API_KEY or OPENAI_API_KEY to server/.env to enable it."
+      "AI assistant is not configured. Add GEMINI_API_KEY (Google AI Studio) to server/.env to enable it.",
     );
   }
 
@@ -271,10 +292,16 @@ function toLangChainMessages(history: ChatTurn[], systemPrompt: string): BaseMes
 
 export class AiAssistantService {
   static isConfigured(): boolean {
-    return Boolean(process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY);
+    return Boolean(getGeminiApiKey() || process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY);
   }
 
   static getModelInfo(): { model: string; provider: string } {
+    if (getGeminiApiKey()) {
+      return {
+        provider: "google",
+        model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
+      };
+    }
     if (process.env.OPENROUTER_API_KEY) {
       return {
         provider: "openrouter",
@@ -388,7 +415,7 @@ export class AiAssistantService {
       if (/\b401\b/i.test(messageText) || /invalid.*(api|key)/i.test(messageText)) {
         return {
           answer:
-            "The AI service API key looks invalid. Ask your administrator to update OPENROUTER_API_KEY or OPENAI_API_KEY.",
+            "The AI service API key looks invalid. Ask your administrator to update GEMINI_API_KEY in server/.env.",
           toolsUsed: [],
         };
       }

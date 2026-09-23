@@ -34,7 +34,7 @@ export class AiAssistantController {
       if (!AiAssistantService.isConfigured()) {
         return res.status(503).json({
           success: false,
-          message: "AI assistant is not configured. Set OPENROUTER_API_KEY in server/.env to enable it.",
+          message: "AI assistant is not configured. Set GEMINI_API_KEY in server/.env to enable it.",
         })
       }
 

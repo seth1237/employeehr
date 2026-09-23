@@ -343,7 +343,7 @@ function ExpenseClaimsInner() {
               </Button>
             </div>
           </form>
-        </FinanceTableCard
+        </FinanceTableCard>
 
         <FinanceTableCard title="Claims register">
           <div className="overflow-x-auto">

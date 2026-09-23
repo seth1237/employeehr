@@ -24,6 +24,7 @@ import {
 } from "@/components/engineer/engineer-ui"
 import { useEngineerBranding } from "@/components/engineer/branding"
 
+const PAGE_SIZE = 8
 const FILTERS = [
   { id: "mine", label: "Mine / open" },
   { id: "installations", label: "Installations" },
@@ -57,6 +58,7 @@ function WorkOrdersInner() {
   const [status, setStatus] = useState(searchParams.get("status") || "")
   const [assetId, setAssetId] = useState(searchParams.get("assetId") || "")
   const [q, setQ] = useState("")
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
   const [createOpen, setCreateOpen] = useState(false)
   const [assets, setAssets] = useState<any[]>([])
   const [saving, setSaving] = useState(false)
@@ -103,6 +105,13 @@ function WorkOrdersInner() {
         .includes(needle),
     )
   }, [rows, q])
+
+  const shown = visible.slice(0, visibleCount)
+  const hasMore = visible.length > shown.length
+
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE)
+  }, [filter, status, assetId, q])
 
   const create = async () => {
     if (!form.machineId || !form.serviceType.trim()) {
@@ -229,14 +238,14 @@ function WorkOrdersInner() {
                 </tr>
               </thead>
               <tbody>
-                {visible.length === 0 ? (
+                {shown.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="px-4 py-10 text-center text-muted-foreground">
                       No work orders in this view.
                     </td>
                   </tr>
                 ) : (
-                  visible.map((row) => (
+                  shown.map((row) => (
                     <tr key={row._id} className="border-t hover:bg-muted/30">
                       <td className="px-4 py-3">
                         <Link href={`/engineer/work-orders/${row._id}`} className="font-medium hover:underline">
@@ -269,12 +278,12 @@ function WorkOrdersInner() {
           </DesktopTableShell>
 
           <MobileCardList label="Work orders">
-            {visible.length === 0 ? (
+            {shown.length === 0 ? (
               <MobileCard>
                 <p className="py-6 text-center text-sm text-muted-foreground">No work orders in this view.</p>
               </MobileCard>
             ) : (
-              visible.map((row) => (
+              shown.map((row) => (
                 <MobileCard key={row._id} className="p-0">
                   <Link href={`/engineer/work-orders/${row._id}`} className="flex items-start gap-3 px-4 py-3">
                     <div className="min-w-0 flex-1">
@@ -308,6 +317,16 @@ function WorkOrdersInner() {
           </MobileCardList>
         </CardContent>
       </Card>
+
+      {hasMore ? (
+        <Button
+          variant="outline"
+          className="w-full"
+          onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
+        >
+          View more ({visible.length - shown.length} left)
+        </Button>
+      ) : null}
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent>

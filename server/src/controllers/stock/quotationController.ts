@@ -117,6 +117,14 @@ export class QuotationController {
         query.createdBy = String(userId)
       }
 
+      const statusFilter = typeof req.query.status === "string" ? req.query.status.trim() : ""
+      if (statusFilter) query.status = statusFilter
+
+      if (String(req.query.count) === "1") {
+        const count = await StockQuotation.countDocuments(query)
+        return res.status(200).json({ success: true, data: { count } })
+      }
+
       const requestedPage = Number(req.query.page)
       const requestedLimit = Number(req.query.limit)
       const paginated =

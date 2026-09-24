@@ -2,6 +2,7 @@
 
 import { getToken, logout } from "./auth";
 import API_URL, { getApiUrl } from "./apiBase";
+import { fetchNoStore, readResponseText, withNoStoreHeaders } from "./apiFetch";
 import { parseApiJson } from "./safe-json";
 import type {
   ApiResponse,
@@ -52,21 +53,24 @@ class ApiClient {
     }
 
     try {
-      const response = await fetch(`${this.baseURL}${endpoint}`, {
+      const requestInit: RequestInit = {
         ...options,
         cache: "no-store",
-        headers,
-      });
+        headers: withNoStoreHeaders(headers),
+      };
+      let response = await fetchNoStore(`${this.baseURL}${endpoint}`, requestInit);
+      let text = await readResponseText(response);
 
-      let data: any = null;
-      let text: string | null = null;
-      try {
-        const body = await response.text();
-        text = body;
-        data = parseApiJson(body);
-      } catch {
-        data = { success: false, message: "Invalid response" };
+      // CORS 304 / empty cached bodies: retry once with a cache-buster.
+      if (!text.trim() && response.status !== 204 && response.status !== 401 && options.method !== "HEAD") {
+        response = await fetchNoStore(
+          `${this.baseURL}${endpoint}${endpoint.includes("?") ? "&" : "?"}_=${Date.now()}`,
+          { ...requestInit, cache: "reload" },
+        );
+        text = await readResponseText(response);
       }
+
+      const data = parseApiJson(text);
 
       // Handle 401 Unauthorized
       if (response.status === 401) {
@@ -82,7 +86,7 @@ class ApiClient {
         throw new Error(data?.message || data?.error || text || "Unauthorized");
       }
 
-      if (!response.ok) {
+      if (!response.ok && response.status !== 304) {
         const errorInfo = {
           endpoint: endpoint || "unknown",
           status: response.status || "unknown",

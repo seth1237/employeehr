@@ -49,6 +49,7 @@ import {
 import { getUser, logout } from "@/lib/auth";
 import { getToken } from "@/lib/auth";
 import API_URL from "@/lib/apiBase";
+import { fetchNoStore } from "@/lib/apiFetch";
 import { parseResponse } from "@/lib/fetchUtils";
 import { companyApi } from "@/lib/api";
 import { getFavoriteHrefs } from "@/lib/admin-personalization";
@@ -577,20 +578,16 @@ export default function AdminSidebar({
         if (!token) return;
         const headers = { Authorization: `Bearer ${token}` };
         const [quotesResponse, invoicesResponse] = await Promise.all([
-          fetch(`${API_URL}/api/stock/quotations`, { headers }),
-          fetch(`${API_URL}/api/stock/invoices`, { headers }),
+          fetchNoStore(`${API_URL}/api/stock/quotations?status=pending_approval&count=1`, { headers }),
+          fetchNoStore(`${API_URL}/api/stock/invoices?status=pending_approval&count=1`, { headers }),
         ]);
         const quotesParsed = await parseResponse(quotesResponse);
         const invoicesParsed = await parseResponse(invoicesResponse);
         const pendingQuotes = quotesParsed.response.ok
-          ? (quotesParsed.data?.data || []).filter(
-              (quotation: any) => quotation.status === "pending_approval",
-            ).length
+          ? Number(quotesParsed.data?.data?.count || 0)
           : 0;
         const pendingInvoices = invoicesParsed.response.ok
-          ? (invoicesParsed.data?.data || []).filter(
-              (invoice: any) => invoice.status === "pending_approval",
-            ).length
+          ? Number(invoicesParsed.data?.data?.count || 0)
           : 0;
         if (mounted) {
           setPendingQuotationCount(pendingQuotes);

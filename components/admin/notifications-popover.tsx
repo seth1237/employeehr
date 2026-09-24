@@ -13,6 +13,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { getToken } from "@/lib/auth"
 import API_URL from "@/lib/apiBase"
+import { fetchNoStore } from "@/lib/apiFetch"
 
 export type InboxItem = {
   id: string
@@ -45,8 +46,9 @@ export function AdminNotificationsPopover() {
     if (!token) return
     setLoading(true)
     try {
-      const res = await fetch(`${API_URL}/api/alerts/inbox`, {
+      const res = await fetchNoStore(`${API_URL}/api/alerts/inbox`, {
         headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
       })
       const data = await res.json()
       if (data?.success) {

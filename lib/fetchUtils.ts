@@ -1,4 +1,4 @@
-import { rewriteApiUrl } from './apiBase'
+import { fetchNoStore } from './apiFetch'
 import { getToken } from './auth'
 import { parseApiJson, type SafeApiJson } from './safe-json'
 
@@ -64,16 +64,13 @@ export async function parseResponse<T = any>(response: Response): Promise<Parsed
 }
 
 export async function fetchJson<T = any>(input: RequestInfo, init?: RequestInit): Promise<ParsedResponse<T>> {
-  const url = typeof input === 'string' ? rewriteApiUrl(input) : input
-  
-  // Merge auth headers if token exists
   const token = getToken()
   const headers = {
     ...init?.headers,
     ...(token ? { 'Authorization': `Bearer ${token}` } : {})
   }
   
-  const response = await fetch(url, {
+  const response = await fetchNoStore(input, {
     ...init,
     headers
   })

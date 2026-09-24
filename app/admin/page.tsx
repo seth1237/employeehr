@@ -206,8 +206,12 @@ export default function AdminDashboard() {
       setIsRefreshing(true)
       setError(null)
 
-      const statsRes = await api.dashboard.getStats()
-      
+      let statsRes = await api.dashboard.getStats()
+      const statsMessage = String((statsRes as any)?.message || "")
+      if (!statsRes?.success && /invalid|empty/i.test(statsMessage)) {
+        statsRes = await api.dashboard.getStats()
+      }
+
       if (!statsRes?.success) {
         throw new Error((statsRes as any)?.message || 'Failed to fetch dashboard stats')
       }

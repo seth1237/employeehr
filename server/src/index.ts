@@ -85,6 +85,8 @@ const server = createServer(app)
 const PORT = process.env.PORT || 5010
 
 app.set("trust proxy", 1)
+// Cross-origin 304s arrive with an empty body and break the admin UI.
+app.set("etag", false)
 
 // Initialize WebRTC signaling service
 new WebRTCSignalingService(server)
@@ -162,6 +164,12 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }))
 
 app.use(sanitizeInput)
 app.use(apiLimiter)
+app.use("/api", (_req, res, next) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private")
+  res.setHeader("Pragma", "no-cache")
+  res.setHeader("Expires", "0")
+  next()
+})
 
 // Health check
 app.get("/health", (_req, res) => {

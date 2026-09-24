@@ -7353,6 +7353,14 @@ export class StockController {
         ];
       }
 
+      const statusFilter = typeof req.query.status === "string" ? req.query.status.trim() : ""
+      if (statusFilter) query.status = statusFilter
+
+      if (String(req.query.count) === "1") {
+        const count = await StockInvoice.countDocuments(query)
+        return res.status(200).json({ success: true, data: { count } })
+      }
+
       const invoices = await StockInvoice.find(query)
         .sort({ createdAt: -1 })
         .lean();

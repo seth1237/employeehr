@@ -270,11 +270,11 @@ export default function WarehouseManagementSystemPage() {
       stockApi.getProducts(),
     ])
       .then(([warehousesRes, productsRes]) => {
-        if (warehousesRes.success) {
+        if (warehousesRes?.success) {
           setWarehouses(warehousesRes.data || [])
           if ((warehousesRes.data || []).length === 1) setActive((warehousesRes.data || [])[0])
         }
-        if (productsRes.success) {
+        if (productsRes?.success) {
           setProducts(productsRes.data || [])
         }
       })
@@ -291,7 +291,7 @@ export default function WarehouseManagementSystemPage() {
   const persistWarehouseLayout = async (objects: any[]) => {
     if (!active?._id) return
     const res = await stockApi.updateWarehouse(active._id, { layoutObjects: objects })
-    if (res.success && res.data) {
+    if (res?.success && res.data) {
       const updated = res.data
       setWarehouses((prev) => prev.map((item) => (item._id === updated._id ? updated : item)))
       setActive(updated)

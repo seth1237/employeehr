@@ -1,7 +1,7 @@
 // Centralized API service for all HTTP requests
 
 import { getToken, logout } from "./auth";
-import API_URL from "./apiBase";
+import API_URL, { getApiUrl } from "./apiBase";
 import { parseApiJson } from "./safe-json";
 import type {
   ApiResponse,
@@ -28,10 +28,8 @@ import type {
 
 // HTTP client with error handling
 class ApiClient {
-  private baseURL: string;
-
-  constructor(baseURL: string) {
-    this.baseURL = baseURL;
+  private get baseURL() {
+    return getApiUrl();
   }
 
   private async request<T>(
@@ -130,6 +128,10 @@ class ApiClient {
         } as ApiResponse<T>;
       }
 
+      if (typeof data.success !== "boolean") {
+        return { ...data, success: response.ok };
+      }
+
       return data;
     } catch (error) {
       const errorMessage =
@@ -178,7 +180,7 @@ class ApiClient {
   }
 }
 
-const client = new ApiClient(API_URL);
+const client = new ApiClient();
 
 // Authentication API
 export const authApi = {

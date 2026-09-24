@@ -195,7 +195,7 @@ export class CompanyEmailController {
         fromEmail || company.emailConfig?.fromEmail || username,
       )
 
-      if (result.success) {
+      if (result?.success) {
         // Persist verified config from the values that actually worked
         company.emailConfig = {
           enabled: enabled !== false,

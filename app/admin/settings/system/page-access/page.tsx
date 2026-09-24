@@ -138,11 +138,11 @@ export default function PageAccessSettingsPage() {
           api.branches.getAll({ active: true }),
         ])
 
-        if (departmentsResponse.status === "fulfilled" && departmentsResponse.value.success) {
+        if (departmentsResponse.status === "fulfilled" && departmentsResponse.value?.success) {
           setDepartments(departmentsResponse.value.data || [])
         }
 
-        if (branchesResponse.status === "fulfilled" && branchesResponse.value.success) {
+        if (branchesResponse.status === "fulfilled" && branchesResponse.value?.success) {
           setBranches(branchesResponse.value.data || [])
         }
 

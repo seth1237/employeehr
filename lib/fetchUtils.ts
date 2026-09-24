@@ -1,19 +1,12 @@
-import { API_URL } from './apiBase'
+import { rewriteApiUrl } from './apiBase'
 import { getToken } from './auth'
+import { parseApiJson, type SafeApiJson } from './safe-json'
 
 export interface ParsedResponse<T = any> {
   response: Response
-  data: T | null
+  data: T
   errorMessage: string | null
   rawText: string
-}
-
-function parseRawText(rawText: string): any {
-  try {
-    return rawText ? JSON.parse(rawText) : null
-  } catch {
-    return null
-  }
 }
 
 function getErrorMessage(response: Response, parsedBody: any, rawText: string): string {
@@ -60,7 +53,7 @@ function getErrorMessage(response: Response, parsedBody: any, rawText: string): 
 
 export async function parseResponse<T = any>(response: Response): Promise<ParsedResponse<T>> {
   const rawText = await response.text()
-  const data = parseRawText(rawText) as T | null
+  const data = parseApiJson(rawText) as SafeApiJson & T
   const errorMessage = response.ok ? null : getErrorMessage(response, data, rawText)
   return {
     response,
@@ -71,10 +64,7 @@ export async function parseResponse<T = any>(response: Response): Promise<Parsed
 }
 
 export async function fetchJson<T = any>(input: RequestInfo, init?: RequestInit): Promise<ParsedResponse<T>> {
-  let url = input
-  if (typeof input === 'string' && input.startsWith('/api')) {
-    url = `${API_URL}${input}`
-  }
+  const url = typeof input === 'string' ? rewriteApiUrl(input) : input
   
   // Merge auth headers if token exists
   const token = getToken()

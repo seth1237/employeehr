@@ -131,7 +131,7 @@ export default function EmployeeDashboard() {
             headers: { Authorization: `Bearer ${token}` },
           })
           const brandingData = await brandingRes.json()
-          if (brandingData.success) {
+          if (brandingData?.success) {
             setBranding(brandingData.data || {})
           }
         } catch {
@@ -155,18 +155,18 @@ export default function EmployeeDashboard() {
           alertsRes.json(),
         ])
 
-        if (tasksJson.success) setTasks(tasksJson.data || [])
-        if (messagesJson.success) {
+        if (tasksJson?.success) setTasks(tasksJson.data || [])
+        if (messagesJson?.success) {
           const unread = ((messagesJson.data as MessageItem[]) || []).filter((message) => !message.is_read).length
           setMessagesUnread(unread)
         }
-        if (performanceJson.success) setPerformance(performanceJson.data || null)
-        if (alertsJson.success) {
+        if (performanceJson?.success) setPerformance(performanceJson.data || null)
+        if (alertsJson?.success) {
           setAlertsCount(((alertsJson.data as any[]) || []).filter((alert) => !(alert.isRead ?? alert.is_read)).length)
         }
-        if (leaveRes.success) setLeaveBalance(leaveRes.data || null)
-        if (payslipsRes.success) setPayslipsCount((payslipsRes.data || []).length)
-        if (meetingsRes.success) {
+        if (leaveRes?.success) setLeaveBalance(leaveRes.data || null)
+        if (payslipsRes?.success) setPayslipsCount((payslipsRes.data || []).length)
+        if (meetingsRes?.success) {
           const upcoming = ((meetingsRes.data as any[]) || []).filter((meeting) => {
             const startsAt = meeting.scheduled_date || meeting.startTime || meeting.date
             return startsAt ? new Date(startsAt).getTime() >= Date.now() : false

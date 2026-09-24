@@ -24,7 +24,7 @@ function getErrorMessage(response: Response, parsedBody: any, rawText: string): 
     if (typeof parsedBody.error === 'string' && parsedBody.error.trim()) {
       return parsedBody.error
     }
-    if (typeof parsedBody.success === 'boolean' && parsedBody.success === false) {
+    if (typeof parsedBody?.success === 'boolean' && parsedBody?.success === false) {
       if (typeof parsedBody.message === 'string' && parsedBody.message.trim()) {
         return parsedBody.message
       }

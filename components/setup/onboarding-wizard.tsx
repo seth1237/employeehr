@@ -121,7 +121,7 @@ export default function OnboardingWizard() {
       setLoading(true)
       const response = await api.setup.getProgress()
 
-      if (response.success && response.data) {
+      if (response?.success && response.data) {
         setSetupData(response.data)
 
         // If already completed, redirect to dashboard
@@ -181,7 +181,7 @@ export default function OnboardingWizard() {
     try {
       setSaving(true)
       const response = await api.company.updateBranding(companyForm)
-      if (response.success) {
+      if (response?.success) {
         await updateStepProgress("companyInfo", true)
         toast.success("Company information saved!")
         return true
@@ -207,7 +207,7 @@ export default function OnboardingWizard() {
         accentColor: brandingForm.accentColor,
         logoFile: brandingForm.logoFile || undefined,
       })
-      if (response.success) {
+      if (response?.success) {
         await updateStepProgress("branding", true)
         toast.success("Branding saved!")
         return true
@@ -243,7 +243,7 @@ export default function OnboardingWizard() {
         smtpPassword: emailForm.smtpPassword,
       })
 
-      if (response.success) {
+      if (response?.success) {
         await updateStepProgress("emailConfig", true)
         toast.success("Email configuration saved!")
         return true
@@ -286,7 +286,7 @@ export default function OnboardingWizard() {
           password: "TempPassword123!", // Temporary password
         })
 
-        if (response.success) {
+        if (response?.success) {
           successCount++
         }
       }
@@ -323,7 +323,7 @@ export default function OnboardingWizard() {
 
       for (const kpi of validKPIs) {
         const response = await api.kpis.create(kpi)
-        if (response.success) {
+        if (response?.success) {
           successCount++
         }
       }
@@ -400,7 +400,7 @@ export default function OnboardingWizard() {
       setCompleting(true)
       const response = await api.setup.complete()
 
-      if (response.success) {
+      if (response?.success) {
         toast.success("🎉 Setup completed! Welcome to Elevate HR!")
         setTimeout(() => {
           router.push("/admin")
@@ -420,7 +420,7 @@ export default function OnboardingWizard() {
     try {
       const response = await api.setup.skip({ step: "all" })
 
-      if (response.success) {
+      if (response?.success) {
         toast.success("Setup skipped. Redirecting to dashboard...")
         setTimeout(() => {
           router.push("/admin")

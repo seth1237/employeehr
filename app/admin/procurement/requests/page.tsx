@@ -50,9 +50,9 @@ export default function PurchaseRequestsPage() {
         companyApi.getBranding(),
         stockApi.getProducts()
       ])
-      if (prRes.success) setRequests(prRes.data)
-      if (depRes.success) setDepartments(depRes.data)
-      if (catRes.success) setCategories(catRes.data)
+      if (prRes?.success) setRequests(prRes.data)
+      if (depRes?.success) setDepartments(depRes.data)
+      if (catRes?.success) setCategories(catRes.data)
       if (brandRes?.success) setBranding(brandRes.data)
       if (prodRes?.success) setStockProducts(prodRes.data)
     } catch (error) {
@@ -65,7 +65,7 @@ export default function PurchaseRequestsPage() {
   const loadRequests = async () => {
     try {
       const res = await procurementApi.getPurchaseRequests()
-      if (res.success) {
+      if (res?.success) {
         setRequests(res.data)
       }
     } catch (error) {
@@ -108,7 +108,7 @@ export default function PurchaseRequestsPage() {
       }
 
       const res = await procurementApi.createPurchaseRequest(payload)
-      if (res.success) {
+      if (res?.success) {
         setModalOpen(false)
         setDateRequired("")
         setDepartment("")
@@ -139,7 +139,7 @@ export default function PurchaseRequestsPage() {
     try {
       if (!confirm("Are you sure you want to approve this request?")) return;
       const res = await procurementApi.updatePurchaseRequestStatus(id, { status: "approved" });
-      if (res.success) loadRequests()
+      if (res?.success) loadRequests()
     } catch (error) {
       alert("Failed to approve")
     }

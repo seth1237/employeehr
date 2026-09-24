@@ -100,7 +100,7 @@ export default function CreditNotesPage() {
     try {
       const query = statusFilter === "all" ? {} : { status: statusFilter }
       const res = await api.creditNotes.getAll(query)
-      if (res.success) {
+      if (res?.success) {
         setCreditNotes(res.data || [])
       }
     } catch (error: any) {
@@ -114,7 +114,7 @@ export default function CreditNotesPage() {
   const fetchInvoices = async () => {
     try {
       const res = await api.creditNotes.getInvoicesForCreditNote()
-      if (res.success) {
+      if (res?.success) {
         setInvoices(res.data || [])
       }
     } catch (error: any) {
@@ -126,7 +126,7 @@ export default function CreditNotesPage() {
   const fetchReasons = async () => {
     try {
       const res = await api.creditNotes.getReasons()
-      if (res.success) {
+      if (res?.success) {
         setReasons(res.data || REASON_OPTIONS)
       }
     } catch (error) {
@@ -137,7 +137,7 @@ export default function CreditNotesPage() {
   const fetchBranding = async () => {
     try {
       const res = await api.company.getBranding()
-      if (res.success) {
+      if (res?.success) {
         setBranding(res.data || {})
       }
     } catch {
@@ -227,7 +227,7 @@ export default function CreditNotesPage() {
         reasonDetails: reason === "other" ? reasonDetails : undefined,
       })
 
-      if (res.success) {
+      if (res?.success) {
         toast({ description: "Credit note created successfully" })
         resetForm()
         setView("list")
@@ -245,7 +245,7 @@ export default function CreditNotesPage() {
     try {
       setSaving(true)
       const res = await api.creditNotes.issue(id)
-      if (res.success) {
+      if (res?.success) {
         toast({ description: "Credit note issued successfully" })
         fetchCreditNotes({ silent: true })
       }
@@ -263,7 +263,7 @@ export default function CreditNotesPage() {
     try {
       setSaving(true)
       const res = await api.creditNotes.delete(id)
-      if (res.success) {
+      if (res?.success) {
         toast({ description: "Credit note deleted successfully" })
         fetchCreditNotes({ silent: true })
       }

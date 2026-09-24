@@ -185,7 +185,7 @@ export default function AdminAllocationsPage() {
         due_date: taskForm.due_date || undefined,
       })
 
-      if (!response.success) throw new Error(response.message || "Failed to create duty")
+      if (!response?.success) throw new Error(response.message || "Failed to create duty")
 
       toast({ title: "Duty allocated", description: "Task created successfully" })
       setTaskForm({ title: "", description: "", assigned_to: "", priority: "medium", due_date: "" })
@@ -224,7 +224,7 @@ export default function AdminAllocationsPage() {
         unit: kpiForm.unit,
       } as any)
 
-      if (!response.success) throw new Error(response.message || "Failed to create target")
+      if (!response?.success) throw new Error(response.message || "Failed to create target")
 
       toast({ title: "Target allocated", description: "KPI created successfully" })
       setKpiForm({ name: "", description: "", category: "Operations", weight: "50", target: "100", unit: "%" })
@@ -282,7 +282,7 @@ export default function AdminAllocationsPage() {
         goals: goalList as any,
       } as any)
 
-      if (!response.success) throw new Error(response.message || "Failed to create responsibility allocation")
+      if (!response?.success) throw new Error(response.message || "Failed to create responsibility allocation")
 
       toast({ title: "Responsibility allocated", description: "PDP created successfully" })
       setPdpForm({ user_id: "", title: "", description: "", period: new Date().getFullYear().toString() })

@@ -21,7 +21,7 @@ export default function SalesExhibitionsPage() {
         },
       })
       const data = await res.json()
-      if (data.success) {
+      if (data?.success) {
         setExhibitions(data.data)
       } else {
         setError(data.message || "Failed to load")

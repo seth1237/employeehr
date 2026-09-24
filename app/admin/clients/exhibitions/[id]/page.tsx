@@ -41,7 +41,7 @@ export default function ExhibitionDetailsPage() {
     try {
       const leadsRes = await fetch(`${API_URL}/api/exhibitions/${id}/leads`, { headers: { Authorization: `Bearer ${getToken()}` } })
       const leadsData = await leadsRes.json()
-      if (leadsData.success) setLeads(leadsData.data)
+      if (leadsData?.success) setLeads(leadsData.data)
     } catch (e) {
       console.error(e)
     }
@@ -59,13 +59,13 @@ export default function ExhibitionDetailsPage() {
         const exData = await exRes.json()
         const leadsData = await leadsRes.json()
 
-        if (exData.success) {
+        if (exData?.success) {
           setExhibition(exData.data)
         } else {
           setError(exData.message || "Failed to load exhibition")
         }
 
-        if (leadsData.success) {
+        if (leadsData?.success) {
           setLeads(leadsData.data)
         }
       } catch (err: any) {
@@ -171,7 +171,7 @@ export default function ExhibitionDetailsPage() {
       })
 
       const result = await res.json()
-      if (!result.success) throw new Error(result.message)
+      if (!result?.success) throw new Error(result.message)
 
       toast({
         title: "Import Successful",
@@ -201,7 +201,7 @@ export default function ExhibitionDetailsPage() {
         body: JSON.stringify(editingLead),
       })
       const data = await res.json()
-      if (!data.success) throw new Error(data.message)
+      if (!data?.success) throw new Error(data.message)
       
       toast({ title: "Success", description: "Lead updated successfully." })
       setEditingLead(null)
@@ -246,7 +246,7 @@ export default function ExhibitionDetailsPage() {
         body: JSON.stringify({ leadIds: Array.from(selectedLeads) }),
       })
       const data = await res.json()
-      if (!data.success) throw new Error(data.message)
+      if (!data?.success) throw new Error(data.message)
 
       toast({ title: "Deleted", description: data.message })
       setSelectedLeads(new Set())

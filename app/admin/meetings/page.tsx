@@ -63,12 +63,12 @@ export default function MeetingsPage() {
       setError(null)
 
       const brandingRes = await companyApi.getBranding()
-      if (brandingRes.success) {
+      if (brandingRes?.success) {
         setBranding(brandingRes.data || {})
       }
 
       const response = await meetingsApi.getAll()
-      if (response.success) {
+      if (response?.success) {
         setMeetings(response.data || [])
       } else {
         setError(response.message || 'Failed to load meetings')
@@ -85,7 +85,7 @@ export default function MeetingsPage() {
   const fetchMeetings = async () => {
     try {
       const response = await meetingsApi.getAll()
-      if (response.success) {
+      if (response?.success) {
         setMeetings(response.data || [])
         setError(null)
       } else {
@@ -99,7 +99,7 @@ export default function MeetingsPage() {
 
   const createMeeting = async (meetingData: any) => {
     const response = await meetingsApi.create(meetingData)
-    if (response.success) {
+    if (response?.success) {
       await fetchMeetings()
       return
     }
@@ -119,7 +119,7 @@ export default function MeetingsPage() {
   const downloadReport = async (meetingId: string) => {
     try {
       const response = await meetingsApi.getReport(meetingId)
-      if (response.success) {
+      if (response?.success) {
         const blob = new Blob([JSON.stringify(response.data, null, 2)], {
           type: 'application/json',
         })

@@ -57,10 +57,10 @@ export default function BadgesPage() {
       const badgesData = await badgesRes.json()
       const leaderboardData = await leaderboardRes.json()
 
-      if (badgesData.success) {
+      if (badgesData?.success) {
         setUserBadges(badgesData.data)
       }
-      if (leaderboardData.success) {
+      if (leaderboardData?.success) {
         setLeaderboard(leaderboardData.data)
       }
     } catch (error) {

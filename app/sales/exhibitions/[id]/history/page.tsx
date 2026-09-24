@@ -28,13 +28,13 @@ export default function SalesExhibitionHistoryPage() {
         const exData = await exRes.json()
         const leadsData = await leadsRes.json()
 
-        if (exData.success) {
+        if (exData?.success) {
           setExhibition(exData.data)
         } else {
           setError(exData.message || "Failed to load exhibition")
         }
 
-        if (leadsData.success) {
+        if (leadsData?.success) {
           // Filter to only show leads collected by the current user
           const currentUser = getUser()
           const myLeads = leadsData.data.filter((lead: any) => 

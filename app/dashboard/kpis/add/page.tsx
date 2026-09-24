@@ -43,7 +43,7 @@ export default function AddKPIPage() {
                 description: formData.description,
             })
 
-            if (response.success) {
+            if (response?.success) {
                 router.push("/dashboard/kpis")
             } else {
                 setError(response.message || "Failed to create KPI")

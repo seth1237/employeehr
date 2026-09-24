@@ -75,7 +75,7 @@ export default function AdminPlannerPage() {
         api.users.getAll()
       ])
       
-      if (resPlanners.success) {
+      if (resPlanners?.success) {
         setPlanners(resPlanners.data || [])
       }
       if (resUsers) { 

@@ -81,7 +81,7 @@ export default function CommunicationsPage() {
         headers: { Authorization: `Bearer ${getToken()}` },
       });
       const data = await response.json();
-      if (data.success) setJobs(data.data || []);
+      if (data?.success) setJobs(data.data || []);
     } catch (error) {
       console.error('Error fetching jobs:', error);
     }
@@ -96,7 +96,7 @@ export default function CommunicationsPage() {
         headers: { Authorization: `Bearer ${getToken()}` },
       });
       const data = await response.json();
-      if (data.success) setSentEmails(data.data || []);
+      if (data?.success) setSentEmails(data.data || []);
     } catch (error) {
       console.error('Error fetching sent emails:', error);
     } finally {
@@ -112,7 +112,7 @@ export default function CommunicationsPage() {
         { headers: { Authorization: `Bearer ${getToken()}` } }
       );
       const data = await response.json();
-      if (data.success) {
+      if (data?.success) {
         setApplicants(data.data || []);
         setSelectedApplicants(new Set()); // Reset selection
       }
@@ -188,7 +188,7 @@ export default function CommunicationsPage() {
 
       const data = await response.json();
 
-      if (data.success) {
+      if (data?.success) {
         setSentResult(data.data);
         setShowTemplateDialog(false);
         toast({

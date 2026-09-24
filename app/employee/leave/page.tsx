@@ -20,8 +20,8 @@ export default function EmployeeLeavePage() {
                 api.leave.getMyRequests()
             ])
 
-            if (balanceRes.success) setBalance(balanceRes.data)
-            if (requestsRes.success) setRequests(requestsRes.data)
+            if (balanceRes?.success) setBalance(balanceRes.data)
+            if (requestsRes?.success) setRequests(requestsRes.data)
         } catch (error) {
             console.error("Failed to fetch leave data", error)
         } finally {

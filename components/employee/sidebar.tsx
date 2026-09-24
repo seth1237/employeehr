@@ -85,7 +85,7 @@ export function EmployeeSidebar({ isOpen = false, onToggle }: EmployeeSidebarPro
 
       try {
         const response = await companyApi.getPageAccess()
-        if (response.success) {
+        if (response?.success) {
           const userId = user?._id || (user as any)?.userId
           const userSections = userId ? response.data?.adminSectionsByUser?.[userId] : undefined
           const roleSections = response.data?.adminSectionsByRole?.[role] || []

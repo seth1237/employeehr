@@ -30,7 +30,7 @@ export function VerifyOtpForm() {
     setLoading(true)
     try {
       const resp = await api.auth.verifyOtp({ email, otp })
-      if (resp && resp.success) {
+      if (resp && resp?.success) {
         const params = new URLSearchParams({ email, otp })
         router.push(`/auth/reset-password?${params.toString()}`)
       } else {

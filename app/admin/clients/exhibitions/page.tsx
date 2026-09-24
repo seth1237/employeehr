@@ -22,7 +22,7 @@ export default function ExhibitionsPage() {
         },
       })
       const data = await res.json()
-      if (data.success) {
+      if (data?.success) {
         setExhibitions(data.data)
       } else {
         setError(data.message || "Failed to load")

@@ -18,7 +18,7 @@ export default function EmployeePayrollPage() {
         const fetchPayslips = async () => {
             try {
                 const res = await api.payroll.getMyPayslips()
-                if (res.success) {
+                if (res?.success) {
                     setPayslips(res.data)
                 }
             } catch (error) {

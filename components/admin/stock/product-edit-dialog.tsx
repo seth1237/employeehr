@@ -114,7 +114,7 @@ export function ProductEditDialog({
         headers: { Authorization: `Bearer ${getToken()}` },
       });
       const data = await response.json();
-      if (data.success) setManufacturers(data.data);
+      if (data?.success) setManufacturers(data.data);
     } catch (e) {}
   };
 

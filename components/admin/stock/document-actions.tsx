@@ -174,7 +174,7 @@ export function StockDocumentActions({
         body: JSON.stringify({ to: emailTo.trim() }),
       })
       const data = await res.json()
-      if (!res.ok || !data.success) {
+      if (!res.ok || !data?.success) {
         throw new Error(data.message || "Failed to send email")
       }
       toast({ title: "Email sent", description: `Sent to ${emailTo.trim()}` })
@@ -194,7 +194,7 @@ export function StockDocumentActions({
     setBusy("convert")
     try {
       const res = await stockApi.convertQuotation(documentId, transport)
-      if (!res.success) throw new Error(res.message || "Convert failed")
+      if (!res?.success) throw new Error(res.message || "Convert failed")
       const invoiceId = (res.data as { _id?: string })?._id
       const invoiceNumber = (res.data as { invoiceNumber?: string })?.invoiceNumber
       toast({

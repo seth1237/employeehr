@@ -54,7 +54,7 @@ export default function ReportsPage() {
     try {
       setLoading(true)
       const response = await api.reports.getMyReports()
-      if (response.success) {
+      if (response?.success) {
         setReports(response.data)
       } else {
         toast({ description: "Failed to load reports", variant: "destructive" })
@@ -91,7 +91,7 @@ export default function ReportsPage() {
 
     try {
       const response = await api.reports.deleteReport(reportId)
-      if (response.success) {
+      if (response?.success) {
         setReports(reports.filter((r) => r._id !== reportId))
         toast({ description: "Report deleted" })
       }

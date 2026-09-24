@@ -51,9 +51,9 @@ export default function PurchaseOrdersPage() {
         companyApi.getBranding(),
         stockApi.getProducts()
       ])
-      if (ordRes.success) setOrders(ordRes.data)
-      if (supRes.success) setSuppliers(supRes.data)
-      if (reqRes.success) setRequests(reqRes.data)
+      if (ordRes?.success) setOrders(ordRes.data)
+      if (supRes?.success) setSuppliers(supRes.data)
+      if (reqRes?.success) setRequests(reqRes.data)
       if (brandRes?.success) setBranding(brandRes.data)
       if (prodRes?.success) setStockProducts(prodRes.data)
     } catch (error) {
@@ -138,7 +138,7 @@ export default function PurchaseOrdersPage() {
       }
 
       const res = editId ? await procurementApi.updatePurchaseOrder(editId, payload) : await procurementApi.createPurchaseOrder(payload)
-      if (res.success) {
+      if (res?.success) {
         setModalOpen(false)
         setEditId("")
         setSupplierId("")
@@ -175,7 +175,7 @@ export default function PurchaseOrdersPage() {
     try {
       if (!confirm("Issue this PO to the supplier? This changes status to 'issued'.")) return;
       const res = await procurementApi.updatePurchaseOrderStatus(id, { status: "issued" });
-      if (res.success) loadData()
+      if (res?.success) loadData()
     } catch (error) {
       alert("Failed to issue")
     }

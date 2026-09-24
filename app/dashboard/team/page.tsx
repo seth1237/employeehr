@@ -33,7 +33,7 @@ export default function TeamManagement() {
       setLoading(true)
       setError(null)
       const response = await api.users.getAll()
-      if (response.success && response.data) {
+      if (response?.success && response.data) {
         setMembers(response.data)
       }
     } catch (err: any) {
@@ -65,7 +65,7 @@ export default function TeamManagement() {
         password: formData.password || Math.random().toString(36).slice(-8), // Generate random password if not provided
       })
 
-      if (response.success && response.data) {
+      if (response?.success && response.data) {
         setMembers([...members, response.data])
         setFormData({ email: "", firstName: "", lastName: "", role: "" as User['role'], department: "", password: "" })
         setShowForm(false)
@@ -90,7 +90,7 @@ export default function TeamManagement() {
 
       const response = await api.users.delete(id)
 
-      if (!response.success) {
+      if (!response?.success) {
         // Revert on failure
         setMembers(previousMembers)
         setError('Failed to remove team member')

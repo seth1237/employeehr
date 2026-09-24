@@ -146,7 +146,7 @@ export default function FinancialBreakdownPage() {
       setData(finRes.data)
       setBranches(branchesRes.data || [])
       setEmployees(usersRes.data || [])
-      if (companyRes.success) {
+      if (companyRes?.success) {
         setBranding({
           primaryColor: companyRes.data?.primaryColor,
           secondaryColor: companyRes.data?.secondaryColor

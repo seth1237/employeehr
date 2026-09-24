@@ -52,10 +52,10 @@ function GRNContent() {
         stockApi.getProducts(),
         companyApi.getBranding()
       ])
-      if (grnRes.success) setGrns(grnRes.data)
-      if (ordRes.success) setOrders(ordRes.data)
-      if (supRes.success) setSuppliers(supRes.data)
-      if (prodRes.success) setStockProducts(prodRes.data)
+      if (grnRes?.success) setGrns(grnRes.data)
+      if (ordRes?.success) setOrders(ordRes.data)
+      if (supRes?.success) setSuppliers(supRes.data)
+      if (prodRes?.success) setStockProducts(prodRes.data)
       if (brandRes?.success) setBranding(brandRes.data)
     } catch (error) {
       console.error(error)
@@ -120,7 +120,7 @@ function GRNContent() {
       }
 
       const res = await procurementApi.createGRN(payload)
-      if (res.success) {
+      if (res?.success) {
         setModalOpen(false)
         setPurchaseOrderId("")
         setDeliveryNoteNumber("")
@@ -149,7 +149,7 @@ function GRNContent() {
     try {
       if (!confirm("Confirming this GRN will permanently update inventory quantities in the stock module. Proceed?")) return;
       const res = await procurementApi.confirmGRN(id);
-      if (res.success) {
+      if (res?.success) {
         alert("Stock updated successfully!")
         loadData()
       }

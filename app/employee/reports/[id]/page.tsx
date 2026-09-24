@@ -45,7 +45,7 @@ export default function ReportDetailPage() {
     try {
       setLoading(true)
       const response = await api.reports.getReport(params.id as string)
-      if (response.success) {
+      if (response?.success) {
         setReport(response.data)
       } else {
         toast({ description: "Report not found", variant: "destructive" })

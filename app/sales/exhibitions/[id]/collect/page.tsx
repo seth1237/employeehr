@@ -39,7 +39,7 @@ export default function CollectExhibitionDataPage() {
           headers: { Authorization: `Bearer ${getToken()}` },
         })
         const data = await res.json()
-        if (data.success) {
+        if (data?.success) {
           setExhibition(data.data)
         } else {
           setError(data.message || "Failed to load exhibition")
@@ -79,7 +79,7 @@ export default function CollectExhibitionDataPage() {
         body: JSON.stringify(formData),
       })
       const data = await res.json()
-      if (data.success) {
+      if (data?.success) {
         setSuccess(true)
         // Reset form for next entry
         setFormData({

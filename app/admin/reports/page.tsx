@@ -44,7 +44,7 @@ export default function AdminReportsHubPage() {
           },
         })
         const data = await res.json()
-        if (data.success) {
+        if (data?.success) {
           setStats(data.data)
         }
       } catch (error) {

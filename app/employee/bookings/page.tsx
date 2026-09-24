@@ -51,7 +51,7 @@ export default function ResourceBookingPage() {
         headers: { Authorization: `Bearer ${token}` },
       })
       const data = await response.json()
-      if (data.success) {
+      if (data?.success) {
         setBookings(data.data)
       }
     } catch (error) {
@@ -77,7 +77,7 @@ export default function ResourceBookingPage() {
       })
 
       const data = await response.json()
-      if (data.success) {
+      if (data?.success) {
         setBookings([data.data, ...bookings])
         setDialogOpen(false)
         setFormData({

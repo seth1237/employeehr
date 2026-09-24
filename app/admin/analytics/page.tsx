@@ -47,7 +47,7 @@ export default function JobAnalyticsPage() {
       });
       const data = await response.json();
 
-      if (data.success) {
+      if (data?.success) {
         setAnalytics(data.data.jobAnalytics || []);
         setTotals(data.data.totals || { views: 0, applications: 0, conversionRate: 0 });
       }

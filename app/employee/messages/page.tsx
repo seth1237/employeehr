@@ -100,8 +100,8 @@ export default function EmployeeMessagesPage() {
       const inboxData = await inboxRes.json()
       const sentData = await sentRes.json()
 
-      if (inboxData.success) setInboxMessages(inboxData.data)
-      if (sentData.success) setSentMessages(sentData.data)
+      if (inboxData?.success) setInboxMessages(inboxData.data)
+      if (sentData?.success) setSentMessages(sentData.data)
     } catch (error) {
       console.error("Failed to fetch messages:", error)
     } finally {
@@ -118,7 +118,7 @@ export default function EmployeeMessagesPage() {
       })
 
       const data = await response.json()
-      if (data.success) {
+      if (data?.success) {
         setEmployees(data.data || [])
       }
     } catch (error) {
@@ -146,7 +146,7 @@ export default function EmployeeMessagesPage() {
       })
 
       const data = await response.json()
-      if (data.success) {
+      if (data?.success) {
         setComposeOpen(false)
         setRecipientId("")
         setSelectedEmployee(null)

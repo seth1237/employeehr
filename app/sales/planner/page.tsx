@@ -99,7 +99,7 @@ export default function SalesPlannerPage() {
         salesApi.getCategories().catch(() => ({ data: [] })),
         api.company.getBranding().catch(() => ({ data: {} })),
       ])
-      if (plannerRes.success) setPlanners(plannerRes.data || [])
+      if (plannerRes?.success) setPlanners(plannerRes.data || [])
       setNightOutRate(Number(brandingRes.data?.salesNightOutAmount ?? 3000) || 3000)
       setLoggedVisits(historyRes.data?.visits || [])
       setCategories(catRes.data || [])

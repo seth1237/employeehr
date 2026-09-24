@@ -48,7 +48,7 @@ export default function FormBuilderPage() {
         headers: { Authorization: `Bearer ${getToken()}` },
       });
       const jobData = await jobRes.json();
-      if (jobData.success) {
+      if (jobData?.success) {
         setJobTitle(jobData.data.title);
         setFormTitle(`${jobData.data.title} Application Form`);
       }
@@ -58,7 +58,7 @@ export default function FormBuilderPage() {
         headers: { Authorization: `Bearer ${getToken()}` },
       });
       const formData = await formRes.json();
-      if (formData.success) {
+      if (formData?.success) {
         setFormTitle(formData.data.title);
         setFormDescription(formData.data.description || '');
         setFields(formData.data.fields || []);
@@ -139,7 +139,7 @@ export default function FormBuilderPage() {
 
       const data = await response.json();
 
-      if (data.success) {
+      if (data?.success) {
         toast({
           title: 'Success',
           description: 'Application form saved successfully',

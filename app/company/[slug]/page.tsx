@@ -43,7 +43,7 @@ export default function CompanyLoginPage() {
         const response = await fetch(`${API_URL}/api/auth/validate-company/${slug}`)
         const data = await response.json()
 
-        if (data.success && data.data) {
+        if (data?.success && data.data) {
           setCompany(data.data.company)
         } else {
           setError("Company not found or inactive")
@@ -92,7 +92,7 @@ export default function CompanyLoginPage() {
 
         data = await response.json()
 
-        if (data.success && data.data?.requiresOtp) {
+        if (data?.success && data.data?.requiresOtp) {
           setOtpStep(true)
           setChallengeId(data.data.challengeId)
           return
@@ -114,7 +114,7 @@ export default function CompanyLoginPage() {
         data = await response.json()
       }
 
-      if (data.success && data.data) {
+      if (data?.success && data.data) {
         setToken(data.data.token)
         setUser({
           _id: data.data.user._id,
@@ -160,7 +160,7 @@ export default function CompanyLoginPage() {
 
       const data = await response.json()
 
-      if (data.success && data.data) {
+      if (data?.success && data.data) {
         setChallengeId(data.data.challengeId)
         setOtp("")
       } else {

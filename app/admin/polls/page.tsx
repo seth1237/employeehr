@@ -93,7 +93,7 @@ export default function PollsPage() {
       const pollsData = await pollsRes.json();
       const votesData = await votesRes.json();
 
-      setPolls(Array.isArray(pollsData) ? pollsData : (pollsData.success ? pollsData.data : []) || []);
+      setPolls(Array.isArray(pollsData) ? pollsData : (pollsData?.success ? pollsData.data : []) || []);
       setVotes(Array.isArray(votesData) ? votesData : votesData.data || []);
     } catch (error) {
       console.error('Error fetching polls:', error);

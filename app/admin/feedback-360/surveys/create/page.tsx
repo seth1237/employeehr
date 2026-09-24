@@ -101,7 +101,7 @@ export default function CreateSurveyPage() {
 
       const data = await response.json()
 
-      if (data.success) {
+      if (data?.success) {
         toast.success('Survey created successfully')
         router.push('/admin/feedback-360/surveys')
       } else {

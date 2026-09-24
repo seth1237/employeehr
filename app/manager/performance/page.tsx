@@ -49,7 +49,7 @@ export default function PerformancePage() {
       }
 
       const teamRes = await usersApi.getTeamMembers(managerId)
-      const team = teamRes.success ? teamRes.data || [] : []
+      const team = teamRes?.success ? teamRes.data || [] : []
 
       if (team.length === 0) {
         setRows([])
@@ -59,7 +59,7 @@ export default function PerformancePage() {
       let performances: any[] = []
       try {
         const allRes = await api.performance.getAll()
-        if (allRes.success) performances = allRes.data || []
+        if (allRes?.success) performances = allRes.data || []
       } catch {
         performances = []
       }
@@ -85,7 +85,7 @@ export default function PerformancePage() {
               },
             )
             const data = await res.json()
-            if (data.success && data.data) perf = data.data
+            if (data?.success && data.data) perf = data.data
           } catch {
             // no performance record
           }

@@ -69,10 +69,10 @@ export default function AlertsPage() {
       const alertsData = await alertsRes.json()
       const summaryData = await summaryRes.json()
 
-      if (alertsData.success) {
+      if (alertsData?.success) {
         setAlerts(alertsData.data.alerts)
       }
-      if (summaryData.success) {
+      if (summaryData?.success) {
         setSummary(summaryData.data)
       }
     } catch (error) {
@@ -91,7 +91,7 @@ export default function AlertsPage() {
       })
 
       const data = await response.json()
-      if (data.success) {
+      if (data?.success) {
         setAlerts(alerts.map((a) => (a._id === alertId ? data.data : a)))
       }
     } catch (error) {
@@ -108,7 +108,7 @@ export default function AlertsPage() {
       })
 
       const data = await response.json()
-      if (data.success) {
+      if (data?.success) {
         setAlerts(alerts.filter((a) => a._id !== alertId))
       }
     } catch (error) {

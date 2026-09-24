@@ -71,7 +71,7 @@ export function CompanyEmailSettings({
       })
       const data = await response.json()
 
-      if (data.success && data.data) {
+      if (data?.success && data.data) {
         setConfig({
           enabled: Boolean(data.data.enabled),
           verified: Boolean(data.data.verified),
@@ -104,7 +104,7 @@ export function CompanyEmailSettings({
       })
       const data = await response.json()
 
-      if (data.success) {
+      if (data?.success) {
         toast.success("Email configuration saved. Send a test email to activate it.")
         setConfig((prev) => ({ ...prev, verified: false }))
       } else {
@@ -147,7 +147,7 @@ export function CompanyEmailSettings({
       })
       const data = await response.json()
 
-      if (data.success) {
+      if (data?.success) {
         toast.success("SMTP verified. Notifications will use your company address.")
         setConfig((prev) => ({
           ...prev,
@@ -174,7 +174,7 @@ export function CompanyEmailSettings({
       })
       const data = await response.json()
 
-      if (data.success) {
+      if (data?.success) {
         toast.success("Company email disabled. Using system default email.")
         setConfig((prev) => ({ ...prev, enabled: false, verified: false }))
       } else {

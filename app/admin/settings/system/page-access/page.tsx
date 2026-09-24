@@ -111,7 +111,7 @@ export default function PageAccessSettingsPage() {
         setError("")
 
         const response = await companyApi.getPageAccess()
-        if (response.success) {
+        if (response?.success) {
           const sections = response.data?.availableSections || FALLBACK_SECTIONS
           const byRole = response.data?.adminSectionsByRole || {}
           const byUser = response.data?.adminSectionsByUser || {}
@@ -129,7 +129,7 @@ export default function PageAccessSettingsPage() {
         }
 
         const usersResponse = await usersApi.getAll()
-        if (usersResponse.success) {
+        if (usersResponse?.success) {
           setSystemUsers(usersResponse.data || [])
         }
 
@@ -146,7 +146,7 @@ export default function PageAccessSettingsPage() {
           setBranches(branchesResponse.value.data || [])
         }
 
-        if (response.success) {
+        if (response?.success) {
           setDepartmentOverrides(response.data?.adminSectionsByDepartment || {})
           setBranchOverrides(response.data?.adminSectionsByBranch || {})
           setAvailablePermissions(response.data?.availablePermissions || [])
@@ -288,7 +288,7 @@ export default function PageAccessSettingsPage() {
         permissionMatrixByUser: userPermissionOverrides,
       })
 
-      if (response.success) {
+      if (response?.success) {
         const data = response.data || {}
         const sections = data.availableSections || FALLBACK_SECTIONS
         const byRole = data.adminSectionsByRole || {}

@@ -35,7 +35,7 @@ export default function SuppliersPage() {
   const loadSuppliers = async () => {
     try {
       const res = await procurementApi.getSuppliers()
-      if (res.success) setSuppliers(res.data)
+      if (res?.success) setSuppliers(res.data)
     } catch (error) {
       console.error(error)
     } finally {
@@ -58,7 +58,7 @@ export default function SuppliersPage() {
         }
       }
       const res = await procurementApi.createSupplier(payload)
-      if (res.success) {
+      if (res?.success) {
         setModalOpen(false)
         setFormData({ name: "", contactName: "", email: "", phone: "", address: "", taxPin: "", paymentTerms: "", bankName: "", accountName: "", accountNumber: "", branch: "" })
         loadSuppliers()

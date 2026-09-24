@@ -79,7 +79,7 @@ export default function QuotationDetailPage({
         stockApi.getQuotationById(quotationId),
         stockApi.getQuotationFollowUps(quotationId).catch(() => ({ data: [] })),
       ])
-      if (!qtRes.success || !qtRes.data) {
+      if (!qtRes?.success || !qtRes.data) {
         if (!silent) {
           setError(qtRes.message || "Quotation not found")
           setQuotation(null)
@@ -117,7 +117,7 @@ export default function QuotationDetailPage({
         { method: "POST", headers: authHeaders() },
       )
       const data = await res.json()
-      if (!res.ok || !data.success) {
+      if (!res.ok || !data?.success) {
         throw new Error(data.message || `${action} failed`)
       }
       toast({ title: action === "approve" ? "Approved" : "Rejected" })
@@ -142,7 +142,7 @@ export default function QuotationDetailPage({
         { method: "DELETE", headers: authHeaders() },
       )
       const data = await res.json()
-      if (!res.ok || !data.success) {
+      if (!res.ok || !data?.success) {
         throw new Error(data.message || "Failed to delete quotation")
       }
       toast({ title: "Quotation permanently deleted" })

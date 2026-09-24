@@ -26,7 +26,7 @@ export default function DeliveryFeedbackAdminPage() {
         throw new Error(`HTTP error! status: ${res.status}`)
       }
       const data = await res.json()
-      if (data.success) {
+      if (data?.success) {
         setFeedbacks(data.data)
       }
     } catch (error) {

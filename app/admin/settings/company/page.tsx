@@ -445,7 +445,7 @@ export default function CompanySettingsPage() {
       }
 
       const res = await api.holidays.sync({ year: new Date().getFullYear() });
-      if (res.success) {
+      if (res?.success) {
         toast({
           description: `✓ ${res.message}`,
           variant: "default",

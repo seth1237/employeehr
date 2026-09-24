@@ -24,7 +24,7 @@ export function HolidayList() {
             try {
                 const currentYear = new Date().getFullYear()
                 const res = await api.holidays.getAll(currentYear)
-                if (res.success && Array.isArray(res.data)) {
+                if (res?.success && Array.isArray(res.data)) {
                     setHolidays(res.data)
                 } else {
                     console.warn("Invalid holidays data:", res)

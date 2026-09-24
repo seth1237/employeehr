@@ -244,7 +244,7 @@ export default function OwnerPage() {
           headers: { Authorization: `Bearer ${token}` },
         })
         const result = await res.json()
-        if (!res.ok || !result.success) {
+        if (!res.ok || !result?.success) {
           router.push("/auth/login")
           return
         }
@@ -268,7 +268,7 @@ export default function OwnerPage() {
           headers: { Authorization: `Bearer ${token}` },
         })
         const result = await res.json()
-        if (result.success) setInsights(result.data)
+        if (result?.success) setInsights(result.data)
         else toast({ description: result.message || "Failed to load insights", variant: "destructive" })
       } else if (activeTab === "companies") {
         const res = await fetch(`${API_URL}/api/owner/companies`, {

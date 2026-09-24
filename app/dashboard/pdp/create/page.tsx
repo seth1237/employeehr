@@ -88,7 +88,7 @@ export default function CreatePDPPage() {
                 end_date: formData.end_date,
             })
 
-            if (response.success) {
+            if (response?.success) {
                 router.push("/employee/pdp")
             } else {
                 setError(response.message || "Failed to create PDP")

@@ -51,7 +51,7 @@ export default function SuggestionsPage() {
         headers: { Authorization: `Bearer ${token}` },
       })
       const data = await response.json()
-      if (data.success) {
+      if (data?.success) {
         setSuggestions(data.data)
       }
     } catch (error) {
@@ -77,7 +77,7 @@ export default function SuggestionsPage() {
       })
 
       const data = await response.json()
-      if (data.success) {
+      if (data?.success) {
         setSuggestions([data.data, ...suggestions])
         setDialogOpen(false)
         setFormData({
@@ -103,7 +103,7 @@ export default function SuggestionsPage() {
       })
 
       const data = await response.json()
-      if (data.success) {
+      if (data?.success) {
         setSuggestions(
           suggestions.map((s) => (s._id === suggestionId ? data.data : s))
         )

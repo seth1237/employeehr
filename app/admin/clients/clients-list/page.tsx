@@ -479,7 +479,7 @@ export default function AccountsClientsPage() {
               headers: { Authorization: `Bearer ${getToken()}` }
             });
             const data = await res.json();
-            if (!data.success) throw new Error(data.message);
+            if (!data?.success) throw new Error(data.message);
             
             const leads = data.data || [];
             const mappedRows: SavedClientRow[] = leads.map((lead: any) => {
@@ -662,7 +662,7 @@ export default function AccountsClientsPage() {
           headers: { Authorization: `Bearer ${getToken()}` },
         });
         const data = await res.json();
-        if (data.success) {
+        if (data?.success) {
           setExhibitionsList(data.data || []);
         }
       } catch (err) {

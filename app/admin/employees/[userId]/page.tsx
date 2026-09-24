@@ -130,7 +130,7 @@ export default function EmployeeProfilePage() {
         api.users.getById(userId),
         api.users.getAll(),
       ])
-      if (!userRes.success || !userRes.data) {
+      if (!userRes?.success || !userRes.data) {
         toast({ variant: "destructive", description: "Employee not found" })
         router.push("/admin/employees")
         return
@@ -181,7 +181,7 @@ export default function EmployeeProfilePage() {
         },
       }
       const res = await api.users.update(userId, payload as any)
-      if (!res.success) throw new Error(res.message || "Update failed")
+      if (!res?.success) throw new Error(res.message || "Update failed")
       toast({ description: "Employee profile saved" })
       if (res.data) setForm(userToForm(res.data))
     } catch (error: any) {
@@ -198,7 +198,7 @@ export default function EmployeeProfilePage() {
     setStartingOnboarding(true)
     try {
       const res = await api.onboarding.create({ userId })
-      if (!res.success) throw new Error(res.message || "Failed to start onboarding")
+      if (!res?.success) throw new Error(res.message || "Failed to start onboarding")
       toast({
         description: "Onboarding checklist created. Open Onboarding to track tasks.",
       })

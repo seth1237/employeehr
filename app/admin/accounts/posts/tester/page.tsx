@@ -129,7 +129,7 @@ export default function EtimsTesterPage() {
   const loadConfig = async () => {
     try {
       const res = await api.etims.getConfig()
-      if (res.success) {
+      if (res?.success) {
         setConfig(res.data)
         
         // Initialize with default API
@@ -294,11 +294,11 @@ export default function EtimsTesterPage() {
           <CardContent>
             {testResult ? (
               <div className="space-y-4">
-                <div className={`p-3 rounded-md border ${testResult.success ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}>
-                  <p className={`font-medium ${testResult.success ? 'text-emerald-800' : 'text-red-800'}`}>
-                    HTTP Status: {testResult.status || (testResult.success ? 200 : 'Unknown')}
+                <div className={`p-3 rounded-md border ${testResult?.success ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}>
+                  <p className={`font-medium ${testResult?.success ? 'text-emerald-800' : 'text-red-800'}`}>
+                    HTTP Status: {testResult.status || (testResult?.success ? 200 : 'Unknown')}
                   </p>
-                  {!testResult.success && testResult.message && (
+                  {!testResult?.success && testResult.message && (
                     <p className="text-sm mt-1 text-red-600">{testResult.message}</p>
                   )}
                 </div>

@@ -424,7 +424,7 @@ export default function TelesalesActivityPage() {
         }),
       ])
 
-      if (!activityRes.success) {
+      if (!activityRes?.success) {
         throw new Error(activityRes.message || "Failed to load activity")
       }
       setData(activityRes.data as TelesalesActivityData)
@@ -589,7 +589,7 @@ export default function TelesalesActivityPage() {
         clientName: item.clientName !== "—" ? item.clientName : undefined,
         clientPhone: item.clientPhone,
       })
-      if (!res.success) {
+      if (!res?.success) {
         throw new Error(res.message || "Failed to load history")
       }
       setHistoryTimeline(res.data?.timeline || [])
@@ -619,7 +619,7 @@ export default function TelesalesActivityPage() {
         callPurpose: item.callPurpose,
         reason: `Changed to ${to} from telesales activity`,
       })
-      if (!res.success) {
+      if (!res?.success) {
         throw new Error(res.message || "Failed to update status")
       }
       toast({
@@ -666,7 +666,7 @@ export default function TelesalesActivityPage() {
         parentConversationId: followUpTarget.conversationId,
         source: "telesales_activity",
       })
-      if (!res.success) {
+      if (!res?.success) {
         throw new Error(res.message || "Failed to save follow-up")
       }
       setFollowUpTarget(null)
@@ -751,7 +751,7 @@ export default function TelesalesActivityPage() {
         to: range.to,
         userId: personId,
       })
-      if (!res.success) {
+      if (!res?.success) {
         throw new Error(res.message || "Failed to load report data")
       }
       const reportData = res.data as TelesalesActivityData

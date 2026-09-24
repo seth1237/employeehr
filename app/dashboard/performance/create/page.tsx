@@ -34,10 +34,10 @@ export default function StartPerformanceReviewPage() {
                     api.kpis.getAll(),
                 ])
 
-                if (employeesRes.success && employeesRes.data) {
+                if (employeesRes?.success && employeesRes.data) {
                     setEmployees(employeesRes.data)
                 }
-                if (kpisRes.success && kpisRes.data) {
+                if (kpisRes?.success && kpisRes.data) {
                     setKPIs(kpisRes.data)
                     // Initialize KPI scores
                     setFormData((prev) => ({
@@ -91,7 +91,7 @@ export default function StartPerformanceReviewPage() {
                 status: "draft",
             })
 
-            if (response.success) {
+            if (response?.success) {
                 router.push("/dashboard/reports")
             } else {
                 setError(response.message || "Failed to create performance review")

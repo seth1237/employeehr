@@ -70,7 +70,7 @@ export default function EmployeePDPPage() {
         headers: { Authorization: `Bearer ${token}` },
       })
       const data = await response.json()
-      if (data.success) {
+      if (data?.success) {
         setColleagues(data.data)
       }
     } catch (error) {
@@ -85,7 +85,7 @@ export default function EmployeePDPPage() {
         headers: { Authorization: `Bearer ${token}` },
       })
       const data = await response.json()
-      if (data.success) {
+      if (data?.success) {
         setPdps(data.data)
         if (data.data.length > 0) {
           setCurrentPDP(data.data[0])
@@ -139,7 +139,7 @@ export default function EmployeePDPPage() {
       
       const data = await response.json()
       
-      if (data.success) {
+      if (data?.success) {
         toast({ title: "Success", description: "PDP created successfully" })
         await fetchPDPs()
       } else {
@@ -175,7 +175,7 @@ export default function EmployeePDPPage() {
         body: JSON.stringify(updates),
       })
       const data = await response.json()
-      if (data.success) {
+      if (data?.success) {
         toast({ title: "Success", description: "PDP updated successfully" })
         setCurrentPDP(data.data)
         fetchPDPs()
@@ -218,7 +218,7 @@ export default function EmployeePDPPage() {
         body: JSON.stringify(entry),
       })
       const data = await response.json()
-      if (data.success) {
+      if (data?.success) {
         toast({ title: "Success", description: "Journal entry added" })
         setCurrentPDP(data.data)
       }

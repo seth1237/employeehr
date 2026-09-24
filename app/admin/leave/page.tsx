@@ -57,7 +57,7 @@ export default function AdminLeavePage() {
     const silent = startDataLoad(opts, setLoading, setRefreshing)
     try {
       const res = await api.leave.getAllRequests()
-      if (res.success) setRequests(res.data || [])
+      if (res?.success) setRequests(res.data || [])
     } catch (error) {
       console.error("Failed to fetch requests", error)
     } finally {
@@ -69,7 +69,7 @@ export default function AdminLeavePage() {
     const silent = startDataLoad(opts, setLoading, setRefreshing)
     try {
       const res = await api.leave.getAllBalances(year)
-      if (res.success) setBalances(res.data || [])
+      if (res?.success) setBalances(res.data || [])
     } catch (error) {
       console.error("Failed to fetch balances", error)
       toast({ variant: "destructive", description: "Failed to load leave balances" })
@@ -84,7 +84,7 @@ export default function AdminLeavePage() {
       const from = `${year}-01-01`
       const to = `${year}-12-31`
       const res = await api.leave.getCalendar(from, to)
-      if (res.success) setCalendar(res.data || [])
+      if (res?.success) setCalendar(res.data || [])
     } catch (error) {
       console.error("Failed to fetch calendar", error)
       toast({ variant: "destructive", description: "Failed to load leave calendar" })
@@ -97,7 +97,7 @@ export default function AdminLeavePage() {
     const silent = startDataLoad(opts, setLoading, setRefreshing)
     try {
       const res = await api.holidays.getAll(year)
-      if (res.success) setHolidays(res.data || [])
+      if (res?.success) setHolidays(res.data || [])
     } catch (error) {
       console.error("Failed to fetch holidays", error)
       toast({ variant: "destructive", description: "Failed to load holidays" })
@@ -149,7 +149,7 @@ export default function AdminLeavePage() {
         annual_total: Number(editForm.annual_total),
         sick_total: Number(editForm.sick_total),
       })
-      if (!res.success) throw new Error(res.message || "Update failed")
+      if (!res?.success) throw new Error(res.message || "Update failed")
       toast({ description: "Leave balance updated" })
       setEditOpen(false)
       fetchBalances({ silent: true })
@@ -167,7 +167,7 @@ export default function AdminLeavePage() {
     setSyncing(true)
     try {
       const res = await api.holidays.sync({ year })
-      if (!res.success) throw new Error(res.message || "Sync failed")
+      if (!res?.success) throw new Error(res.message || "Sync failed")
       toast({ description: `Holidays synced for ${year}` })
       fetchHolidays({ silent: true })
     } catch (error: any) {

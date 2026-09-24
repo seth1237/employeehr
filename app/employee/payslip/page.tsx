@@ -97,7 +97,7 @@ export default function PayslipPage() {
         headers: { Authorization: `Bearer ${token}` },
       })
       const data = await res.json()
-      if (data.success) {
+      if (data?.success) {
         setBranding(data.data || {})
       }
     } catch {
@@ -113,7 +113,7 @@ export default function PayslipPage() {
       })
 
       const data = await response.json()
-      if (data.success) {
+      if (data?.success) {
         setPayslips(data.data || [])
       }
     } catch (error) {
@@ -131,7 +131,7 @@ export default function PayslipPage() {
       })
 
       const data = await response.json()
-      if (data.success) {
+      if (data?.success) {
         setSelectedPayslip(data.data)
         setViewDialogOpen(true)
       }

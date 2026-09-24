@@ -22,7 +22,7 @@ export default function ForgotPasswordPage() {
     setIsLoading(true)
     try {
       const resp = await api.auth.forgotPassword({ email })
-      if (resp && resp.success) {
+      if (resp && resp?.success) {
         setIsSubmitted(true)
         // Navigate to verify page
         const encoded = encodeURIComponent(email)

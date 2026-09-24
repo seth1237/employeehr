@@ -87,7 +87,7 @@ export default function EmployeesPage() {
     const silent = startDataLoad(opts, setLoading, setRefreshing)
     try {
       const res = await api.users.getAll()
-      if (res.success) setEmployees(res.data || [])
+      if (res?.success) setEmployees(res.data || [])
     } catch (error) {
       console.error(error)
       toast({
@@ -146,7 +146,7 @@ export default function EmployeesPage() {
         position: form.position.trim() || undefined,
         role: "employee",
       } as any)
-      if (!res.success) throw new Error(res.message || "Create failed")
+      if (!res?.success) throw new Error(res.message || "Create failed")
       toast({ description: "Employee created" })
       setCreateOpen(false)
       setForm({ firstName: "", lastName: "", email: "", department: "", position: "" })

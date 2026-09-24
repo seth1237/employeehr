@@ -2,6 +2,7 @@
 
 import { getToken, logout } from "./auth";
 import API_URL from "./apiBase";
+import { parseApiJson } from "./safe-json";
 import type {
   ApiResponse,
   LoginRequest,
@@ -64,10 +65,9 @@ class ApiClient {
       try {
         const body = await response.text();
         text = body;
-        data = body ? JSON.parse(body) : null;
+        data = parseApiJson(body);
       } catch {
-        // If the response is not JSON, preserve the raw text
-        data = null;
+        data = { success: false, message: "Invalid response" };
       }
 
       // Handle 401 Unauthorized
@@ -562,7 +562,7 @@ export const companyApi = {
         throw new Error(errorData.message || "Upload failed");
       }
 
-      return response.json();
+      return parseApiJson(await response.text());
     }
 
     // Otherwise use JSON

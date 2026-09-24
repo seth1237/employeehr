@@ -52,7 +52,7 @@ export default function DeliveryFeedbackPage() {
     try {
       const res = await fetch(`${API_URL}/api/stock/public/delivery-feedback/${invoiceId}`)
       const data = await res.json()
-      if (data.success) {
+      if (data?.success) {
         setDeliveryData(data.data)
       } else if (data.data?.alreadySubmitted) {
         setSubmitted(true)
@@ -95,7 +95,7 @@ export default function DeliveryFeedbackPage() {
       })
       
       const data = await res.json()
-      if (data.success) {
+      if (data?.success) {
         setSubmitted(true)
         setShowConfetti(true)
       } else {

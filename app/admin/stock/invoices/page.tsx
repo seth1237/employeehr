@@ -353,7 +353,7 @@ export default function InvoicesPage() {
     try {
       setActingInvoiceId(invoiceId);
       const result = await stockApi.approveInvoice(invoiceId);
-      if (!result.success) {
+      if (!result?.success) {
         window.alert(result.message || "Failed to approve invoice");
         return;
       }
@@ -369,7 +369,7 @@ export default function InvoicesPage() {
     try {
       setActingInvoiceId(invoiceId);
       const result = await stockApi.rejectInvoice(invoiceId);
-      if (!result.success) {
+      if (!result?.success) {
         window.alert(result.message || "Failed to reject invoice");
         return;
       }

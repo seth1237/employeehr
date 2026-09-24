@@ -132,7 +132,7 @@ export default function EditSurveyPage() {
 
       const data = await response.json()
 
-      if (data.success) {
+      if (data?.success) {
         toast.success('Survey updated successfully')
         router.push(`/admin/feedback-360/surveys/${surveyId}`)
       } else {

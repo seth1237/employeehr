@@ -346,7 +346,7 @@ export default function MeetingPage() {
       if (!response.ok) throw new Error('Failed to fetch meeting history')
       
       const data = await response.json()
-      if (data.success && Array.isArray(data.data)) {
+      if (data?.success && Array.isArray(data.data)) {
         // Filter to show only completed meetings (excluding current meeting)
         const completed = data.data.filter(
           (m: Meeting) => 

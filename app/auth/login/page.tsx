@@ -89,7 +89,7 @@ function LoginContent() {
 
         const response = await api.auth.login({ email, password })
 
-        if (response.success && response.data) {
+        if (response?.success && response.data) {
           const data: any = response.data
           if (data.requiresOtp) {
             setOtpStep(true)
@@ -110,7 +110,7 @@ function LoginContent() {
           loginType: "standard",
         })
 
-        if (response.success && response.data) {
+        if (response?.success && response.data) {
           completeLogin(response.data as any)
         } else {
           setError(response.message || "OTP verification failed")
@@ -138,7 +138,7 @@ function LoginContent() {
         loginType: "standard",
       })
 
-      if (response.success && response.data) {
+      if (response?.success && response.data) {
         const data: any = response.data
         setChallengeId(data.challengeId)
         setOtpEmail(data.email || otpEmail || email)

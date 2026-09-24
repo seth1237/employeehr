@@ -60,7 +60,7 @@ export default function MeetingsPage() {
 
   const createMeeting = async (meetingData: any) => {
     const response = await meetingsApi.create(meetingData)
-    if (!response.success) {
+    if (!response?.success) {
       throw new Error(response.message || 'Failed to create meeting')
     }
     await fetchMeetings()
@@ -78,7 +78,7 @@ export default function MeetingsPage() {
 
   const downloadReport = async (meetingId: string) => {
     const response = await meetingsApi.getReport(meetingId)
-    if (response.success) {
+    if (response?.success) {
       const blob = new Blob([JSON.stringify(response.data, null, 2)], {
         type: 'application/json',
       })

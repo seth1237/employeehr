@@ -1,5 +1,6 @@
 "use client";
 
+import "@/lib/install-safe-json";
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { getUser, isAdmin } from "@/lib/auth";

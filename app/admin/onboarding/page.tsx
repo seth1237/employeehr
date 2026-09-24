@@ -50,8 +50,8 @@ export default function OnboardingPage() {
         api.onboarding.list(),
         api.users.getAll(),
       ])
-      if (listRes.success) setChecklists(listRes.data || [])
-      if (usersRes.success) setUsers(usersRes.data || [])
+      if (listRes?.success) setChecklists(listRes.data || [])
+      if (usersRes?.success) setUsers(usersRes.data || [])
     } catch (error) {
       console.error(error)
       toast({ variant: "destructive", description: "Failed to load onboarding" })
@@ -77,7 +77,7 @@ export default function OnboardingPage() {
     setCreating(true)
     try {
       const res = await api.onboarding.create({ userId: selectedUserId })
-      if (!res.success) throw new Error(res.message || "Create failed")
+      if (!res?.success) throw new Error(res.message || "Create failed")
       toast({ description: "Onboarding checklist created" })
       setSelectedUserId("")
       load({ silent: true })
@@ -96,7 +96,7 @@ export default function OnboardingPage() {
     setToggling(key)
     try {
       const res = await api.onboarding.toggleTask(checklistId, taskId, { completed: !completed })
-      if (!res.success) throw new Error(res.message || "Update failed")
+      if (!res?.success) throw new Error(res.message || "Update failed")
       load({ silent: true })
     } catch (error: any) {
       toast({

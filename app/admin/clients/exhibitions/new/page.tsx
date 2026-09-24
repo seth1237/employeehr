@@ -34,7 +34,7 @@ export default function NewExhibitionPage() {
           headers: { Authorization: `Bearer ${getToken()}` },
         })
         const data = await res.json()
-        if (data.success) {
+        if (data?.success) {
           setUsers(data.data)
         }
       } catch (err) {
@@ -83,7 +83,7 @@ export default function NewExhibitionPage() {
         body: JSON.stringify(formData),
       })
       const data = await res.json()
-      if (data.success) {
+      if (data?.success) {
         router.push("/admin/clients/exhibitions")
       } else {
         setError(data.message || "Failed to create exhibition")

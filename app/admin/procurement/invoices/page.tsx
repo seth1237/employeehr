@@ -66,10 +66,10 @@ function SupplierInvoicesContent() {
         companyApi.getBranding(),
         stockApi.getProducts()
       ])
-      if (invRes.success) setInvoices(invRes.data)
-      if (grnRes.success) setGrns(grnRes.data)
-      if (ordRes.success) setOrders(ordRes.data)
-      if (supRes.success) setSuppliers(supRes.data)
+      if (invRes?.success) setInvoices(invRes.data)
+      if (grnRes?.success) setGrns(grnRes.data)
+      if (ordRes?.success) setOrders(ordRes.data)
+      if (supRes?.success) setSuppliers(supRes.data)
       if (bankRes?.success) setBankAccounts(bankRes.data)
       if (brandRes?.success) setBranding(brandRes.data)
       if (prodRes?.success) setStockProducts(prodRes.data)
@@ -153,7 +153,7 @@ function SupplierInvoicesContent() {
       }
 
       const res = await procurementApi.createSupplierInvoice(payload)
-      if (res.success) {
+      if (res?.success) {
         setModalOpen(false)
         setGrnId("")
         setSupplierId("")
@@ -173,7 +173,7 @@ function SupplierInvoicesContent() {
     try {
       if (!confirm("This will post the invoice to the General Ledger (Accounts Payable). Proceed?")) return;
       const res = await procurementApi.postSupplierInvoiceToGL(id);
-      if (res.success) {
+      if (res?.success) {
         alert("Posted to GL successfully")
         loadData()
       }
@@ -205,7 +205,7 @@ function SupplierInvoicesContent() {
         amount: Number(payAmount),
         reference: payRef
       })
-      if (res.success) {
+      if (res?.success) {
         setPayModalOpen(false)
         loadData()
       }

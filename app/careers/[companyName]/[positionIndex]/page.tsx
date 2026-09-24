@@ -109,7 +109,7 @@ export default function PublicJobPage() {
       );
       const data = await response.json();
 
-      if (data.success) {
+      if (data?.success) {
         setJob(data.data);
         // Fetch application form
         fetchApplicationForm(data.data._id);
@@ -128,7 +128,7 @@ export default function PublicJobPage() {
     try {
       const response = await fetch(`${API_URL}/api/application-forms/job/${jobId}`);
       const data = await response.json();
-      if (data.success) {
+      if (data?.success) {
         setApplicationForm(data.data);
       }
     } catch (err) {
@@ -206,7 +206,7 @@ export default function PublicJobPage() {
 
       const data = await response.json();
 
-      if (data.success) {
+      if (data?.success) {
         const deviceId = getDeviceFingerprint();
         localStorage.setItem(`job_applied_${job._id}_${deviceId}`, 'true');
         localStorage.setItem(`job_applied_${job._id}`, 'true');

@@ -44,7 +44,7 @@ export default function Page() {
 
       const res = await fetch(`${API_URL}/api/reports/admin/monthly-invoice-summary?startDate=${encodeURIComponent(start)}&endDate=${encodeURIComponent(end)}&include=${includeParts.join(",")}`)
       const payload = await res.json()
-      if (!payload.success) throw new Error(payload.message || "Failed to fetch")
+      if (!payload?.success) throw new Error(payload.message || "Failed to fetch")
       return payload.data.map((r: any) => ({ date: formatDateISO(r.date), type: r.type, reference: r.reference }))
     } finally {
       setLoading(false)

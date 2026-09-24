@@ -45,7 +45,7 @@ export default function PollsPage() {
         headers: { Authorization: `Bearer ${token}` },
       })
       const data = await response.json()
-      if (data.success) {
+      if (data?.success) {
         setPolls(data.data)
         if (data.votedPollIds && Array.isArray(data.votedPollIds)) {
           setVotedPolls(new Set(data.votedPollIds))
@@ -71,7 +71,7 @@ export default function PollsPage() {
       })
 
       const data = await response.json()
-      if (data.success) {
+      if (data?.success) {
         setVotedPolls(new Set([...votedPolls, pollId]))
         setPolls(polls.map((p) => (p._id === pollId ? data.data : p)))
       } else {

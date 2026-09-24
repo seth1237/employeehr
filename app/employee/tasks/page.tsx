@@ -92,7 +92,7 @@ export default function EmployeeTasksPage() {
         headers: { Authorization: `Bearer ${token}` },
       })
       const data = await res.json()
-      if (data.success) {
+      if (data?.success) {
         setBranding(data.data || {})
       }
     } catch {
@@ -118,7 +118,7 @@ export default function EmployeeTasksPage() {
       })
 
       const data = await response.json()
-      if (data.success) {
+      if (data?.success) {
         setTasks(data.data)
         setError(null)
       } else {
@@ -148,7 +148,7 @@ export default function EmployeeTasksPage() {
       })
 
       const data = await response.json()
-      if (data.success) {
+      if (data?.success) {
         toast({
           title: "Task completed",
           description: "Task marked as completed successfully",
@@ -187,7 +187,7 @@ export default function EmployeeTasksPage() {
         headers: { Authorization: `Bearer ${token}` },
       })
       const data = await res.json()
-      if (data.success) {
+      if (data?.success) {
         setSelectedTask(data.data)
         setError(null)
         setShowPostponeForm(false)
@@ -226,7 +226,7 @@ export default function EmployeeTasksPage() {
         body: JSON.stringify({ text: trimmedNote }),
       })
       const data = await res.json()
-      if (data.success) {
+      if (data?.success) {
         setNoteText("")
         toast({
           title: "Note added",
@@ -271,7 +271,7 @@ export default function EmployeeTasksPage() {
         body: JSON.stringify({ new_due_date: postponeDate, reason: postponeReason }),
       })
       const data = await res.json()
-      if (data.success) {
+      if (data?.success) {
         setPostponeDate(null)
         setPostponeReason("")
         setShowPostponeForm(false)

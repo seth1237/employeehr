@@ -83,7 +83,7 @@ export default function SignupForm({ onBack }: SignupFormProps) {
         countryCode: formData.countryCode,
       })
 
-      if (response.success && response.data) {
+      if (response?.success && response.data) {
         // Store token and user data
         setToken(response.data.token)
         setUser({

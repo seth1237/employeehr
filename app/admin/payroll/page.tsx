@@ -150,8 +150,8 @@ export default function AdminPayrollPage() {
                 api.users.getAll()
             ])
 
-            if (payrollRes.success) setPayrolls(payrollRes.data || [])
-            if (previousPayrollRes.success) setPreviousMonthPayrolls(previousPayrollRes.data || [])
+            if (payrollRes?.success) setPayrolls(payrollRes.data || [])
+            if (previousPayrollRes?.success) setPreviousMonthPayrolls(previousPayrollRes.data || [])
             if (usersRes?.success && Array.isArray(usersRes.data)) {
                 setEmployees(usersRes.data.filter((u: any) => u.role !== 'company_admin'))
             }
@@ -208,7 +208,7 @@ export default function AdminPayrollPage() {
             if (editId) return // Don't override when editing existing
             try {
                 const res = await api.payroll.getMyPayslips()
-                if (res.success && res.data && res.data.length > 0) {
+                if (res?.success && res.data && res.data.length > 0) {
                     const lastSlip = res.data[0]
                     // Pre-fill overrides for standard deductions if they were overridden
                     if (lastSlip.standard_deduction_overrides) {

@@ -144,7 +144,7 @@ export default function InvoiceDetailPage({
         stockApi.getInvoiceById(invoiceId),
         stockApi.getInvoiceLifecycle(invoiceId).catch(() => null),
       ])
-      if (!invRes.success || !invRes.data) {
+      if (!invRes?.success || !invRes.data) {
         setError(invRes.message || "Invoice not found")
         setInvoice(null)
         return
@@ -167,7 +167,7 @@ export default function InvoiceDetailPage({
     setProductsError("")
     try {
       const res = await stockApi.getProducts()
-      if (!res.success) {
+      if (!res?.success) {
         throw new Error(res.message || "Failed to load products")
       }
       setProducts((res.data || []) as StockProduct[])
@@ -385,7 +385,7 @@ export default function InvoiceDetailPage({
           : undefined,
         transportNote: editTransportNote || undefined,
       })
-      if (!res.success) {
+      if (!res?.success) {
         window.alert(res.message || "Failed to save draft")
         return
       }
@@ -424,7 +424,7 @@ export default function InvoiceDetailPage({
       } else {
         res = await stockApi.reviseInvoice(invoice._id)
       }
-      if (!res.success) {
+      if (!res?.success) {
         window.alert(res.message || `Failed to ${action} invoice`)
         return
       }

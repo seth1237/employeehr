@@ -38,7 +38,7 @@ export default function EmployeeLoginPage() {
 
         data = await response.json()
 
-        if (data.success && data.data?.requiresOtp) {
+        if (data?.success && data.data?.requiresOtp) {
           setOtpStep(true)
           setChallengeId(data.data.challengeId)
           setEmail(data.data.email || "")
@@ -59,7 +59,7 @@ export default function EmployeeLoginPage() {
         data = await response.json()
       }
 
-      if (data.success && data.data) {
+      if (data?.success && data.data) {
         setToken(data.data.token)
         setUser({
           _id: data.data.user._id,
@@ -103,7 +103,7 @@ export default function EmployeeLoginPage() {
 
       const data = await response.json()
 
-      if (data.success && data.data) {
+      if (data?.success && data.data) {
         setChallengeId(data.data.challengeId)
         setOtp("")
       } else {

@@ -3,47 +3,41 @@
 
 const DEFAULT_LOCAL = "http://localhost:5010"
 const DEFAULT_PROD = "https://backend.codewithseth.co.ke"
-// hrapi.codewithseth.co.ke currently serves cert for backend.* only → browsers block with ERR_CERT_COMMON_NAME_INVALID.
-// Use the hostname that matches the live SSL cert until a proper cert is issued for hrapi.
-const ELEVATEHUB_API = "https://backend.codewithseth.co.ke"
+const FRONTEND_HOSTS = new Set(["elevatehub.co.ke", "www.elevatehub.co.ke"])
 
-export const API_URL = (() => {
-  // In browser, inspect the hostname
+function normalizeUrl(value?: string) {
+  return String(value || "").trim().replace(/\/$/, "")
+}
+
+function isUsableApiUrl(value: string, appHost?: string) {
+  if (!value) return false
+  try {
+    const url = new URL(value)
+    const host = url.hostname
+    if (FRONTEND_HOSTS.has(host)) return false
+    const appIsLocal = !appHost || appHost === "localhost" || appHost === "127.0.0.1"
+    if ((host === "localhost" || host === "127.0.0.1") && !appIsLocal) return false
+    return url.protocol === "http:" || url.protocol === "https:"
+  } catch {
+    return false
+  }
+}
+
+function resolveApiUrl() {
+  const envUrl = normalizeUrl(process.env.NEXT_PUBLIC_API_URL)
+  const appHost = typeof window !== "undefined" ? window.location.hostname : ""
+  const isLocal = appHost === "localhost" || appHost === "127.0.0.1"
+
   if (typeof window !== "undefined") {
-    const host = window.location.hostname
-    const isLocal = host === "localhost" || host === "127.0.0.1"
-    
-    if (isLocal) {
-      return DEFAULT_LOCAL
-    }
-
-    // Elevate Hub production frontend
-    if (host === "elevatehub.co.ke" || host === "www.elevatehub.co.ke") {
-      return process.env.NEXT_PUBLIC_API_URL || ELEVATEHUB_API
-    }
-
-    // Production hostnames
-    if (host.endsWith("codewithseth.co.ke") || host.endsWith(".vercel.app")) {
-      return process.env.NEXT_PUBLIC_API_URL || DEFAULT_PROD
-    }
-
-    // If the browser is on an unknown host, prefer the explicit env only if present.
-    if (process.env.NEXT_PUBLIC_API_URL) {
-      return process.env.NEXT_PUBLIC_API_URL
-    }
-    
-    // Fallback for any other hostname - assume production
+    if (isLocal) return DEFAULT_LOCAL
+    if (isUsableApiUrl(envUrl, appHost)) return envUrl
     return DEFAULT_PROD
   }
 
-  // If env is set on the server, prefer it
-  if (process.env.NEXT_PUBLIC_API_URL) {
-    return process.env.NEXT_PUBLIC_API_URL
-  }
+  if (isUsableApiUrl(envUrl)) return envUrl
+  return process.env.NODE_ENV === "production" ? DEFAULT_PROD : DEFAULT_LOCAL
+}
 
-  // In server-side rendering, use NODE_ENV as a hint
-  const isProd = process.env.NODE_ENV === "production"
-  return isProd ? DEFAULT_PROD : DEFAULT_LOCAL
-})()
+export const API_URL = resolveApiUrl()
 
 export default API_URL

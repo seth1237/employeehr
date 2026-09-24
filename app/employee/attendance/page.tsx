@@ -70,7 +70,7 @@ export default function AttendancePage() {
         headers: { Authorization: `Bearer ${token}` },
       })
       const data = await res.json()
-      if (data.success) {
+      if (data?.success) {
         setBranding(data.data || {})
       }
     } catch {

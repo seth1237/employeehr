@@ -182,7 +182,7 @@ export default function ClientsHubPage() {
     setError(null)
     try {
       const res = await stockApi.getClientInsights()
-      if (!res.success) {
+      if (!res?.success) {
         throw new Error(res.message || "Failed to load client insights")
       }
       setInsights(res.data as ClientInsights)

@@ -2283,7 +2283,7 @@ export default function InstalledMachinesPage({ isEngineerView = false }: { isEn
       const res = await api.crm.getConversations({
         relatedMachineId: machine._id,
       });
-      if (res.success) {
+      if (res?.success) {
         setClientHistory(res.data || []);
       }
     } catch (err) {

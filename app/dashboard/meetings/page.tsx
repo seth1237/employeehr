@@ -78,7 +78,7 @@ export default function MeetingsPage() {
 
   const downloadReport = async (meetingId: string) => {
     const response = await meetingsApi.getReport(meetingId)
-    if (response.success) {
+    if (response?.success) {
       const blob = new Blob([JSON.stringify(response.data, null, 2)], {
         type: 'application/json',
       })

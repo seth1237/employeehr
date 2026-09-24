@@ -52,7 +52,7 @@ export default function ApplicationsPage() {
         headers: { Authorization: `Bearer ${getToken()}` },
       });
       const data = await response.json();
-      if (data.success) setJobs(data.data || []);
+      if (data?.success) setJobs(data.data || []);
     } catch (error) {
       console.error('Error fetching jobs:', error);
     }
@@ -151,7 +151,7 @@ export default function ApplicationsPage() {
         body: JSON.stringify({}),
       });
       const data = await response.json();
-      if (!response.ok || !data.success) {
+      if (!response.ok || !data?.success) {
         throw new Error(data.message || 'Hire failed');
       }
       toast({

@@ -27,7 +27,7 @@ export default function PayslipDetailPage() {
 
         // Fetch payslip details (includes payslip, company, and user data)
         const payslipRes = await api.payroll.getPayslipDetails(params.id as string)
-        if (payslipRes.success && payslipRes.data) {
+        if (payslipRes?.success && payslipRes.data) {
           setPayslip(payslipRes.data.payslip)
           setCompany(payslipRes.data.company)
           

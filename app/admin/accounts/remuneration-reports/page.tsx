@@ -54,11 +54,11 @@ export default function RemunerationReportsPage() {
                     api.users.getAll(),
                 ])
 
-                if (payrollRes.success) {
+                if (payrollRes?.success) {
                     setPayrolls(payrollRes.data || [])
                 }
 
-                if (employeesRes.success) {
+                if (employeesRes?.success) {
                     setEmployees((employeesRes.data || []).filter((user: any) => user.role === "employee"))
                 }
             } catch (error) {
@@ -76,7 +76,7 @@ export default function RemunerationReportsPage() {
         const fetchBranding = async () => {
             try {
                 const res = await api.company.getBranding()
-                if (res && res.success) {
+                if (res && res?.success) {
                     setBranding(res.data || {})
                 }
             } catch (error) {

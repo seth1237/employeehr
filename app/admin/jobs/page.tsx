@@ -130,7 +130,7 @@ export default function JobsPage() {
 
       const data = await response.json();
 
-      if (data.success) {
+      if (data?.success) {
         toast({
           title: 'Success',
           description: 'Job created successfully',

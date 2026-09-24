@@ -37,7 +37,7 @@ export function ResetPasswordForm() {
     setLoading(true)
     try {
       const resp = await api.auth.resetPassword({ email, otp, newPassword: password })
-      if (resp && resp.success) {
+      if (resp && resp?.success) {
         setSuccess("Password reset successfully. Redirecting to login...")
         setTimeout(() => router.push('/auth/login'), 1500)
       } else {

@@ -72,7 +72,7 @@ export default function InvitationForm({
         password,
       })
 
-      if (response.success && response.data) {
+      if (response?.success && response.data) {
         setSuccess(true)
 
         // Log the user in after accepting invitation
@@ -81,7 +81,7 @@ export default function InvitationForm({
           password,
         })
 
-        if (loginResponse.success && loginResponse.data) {
+        if (loginResponse?.success && loginResponse.data) {
           setToken(loginResponse.data.token)
           setUser({
             _id: loginResponse.data.user._id,

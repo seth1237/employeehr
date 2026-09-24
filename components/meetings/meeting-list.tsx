@@ -123,7 +123,7 @@ export function MeetingList({
     try {
       setLoadingUsers(true)
       const response = await usersApi.getAll()
-      if (response.success && response.data) {
+      if (response?.success && response.data) {
         // Filter out current user
         const users = response.data.filter((u: any) => u._id !== currentUserId)
         setAvailableUsers(users)

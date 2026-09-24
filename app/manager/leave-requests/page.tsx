@@ -17,7 +17,7 @@ export default function ManagerLeaveRequestsPage() {
     const fetchRequests = async () => {
         try {
             const res = await api.leave.getTeamRequests()
-            if (res.success) {
+            if (res?.success) {
                 setRequests(res.data)
             }
         } catch (error) {

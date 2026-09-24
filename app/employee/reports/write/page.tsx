@@ -70,7 +70,7 @@ export default function ReportWritePage() {
     try {
       setLoadingDrafts(true)
       const response = await api.reports.getMyReports(reportType, "draft")
-      if (response.success) {
+      if (response?.success) {
         setDrafts(response.data)
       }
     } catch (error: any) {
@@ -107,7 +107,7 @@ export default function ReportWritePage() {
         tags,
       })
 
-      if (response.success) {
+      if (response?.success) {
         setCurrentDraft(response.data)
         toast({ description: "Report saved as draft" })
       } else {
@@ -132,7 +132,7 @@ export default function ReportWritePage() {
         report_id: currentDraft._id,
       })
 
-      if (response.success) {
+      if (response?.success) {
         toast({ description: "Report submitted for approval" })
         setTimeout(() => router.push("/employee/reports"), 1500)
       } else {
@@ -170,7 +170,7 @@ export default function ReportWritePage() {
         toType: reportType,
       })
 
-      if (response.success && response.data) {
+      if (response?.success && response.data) {
         setSummaryData({
           summary: response.data.summary,
           title: response.data.title,

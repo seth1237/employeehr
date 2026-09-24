@@ -80,7 +80,7 @@ export default function SalesMeetingsPage() {
     setLoading(true)
     try {
       const response = await meetingsApi.getAll()
-      if (response.success) {
+      if (response?.success) {
         setMeetings((response.data as SalesMeeting[]) || [])
       } else {
         toast({
@@ -136,7 +136,7 @@ export default function SalesMeetingsPage() {
     setJoiningId(meeting._id)
     try {
       const joinRes = await meetingsApi.join(meeting._id)
-      const fresh = joinRes.success && joinRes.data ? (joinRes.data as SalesMeeting) : meeting
+      const fresh = joinRes?.success && joinRes.data ? (joinRes.data as SalesMeeting) : meeting
       // Prefer latest full record when available
       const detail = await meetingsApi.getById(meeting._id).catch(() => null)
       const next = (detail?.success && detail.data ? detail.data : fresh) as SalesMeeting

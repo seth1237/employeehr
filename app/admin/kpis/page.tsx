@@ -52,7 +52,7 @@ export default function AdminKpisPage() {
     const silent = startDataLoad(opts, setLoading, setRefreshing)
     try {
       const res = await api.kpis.getAll()
-      if (res.success) setKpis(res.data || [])
+      if (res?.success) setKpis(res.data || [])
     } catch (error) {
       console.error(error)
       toast({ variant: "destructive", description: "Failed to load KPIs" })
@@ -102,7 +102,7 @@ export default function AdminKpisPage() {
       const res = editingId
         ? await api.kpis.update(editingId, payload as any)
         : await api.kpis.create(payload as any)
-      if (!res.success) throw new Error(res.message || "Save failed")
+      if (!res?.success) throw new Error(res.message || "Save failed")
       toast({ description: editingId ? "KPI updated" : "KPI created" })
       setDialogOpen(false)
       load({ silent: true })
@@ -120,7 +120,7 @@ export default function AdminKpisPage() {
     if (!confirm("Delete this KPI?")) return
     try {
       const res = await api.kpis.delete(id)
-      if (!res.success) throw new Error(res.message || "Delete failed")
+      if (!res?.success) throw new Error(res.message || "Delete failed")
       toast({ description: "KPI deleted" })
       load({ silent: true })
     } catch (error: any) {

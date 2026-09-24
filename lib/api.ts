@@ -1641,7 +1641,7 @@ const debitNoteApi = {
   delete: (id: string) => client.delete<any>(`/api/stock/debit-notes/${id}`),
 };
 
-const cashBankingApi = {
+export const cashBankingApi = {
   getOverview: (params?: { from?: string; to?: string }) => {
     const q = new URLSearchParams();
     if (params?.from) q.set("from", params.from);
@@ -1659,6 +1659,9 @@ const cashBankingApi = {
       `/api/accounts/cash-banking/accounts${qs ? `?${qs}` : ""}`,
     );
   },
+
+  getAccounts: (params?: { type?: string; status?: string }) =>
+    cashBankingApi.listAccounts(params),
 
   createAccount: (data: Record<string, unknown>) =>
     client.post<any>("/api/accounts/cash-banking/accounts", data),

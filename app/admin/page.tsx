@@ -213,6 +213,11 @@ export default function AdminDashboard() {
       }
 
       if (!statsRes?.success) {
+        if (/empty|invalid/i.test(String((statsRes as any)?.message || ""))) {
+          setData(DEFAULT_DATA)
+          setLastUpdatedAt(new Date())
+          return
+        }
         throw new Error((statsRes as any)?.message || 'Failed to fetch dashboard stats')
       }
       

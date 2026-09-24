@@ -166,7 +166,9 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }))
 
 app.use(sanitizeInput)
 app.use(apiLimiter)
-app.use("/api", (_req, res, next) => {
+app.use("/api", (req, res, next) => {
+  delete req.headers["if-none-match"]
+  delete req.headers["if-modified-since"]
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private")
   res.setHeader("Pragma", "no-cache")
   res.setHeader("Expires", "0")

@@ -52,7 +52,7 @@ export class DashboardController {
         safeQuery("kpis", () => KPI.find({ org_id: orgId }).select("_id").lean(), []),
         safeQuery("awards", () => Award.find({ org_id: orgId }).select("_id").lean(), []),
         safeQuery("performances", () => Performance.find({ org_id: orgId }).select("_id user_id overall_score").lean(), []),
-        safeQuery("attendance", () => Attendance.find({ org_id: orgId }).select("_id date createdAt checkIn checkOut user_id status").lean(), []),
+        safeQuery("attendance", () => Attendance.find({ org_id: orgId }).select("_id date createdAt checkIn checkOut user_id status").sort({ date: -1 }).limit(2000).lean(), []),
         safeQuery("leave", () => LeaveRequest.find({ org_id: orgId }).select("_id status leave_type createdAt updatedAt user_id user").lean(), []),
         safeQuery("payroll", () => Payroll.find({ org_id: orgId }).select("_id status").lean(), []),
         safeQuery("meetings", () => Meeting.find({ org_id: orgId }).select("_id title scheduled_at scheduled_start createdAt organizer_id").lean(), []),
@@ -64,11 +64,13 @@ export class DashboardController {
           () =>
             StockInvoice.find({ org_id: orgId })
               .select("_id invoiceNumber number subTotal items.productId items.productName items.quantity items.lineTotal dispatch createdAt updatedAt createdBy client clientName buyer quotationId quotationNumber")
+              .sort({ updatedAt: -1 })
+              .limit(400)
               .lean(),
           [],
         ),
-        safeQuery("products", () => StockProduct.find({ org_id: orgId }).select("_id name currentQuantity minAlertQuantity").lean(), []),
-        safeQuery("quotations", () => StockQuotation.find({ org_id: orgId }).select("_id").lean(), []),
+        safeQuery("products", () => StockProduct.find({ org_id: orgId }).select("_id name currentQuantity minAlertQuantity").limit(500).lean(), []),
+        safeQuery("quotations", () => StockQuotation.find({ org_id: orgId }).select("_id").limit(500).lean(), []),
       ])
 
       return res.status(200).json({

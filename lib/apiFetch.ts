@@ -18,7 +18,11 @@ export async function fetchNoStore(
   input: RequestInfo,
   init?: RequestInit,
 ): Promise<Response> {
-  const url = typeof input === "string" ? rewriteApiUrl(input) : input
+  const method = String(init?.method || "GET").toUpperCase()
+  let url = typeof input === "string" ? rewriteApiUrl(input) : input
+  if (method === "GET" && typeof url === "string") {
+    url = withCacheBust(url)
+  }
   const headers = withNoStoreHeaders(init?.headers)
 
   let response = await fetch(url, {

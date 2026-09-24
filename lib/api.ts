@@ -40,11 +40,14 @@ class ApiClient {
     const token = getToken();
     const isFormData =
       typeof FormData !== "undefined" && options.body instanceof FormData;
+    const method = String(options.method || "GET").toUpperCase();
     const headers: Record<string, string> = {
-      ...(isFormData ? {} : { "Content-Type": "application/json" }),
+      ...(isFormData || method === "GET" || method === "HEAD"
+        ? {}
+        : { "Content-Type": "application/json" }),
       ...(options.headers as Record<string, string>),
     };
-    if (isFormData) {
+    if (isFormData || method === "GET" || method === "HEAD") {
       delete headers["Content-Type"];
     }
 
@@ -2107,7 +2110,7 @@ export const api = {
   engineering: engineeringApi,
   etims: etimsApi,
   dashboard: {
-    getStats: () => client.get<any>("/api/dashboard/stats"),
+    getStats: () => client.get<any>(`/api/dashboard/stats?_=${Date.now()}`),
   },
   projects: projectsApi,
 };

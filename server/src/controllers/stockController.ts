@@ -8709,19 +8709,21 @@ export class StockController {
       }
       const products = await productsQuery.lean();
 
-      const categoryIds = [
-        ...new Set(products.map((product) => product.category).filter(Boolean)),
-      ];
-      const categories = await StockCategory.find({
-        _id: { $in: categoryIds },
-        org_id,
-      }).lean();
+      const categoryIds = toValidObjectIds(
+        products.map((product) => String((product as any).category || "")),
+      );
+      const categories = categoryIds.length
+        ? await StockCategory.find({
+            _id: { $in: categoryIds },
+            org_id,
+          }).lean()
+        : [];
       const categoryMap = new Map(
         categories.map((category) => [String(category._id), category]),
       );
 
       const warehouseQuantities = new Map<string, number>();
-      if (warehouseId) {
+      if (warehouseId && Types.ObjectId.isValid(warehouseId)) {
         const productLocations = await StockProductLocation.find({
           org_id,
           branchId: warehouseId,

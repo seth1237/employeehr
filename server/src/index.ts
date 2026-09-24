@@ -115,6 +115,8 @@ const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:3001",
   "http://localhost:3002",
+  "https://www.elevatehub.co.ke",
+  "https://elevatehub.co.ke",
   "https://hr.codewithseth.co.ke",
   "https://tarumed.vercel.app",
   "https://www.tarumed.vercel.app",

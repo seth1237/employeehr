@@ -15,6 +15,15 @@ import { StockInvoice } from "../models/StockInvoice"
 import { StockProduct } from "../models/StockProduct"
 import { StockQuotation } from "../models/StockQuotation"
 
+async function safeQuery<T>(label: string, fn: () => Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await fn()
+  } catch (error) {
+    console.error(`getAdminStats ${label}:`, error)
+    return fallback
+  }
+}
+
 export class DashboardController {
   static async getAdminStats(req: AuthenticatedRequest, res: Response) {
     try {
@@ -23,22 +32,44 @@ export class DashboardController {
       }
       const orgId = req.org_id
 
-      // Use .select() to pick only the fields the frontend calculates upon
-      const usersRes = await User.find({ org_id: orgId }).select('_id firstName lastName email department status createdAt profilePic')
-      const kpisRes = await KPI.find({ org_id: orgId }).select('_id')
-      const awardsRes = await Award.find({ org_id: orgId }).select('_id')
-      const perfRes = await Performance.find({ org_id: orgId }).select('_id user_id overall_score')
-      const attendRes = await Attendance.find({ org_id: orgId }).select('_id date createdAt checkIn checkOut user_id status')
-      const leaveRes = await LeaveRequest.find({ org_id: orgId }).select('_id status leave_type createdAt updatedAt user_id user')
-      const payrollRes = await Payroll.find({ org_id: orgId }).select('_id status')
-      const meetingsRes = await Meeting.find({ org_id: orgId }).select('_id title scheduled_at scheduled_start createdAt organizer_id')
-      const reportsRes = await Report.find({ org_id: orgId }).select('_id created_at createdAt user_id')
-      const feedbackRes = await Feedback.find({ org_id: orgId }).select('_id')
-      const pdpRes = await PDP.find({ org_id: orgId }).select('_id')
-      
-      const stockInvoicesRes = await StockInvoice.find({ org_id: orgId }).select('_id invoiceNumber number subTotal items dispatch createdAt updatedAt createdBy client clientName buyer quotationId quotationNumber')
-      const stockProductsRes = await StockProduct.find({ org_id: orgId }).select('_id name currentQuantity minAlertQuantity')
-      const stockQuotationsRes = await StockQuotation.find({ org_id: orgId }).select('_id')
+      const [
+        usersRes,
+        kpisRes,
+        awardsRes,
+        perfRes,
+        attendRes,
+        leaveRes,
+        payrollRes,
+        meetingsRes,
+        reportsRes,
+        feedbackRes,
+        pdpRes,
+        stockInvoicesRes,
+        stockProductsRes,
+        stockQuotationsRes,
+      ] = await Promise.all([
+        safeQuery("users", () => User.find({ org_id: orgId }).select("_id firstName lastName email department status createdAt profilePic").lean(), []),
+        safeQuery("kpis", () => KPI.find({ org_id: orgId }).select("_id").lean(), []),
+        safeQuery("awards", () => Award.find({ org_id: orgId }).select("_id").lean(), []),
+        safeQuery("performances", () => Performance.find({ org_id: orgId }).select("_id user_id overall_score").lean(), []),
+        safeQuery("attendance", () => Attendance.find({ org_id: orgId }).select("_id date createdAt checkIn checkOut user_id status").lean(), []),
+        safeQuery("leave", () => LeaveRequest.find({ org_id: orgId }).select("_id status leave_type createdAt updatedAt user_id user").lean(), []),
+        safeQuery("payroll", () => Payroll.find({ org_id: orgId }).select("_id status").lean(), []),
+        safeQuery("meetings", () => Meeting.find({ org_id: orgId }).select("_id title scheduled_at scheduled_start createdAt organizer_id").lean(), []),
+        safeQuery("reports", () => Report.find({ org_id: orgId }).select("_id created_at createdAt user_id").lean(), []),
+        safeQuery("feedback", () => Feedback.find({ org_id: orgId }).select("_id").lean(), []),
+        safeQuery("pdps", () => PDP.find({ org_id: orgId }).select("_id").lean(), []),
+        safeQuery(
+          "invoices",
+          () =>
+            StockInvoice.find({ org_id: orgId })
+              .select("_id invoiceNumber number subTotal items.productId items.productName items.quantity items.lineTotal dispatch createdAt updatedAt createdBy client clientName buyer quotationId quotationNumber")
+              .lean(),
+          [],
+        ),
+        safeQuery("products", () => StockProduct.find({ org_id: orgId }).select("_id name currentQuantity minAlertQuantity").lean(), []),
+        safeQuery("quotations", () => StockQuotation.find({ org_id: orgId }).select("_id").lean(), []),
+      ])
 
       return res.status(200).json({
         success: true,

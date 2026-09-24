@@ -10,6 +10,8 @@ yarn.lock
 .env*.local
 .env.production
 .env.development
+deployed.env
+**/deployed.env
 
 # Next.js build output
 .next/

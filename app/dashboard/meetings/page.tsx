@@ -50,17 +50,17 @@ export default function MeetingsPage() {
 
   const fetchMeetings = async () => {
     const response = await meetingsApi.getAll()
-    if (response.success) {
+    if (response?.success) {
       setMeetings(response.data || [])
       setError(null)
     } else {
-      setError(response.message || 'Failed to load meetings')
+      setError(response?.message || 'Failed to load meetings')
     }
   }
 
   const createMeeting = async (meetingData: any) => {
     const response = await meetingsApi.create(meetingData)
-    if (!response.success) {
+    if (!response?.success) {
       throw new Error(response.message || 'Failed to create meeting')
     }
     await fetchMeetings()

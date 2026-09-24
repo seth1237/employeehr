@@ -208,11 +208,11 @@ export default function AdminDashboard() {
 
       const statsRes = await api.dashboard.getStats()
       
-      if (!statsRes.success) {
-        throw new Error((statsRes as any).message || 'Failed to fetch dashboard stats')
+      if (!statsRes?.success) {
+        throw new Error((statsRes as any)?.message || 'Failed to fetch dashboard stats')
       }
       
-      const payload = (statsRes as any).data
+      const payload = (statsRes as any)?.data || {}
 
       setData({
         users: payload.users || [],

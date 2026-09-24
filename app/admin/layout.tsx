@@ -78,7 +78,7 @@ export default function AdminLayout({
     try {
       const response = await api.setup.getProgress();
 
-      if (response.success && response.data) {
+      if (response?.success && response.data) {
         if (!response.data.setupProgress?.completed) {
           router.push("/setup");
           return;
@@ -100,7 +100,7 @@ export default function AdminLayout({
 
       try {
         const response = await api.company.getPageAccess();
-        if (!response.success) return;
+        if (!response?.success) return;
 
         const allowed = resolveAdminAllowedSections({
           role: user.role,

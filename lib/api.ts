@@ -121,6 +121,15 @@ class ApiClient {
         throw new Error(data?.message || data?.error || errorMessage);
       }
 
+      if (!data || typeof data !== "object") {
+        return {
+          success: false,
+          message: text?.trim()
+            ? `Invalid response from ${endpoint}`
+            : `Empty response from ${endpoint}`,
+        } as ApiResponse<T>;
+      }
+
       return data;
     } catch (error) {
       const errorMessage =

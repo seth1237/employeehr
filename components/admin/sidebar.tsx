@@ -542,7 +542,7 @@ export default function AdminSidebar({
 
       try {
         const response = await companyApi.getPageAccess();
-        if (!response.success) {
+        if (!response?.success) {
           setAllowedSections(null);
           return;
         }

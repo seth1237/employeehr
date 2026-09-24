@@ -66,7 +66,7 @@ export default function EmployeeLayout({
 
       try {
         const response = await companyApi.getPageAccess()
-        if (!response.success) return
+        if (!response?.success) return
 
         const userId = user._id || user.userId
         const userSections: string[] | undefined = userId ? response.data?.adminSectionsByUser?.[userId] : undefined

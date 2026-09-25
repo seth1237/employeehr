@@ -1,10 +1,17 @@
 "use client"
 
-import { Menu, PanelLeftClose, PanelLeftOpen, Search } from "lucide-react"
+import { CircleHelp, Menu, PanelLeftClose, PanelLeftOpen, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { getUser } from "@/lib/auth"
 import { AdminCommandPalette } from "@/components/admin/command-palette"
 import { AdminNotificationsPopover } from "@/components/admin/notifications-popover"
+import { requestWalkthroughReplay } from "@/lib/walkthrough"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 interface TopNavProps {
   onMenuClick: () => void
@@ -60,8 +67,21 @@ export default function AdminTopNav({ onMenuClick, onSidebarCollapseToggle, isSi
           <Search size={20} />
         </Button>
         <AdminNotificationsPopover />
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm" className="hidden lg:inline-flex" aria-label="Help">
+              <CircleHelp size={18} />
+              <span className="ml-1.5 text-sm">Help</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => requestWalkthroughReplay("admin")}>
+              Product tour
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
-        <div className="flex items-center gap-2 sm:gap-3 pl-2 sm:pl-4 border-l border-border">
+        <div data-tour="wt-profile" className="flex items-center gap-2 sm:gap-3 pl-2 sm:pl-4 border-l border-border">
           <div className="text-right hidden sm:block">
             <p className="text-sm font-medium">
               {user?.first_name} {user?.last_name}

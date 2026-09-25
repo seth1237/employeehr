@@ -14,6 +14,7 @@ import {
   resolveAdminAllowedSections,
 } from "@/lib/admin-sections";
 import { firstAllowedAdminPath } from "@/lib/enabled-pages";
+import { WalkthroughProvider } from "@/components/walkthrough";
 
 export default function AdminLayout({
   children,
@@ -138,6 +139,7 @@ export default function AdminLayout({
   }
 
   return (
+    <WalkthroughProvider portal="admin">
     <div className="flex h-screen bg-background">
       <a
         href="#admin-main"
@@ -168,5 +170,6 @@ export default function AdminLayout({
       </div>
       <AiAssistantChat />
     </div>
+    </WalkthroughProvider>
   );
 }

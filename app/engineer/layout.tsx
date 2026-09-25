@@ -8,11 +8,13 @@ import { EngineerSidebar } from "@/components/engineer/sidebar"
 import { EngineerTopNav } from "@/components/engineer/top-nav"
 import { EngineerMobileNav } from "@/components/engineer/mobile-nav"
 import { AiAssistantChat } from "@/components/ai/ai-assistant-chat"
+import { WalkthroughProvider } from "@/components/walkthrough"
 
 function EngineerShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   return (
+    <WalkthroughProvider portal="engineer">
     <div className="flex h-screen overflow-hidden bg-slate-50">
       <EngineerSidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(false)} />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -22,6 +24,7 @@ function EngineerShell({ children }: { children: React.ReactNode }) {
       </div>
       <AiAssistantChat variant="engineer" />
     </div>
+    </WalkthroughProvider>
   )
 }
 

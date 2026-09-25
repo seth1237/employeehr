@@ -45,7 +45,7 @@ export default function EngineerDashboard() {
     <EngineerPage>
       <EngineerHeader title="Today" description="Your open work and overdue jobs." />
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div data-tour="wt-dashboard" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {stats.map((stat) => (
           <EngineerKpi
             key={stat.label}

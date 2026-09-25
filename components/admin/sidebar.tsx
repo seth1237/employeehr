@@ -534,6 +534,18 @@ export default function AdminSidebar({
   }, []);
 
   useEffect(() => {
+    const expandForTour = () => {
+      if (document.body.dataset.walkthrough === "open") {
+        setCollapsedSections(new Set());
+      }
+    };
+    expandForTour();
+    const observer = new MutationObserver(expandForTour);
+    observer.observe(document.body, { attributes: true, attributeFilter: ["data-walkthrough"] });
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
     const loadSectionAccess = async () => {
       const role = currentUser?.role;
       if (!role || role === "super_admin") {
@@ -643,7 +655,7 @@ export default function AdminSidebar({
     const activeAccountsPage = resolveAccountsPageFromPathname(pathname || "");
 
     return (
-      <div key="ACCOUNTS">
+      <div key="ACCOUNTS" data-tour="wt-section-ACCOUNTS">
         {!isCollapsed ? (
           <button
             type="button"
@@ -799,6 +811,7 @@ export default function AdminSidebar({
       )}
 
       <aside
+        data-tour="wt-sidebar"
         className={`
         fixed lg:static top-0 left-0 h-screen bg-card border-r border-border z-50 flex flex-col
         transition-all duration-300 ${isCollapsed ? "lg:w-20" : "lg:w-64"} w-64
@@ -882,7 +895,7 @@ export default function AdminSidebar({
             }
 
             blocks.push(
-              <div key={sectionName}>
+              <div key={sectionName} data-tour={`wt-section-${sectionName}`}>
                 {!isCollapsed ? (
                   <button
                     type="button"
@@ -909,6 +922,7 @@ export default function AdminSidebar({
                       <Link
                         key={item.href}
                         href={item.href}
+                        data-tour={`wt-nav-${item.href}`}
                         title={isCollapsed ? item.label : undefined}
                         className={`
                         flex items-center rounded-lg transition text-sm

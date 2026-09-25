@@ -1,9 +1,16 @@
 "use client"
 
 import Link from "next/link"
-import { Menu, Plus } from "lucide-react"
+import { CircleHelp, Menu, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { getUser } from "@/lib/auth"
+import { requestWalkthroughReplay } from "@/lib/walkthrough"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 export function SalesTopNav({ onMenuClick }: { onMenuClick?: () => void }) {
   const user = getUser()
@@ -22,17 +29,32 @@ export function SalesTopNav({ onMenuClick }: { onMenuClick?: () => void }) {
           <p className="hidden text-xs text-slate-500 sm:block">Let’s get today’s visits in</p>
         </div>
       </div>
-      <Button asChild size="icon" className="h-10 w-10 sm:hidden" aria-label="Plan visit">
-        <Link href="/sales/planner">
-          <Plus className="h-4 w-4" />
-        </Link>
-      </Button>
-      <Button asChild size="sm" className="hidden min-h-10 sm:inline-flex">
-        <Link href="/sales/planner">
-          <Plus className="mr-1.5 h-4 w-4" />
-          Plan visit
-        </Link>
-      </Button>
+      <div className="flex items-center gap-2">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm" className="hidden lg:inline-flex" aria-label="Help">
+              <CircleHelp size={18} />
+              <span className="ml-1.5 text-sm">Help</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => requestWalkthroughReplay("sales")}>
+              Product tour
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <Button asChild size="icon" className="h-10 w-10 sm:hidden" aria-label="Plan visit">
+          <Link href="/sales/planner">
+            <Plus className="h-4 w-4" />
+          </Link>
+        </Button>
+        <Button asChild size="sm" className="hidden min-h-10 sm:inline-flex">
+          <Link href="/sales/planner">
+            <Plus className="mr-1.5 h-4 w-4" />
+            Plan visit
+          </Link>
+        </Button>
+      </div>
     </header>
   )
 }

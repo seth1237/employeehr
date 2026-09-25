@@ -53,6 +53,15 @@ const STEPS: Array<{
 export function SalesWorkflowTour({ pathname = "/admin" }: { pathname?: string }) {
   const [current, setCurrent] = useState<SalesTourStep | null>(null)
   const [visible, setVisible] = useState(false)
+  const [walkthroughOpen, setWalkthroughOpen] = useState(false)
+
+  useEffect(() => {
+    const sync = () => setWalkthroughOpen(document.body.dataset.walkthrough === "open")
+    sync()
+    const observer = new MutationObserver(sync)
+    observer.observe(document.body, { attributes: true, attributeFilter: ["data-walkthrough"] })
+    return () => observer.disconnect()
+  }, [])
 
   useEffect(() => {
     const decision = touchAdminVisitAndShouldShowTour()
@@ -79,7 +88,7 @@ export function SalesWorkflowTour({ pathname = "/admin" }: { pathname?: string }
     }
   }, [pathname, current, visible])
 
-  if (!visible || !current || current === "completed") return null
+  if (walkthroughOpen || !visible || !current || current === "completed") return null
 
   const activeIndex = STEPS.findIndex((s) => s.id === current)
   const step = STEPS[activeIndex] || STEPS[0]

@@ -749,7 +749,7 @@ export default function AdminDashboard() {
         <SalesWorkflowTour pathname="/admin" />
 
         {/* Main grid */}
-        <div className="grid gap-4 lg:gap-6 xl:grid-cols-[1.65fr_1fr]">
+        <div data-tour="wt-dashboard" className="grid gap-4 lg:gap-6 xl:grid-cols-[1.65fr_1fr]">
           <div className="space-y-4 lg:space-y-6">
             {leftWidgets.map((widgetId) => {
               if (widgetId === 'hr-overview') {

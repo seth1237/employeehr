@@ -200,7 +200,7 @@ export default function SalesDashboardPage() {
         onEndDay={() => void endDay()}
       />
 
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+      <div data-tour="wt-dashboard" className="grid grid-cols-2 gap-2 lg:grid-cols-4">
         <SalesKpi
           label="Coverage"
           value={`${Number(kpis?.coverageCompleted || 0)}/${Number(kpis?.coveragePlanned || 0)}`}

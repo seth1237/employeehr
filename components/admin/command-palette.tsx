@@ -168,6 +168,7 @@ export function AdminCommandPalette() {
     <>
       <button
         type="button"
+        data-tour="wt-search"
         onClick={() => setOpen(true)}
         className="hidden md:inline-flex items-center gap-2 h-9 px-3 rounded-md border border-border bg-background text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors min-w-[220px]"
       >

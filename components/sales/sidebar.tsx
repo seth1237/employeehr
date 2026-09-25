@@ -46,6 +46,7 @@ export function SalesSidebar({ isOpen = false, onToggle }: { isOpen?: boolean; o
         />
       ) : null}
       <aside
+        data-tour="wt-sidebar"
         className={cn(
           "fixed top-0 left-0 z-50 flex h-screen w-64 flex-col border-r border-slate-200 bg-white transition-transform duration-200 lg:static",
           isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
@@ -68,6 +69,7 @@ export function SalesSidebar({ isOpen = false, onToggle }: { isOpen?: boolean; o
               <Link
                 key={item.href}
                 href={item.href}
+                data-tour={item.href === "/sales/quotes" ? "wt-section-sales-quotes" : undefined}
                 onClick={onToggle}
                 className={cn(
                   "flex min-h-11 items-center gap-3 rounded-md px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700",

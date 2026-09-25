@@ -109,7 +109,7 @@ export function AdminNotificationsPopover() {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="sm" className="relative" aria-label="Notifications">
+        <Button variant="ghost" size="sm" className="relative" data-tour="wt-notifications" aria-label="Notifications">
           <Bell size={20} />
           {unread > 0 && (
             <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold flex items-center justify-center">

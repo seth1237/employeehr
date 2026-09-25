@@ -7,6 +7,7 @@ import { SalesSidebar } from "@/components/sales/sidebar"
 import { SalesTopNav } from "@/components/sales/top-nav"
 import { SalesMobileNav } from "@/components/sales/mobile-nav"
 import { AiAssistantChat } from "@/components/ai/ai-assistant-chat"
+import { WalkthroughProvider } from "@/components/walkthrough"
 
 export default function SalesLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -36,6 +37,7 @@ export default function SalesLayout({ children }: { children: React.ReactNode })
   }
 
   return (
+    <WalkthroughProvider portal="sales">
     <div className="flex h-screen overflow-hidden bg-slate-50">
       <SalesSidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(false)} />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -45,5 +47,6 @@ export default function SalesLayout({ children }: { children: React.ReactNode })
       </div>
       <AiAssistantChat variant="sales" />
     </div>
+    </WalkthroughProvider>
   )
 }

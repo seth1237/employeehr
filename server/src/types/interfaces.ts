@@ -14,7 +14,10 @@ export interface IUser {
     | "manager"
     | "employee"
     | "hr"
-    | "sales_rep";
+    | "sales_rep"
+    | "technical_service_engineer"
+    | "dispatch"
+    | "pos_cashier";
   department?: string;
   position?: string; // Job title
   manager_id?: string;

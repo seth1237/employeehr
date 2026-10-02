@@ -6,7 +6,7 @@ export interface User {
     email: string
     first_name: string
     last_name: string
-    role: 'company_admin' | 'admin' | 'hr' | 'manager' | 'employee' | 'sales_rep'
+    role: 'company_admin' | 'admin' | 'hr' | 'manager' | 'employee' | 'sales_rep' | 'technical_service_engineer' | 'dispatch' | 'pos_cashier'
     org_id: string
     department?: string
     position?: string
@@ -33,7 +33,7 @@ export interface BackendUser {
     email: string
     firstName: string
     lastName: string
-    role: 'company_admin' | 'admin' | 'hr' | 'manager' | 'employee' | 'sales_rep'
+    role: 'company_admin' | 'admin' | 'hr' | 'manager' | 'employee' | 'sales_rep' | 'technical_service_engineer' | 'dispatch' | 'pos_cashier'
     org_id: string
     department?: string
     manager_id?: string

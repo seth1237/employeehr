@@ -76,6 +76,7 @@ import {
   isOwnDocumentsRole,
 } from "./stock/stockShared";
 import { QuotationController } from "./stock/quotationController";
+import { assignBarcodeFields } from "../lib/productBarcode";
 
 function normalizeClientValue(value: string) {
   return String(value || "")
@@ -7810,27 +7811,31 @@ export class StockController {
       }
 
       const currentPacking = invoice.dispatch?.packingItems || [];
-      const packedMap = new Map<string, number>();
+      const packedMap = new Map<string, { packedQuantity: number; serials?: string[] }>();
       if (Array.isArray(items)) {
         for (const item of items) {
-          packedMap.set(
-            String(item.productId),
-            Math.max(0, Number(item.packedQuantity || 0)),
-          );
+          packedMap.set(String(item.productId), {
+            packedQuantity: Math.max(0, Number(item.packedQuantity || 0)),
+            serials: Array.isArray(item.serials)
+              ? item.serials.map((value: string) => String(value || "").trim()).filter(Boolean)
+              : undefined,
+          });
         }
       }
 
-      const nextPacking = currentPacking.map((item: any) => ({
-        productId: item.productId,
-        productName: item.productName,
-        requiredQuantity: Number(item.requiredQuantity),
-        packedQuantity: packedMap.has(String(item.productId))
-          ? Math.min(
-              Number(item.requiredQuantity),
-              Number(packedMap.get(String(item.productId))),
-            )
-          : Number(item.packedQuantity || 0),
-      }));
+      const nextPacking = currentPacking.map((item: any) => {
+        const next = packedMap.get(String(item.productId));
+        return {
+          productId: item.productId,
+          productName: item.productName,
+          requiredQuantity: Number(item.requiredQuantity),
+          packedQuantity: next
+            ? Math.min(Number(item.requiredQuantity), Number(next.packedQuantity))
+            : Number(item.packedQuantity || 0),
+          scannedAt: item.scannedAt,
+          serials: next?.serials ?? item.serials ?? [],
+        };
+      });
 
       const packingCompleted = computePackingCompletion(nextPacking);
 
@@ -8547,6 +8552,8 @@ export class StockController {
       const intervalDays = getVal(req.body.intervalDays) || 0;
       const manufacturer = getVal(req.body.manufacturer);
       const description = getVal(req.body.description);
+      const sku = getVal(req.body.sku);
+      const manufacturerBarcode = getVal(req.body.manufacturerBarcode);
 
       const resolvedBuyingPrice =
         buyingPrice !== undefined ? buyingPrice : startingPrice;
@@ -8616,7 +8623,7 @@ export class StockController {
         imageUrl = await StockController.processProductImage(req.file);
       }
 
-      const product = await StockProduct.create({
+      let productPayload: Record<string, unknown> = {
         org_id,
         name: String(name).trim(),
         category,
@@ -8646,7 +8653,25 @@ export class StockController {
         manufacturer: manufacturer ? String(manufacturer).trim() : undefined,
         description: description ? String(description).trim() : undefined,
         imageUrl,
-      });
+      };
+
+      try {
+        productPayload = await assignBarcodeFields(org_id, productPayload, {
+          sku: sku ? String(sku) : "",
+          manufacturerBarcode: manufacturerBarcode
+            ? String(manufacturerBarcode)
+            : "",
+          category: String(category || ""),
+          productType: String(productType || "physical"),
+        });
+      } catch (barcodeError: any) {
+        return res.status(400).json({
+          success: false,
+          message: barcodeError.message || "Could not assign product SKU",
+        });
+      }
+
+      const product = await StockProduct.create(productPayload);
 
       if (Number(currentQuantity) > 0 && trimmedBranchId) {
         await StockEntry.create({
@@ -8665,6 +8690,12 @@ export class StockController {
 
       return res.status(201).json({ success: true, data: product });
     } catch (error: any) {
+      if (error?.code === 11000) {
+        return res.status(400).json({
+          success: false,
+          message: "That SKU or barcode is already used",
+        });
+      }
       return res.status(500).json({
         success: false,
         message: error.message || "Failed to create product",
@@ -8704,7 +8735,7 @@ export class StockController {
       const productsQuery = StockProduct.find(productQuery).sort({ createdAt: -1 })
       if (lite) {
         productsQuery.select(
-          "_id name category startingPrice sellingPrice minAlertQuantity currentQuantity assignedUsers isOutsourced taxable taxRate expiryEnabled expiryDate expiryReminderDays productType isRecurring intervalDays manufacturer description isActive createdAt updatedAt imageUrl",
+          "_id name category startingPrice sellingPrice minAlertQuantity currentQuantity assignedUsers isOutsourced taxable taxRate expiryEnabled expiryDate expiryReminderDays productType isRecurring intervalDays manufacturer description isActive createdAt updatedAt imageUrl sku barcode manufacturerBarcode",
         )
       }
       const products = await productsQuery.lean();
@@ -8877,6 +8908,17 @@ export class StockController {
       if (description !== undefined) {
         payload.description = description ? String(description).trim() : null;
       }
+      if (req.body.sku !== undefined) {
+        const val = String(getVal(req.body.sku) || "").trim().toUpperCase();
+        if (val) {
+          payload.sku = val;
+          payload.barcode = val;
+        }
+      }
+      if (req.body.manufacturerBarcode !== undefined) {
+        const val = String(getVal(req.body.manufacturerBarcode) || "").trim();
+        payload.manufacturerBarcode = val || null;
+      }
 
       if (req.file) {
         payload.imageUrl = await StockController.processProductImage(req.file);
@@ -8905,18 +8947,57 @@ export class StockController {
         });
       }
 
-      const product = await StockProduct.findOneAndUpdate(
-        { _id: id, org_id },
-        { $set: payload },
-        { new: true },
-      );
+      const product = await StockProduct.findOne({ _id: id, org_id });
       if (!product) {
         return res
           .status(404)
           .json({ success: false, message: "Product not found" });
       }
 
-      return res.status(200).json({ success: true, data: product });
+      if (payload.sku && payload.sku !== product.sku) {
+        const taken = await StockProduct.findOne({
+          org_id,
+          sku: payload.sku,
+          _id: { $ne: product._id },
+        }).select("_id");
+        if (taken) {
+          return res.status(400).json({
+            success: false,
+            message: `SKU ${payload.sku} is already used`,
+          });
+        }
+      }
+
+      if (
+        product.productType !== "service" &&
+        !product.sku &&
+        !payload.sku
+      ) {
+        try {
+          const assigned = await assignBarcodeFields(
+            org_id,
+            {},
+            {
+              category: String(payload.category || product.category || ""),
+              productType: String(product.productType || "physical"),
+            },
+          );
+          Object.assign(payload, assigned);
+        } catch (barcodeError: any) {
+          return res.status(400).json({
+            success: false,
+            message: barcodeError.message || "Could not assign product SKU",
+          });
+        }
+      }
+
+      const updated = await StockProduct.findOneAndUpdate(
+        { _id: id, org_id },
+        { $set: payload },
+        { new: true },
+      );
+
+      return res.status(200).json({ success: true, data: updated });
     } catch (error: any) {
       return res.status(500).json({
         success: false,
@@ -9081,6 +9162,16 @@ export class StockController {
           const description = String(
             row.description || row["Description"] || row.notes || "",
           ).trim();
+          const sku = String(
+            row.sku || row.SKU || row.barcode || row.Barcode || "",
+          ).trim();
+          const manufacturerBarcode = String(
+            row.manufacturerBarcode ||
+              row["Manufacturer Barcode"] ||
+              row.ean ||
+              row.EAN ||
+              "",
+          ).trim();
 
           if (!name) {
             errors.push(`Row ${index + 1}: Missing product name`);
@@ -9138,49 +9229,73 @@ export class StockController {
           let productId = existingProduct ? String(existingProduct._id) : "";
 
           if (existingProduct) {
+            const barcodePatch: Record<string, unknown> = {
+              category: categoryId || existingProduct.category,
+              startingPrice:
+                Number.isFinite(startingPrice) && startingPrice >= 0
+                  ? startingPrice
+                  : existingProduct.startingPrice,
+              sellingPrice:
+                Number.isFinite(sellingPrice) && sellingPrice >= 0
+                  ? sellingPrice
+                  : existingProduct.sellingPrice,
+              minAlertQuantity: Number.isFinite(minAlertQuantity)
+                ? minAlertQuantity
+                : existingProduct.minAlertQuantity,
+              currentQuantity:
+                Number(existingProduct.currentQuantity || 0) +
+                (Number.isFinite(currentQuantity) ? currentQuantity : 0),
+              description: description || existingProduct.description,
+              isActive: true,
+            };
+            if (sku) {
+              barcodePatch.sku = sku.toUpperCase();
+              barcodePatch.barcode = sku.toUpperCase();
+            } else if (!existingProduct.sku) {
+              Object.assign(
+                barcodePatch,
+                await assignBarcodeFields(org_id, {}, {
+                  category: String(categoryId || existingProduct.category || ""),
+                  productType: String(existingProduct.productType || "physical"),
+                }),
+              );
+            }
+            if (manufacturerBarcode) {
+              barcodePatch.manufacturerBarcode = manufacturerBarcode;
+            }
             await StockProduct.findOneAndUpdate(
               { _id: existingProduct._id, org_id },
-              {
-                $set: {
-                  category: categoryId || existingProduct.category,
-                  startingPrice:
-                    Number.isFinite(startingPrice) && startingPrice >= 0
-                      ? startingPrice
-                      : existingProduct.startingPrice,
-                  sellingPrice:
-                    Number.isFinite(sellingPrice) && sellingPrice >= 0
-                      ? sellingPrice
-                      : existingProduct.sellingPrice,
-                  minAlertQuantity: Number.isFinite(minAlertQuantity)
-                    ? minAlertQuantity
-                    : existingProduct.minAlertQuantity,
-                  currentQuantity:
-                    Number(existingProduct.currentQuantity || 0) +
-                    (Number.isFinite(currentQuantity) ? currentQuantity : 0),
-                  description: description || existingProduct.description,
-                  isActive: true,
-                },
-              },
+              { $set: barcodePatch },
             );
             updatedCount += 1;
           } else {
-            const created = await StockProduct.create({
+            const createdPayload = await assignBarcodeFields(
               org_id,
-              name,
-              category: categoryId || undefined,
-              startingPrice: Number.isFinite(startingPrice) ? startingPrice : 0,
-              sellingPrice: Number.isFinite(sellingPrice) ? sellingPrice : 0,
-              minAlertQuantity: Number.isFinite(minAlertQuantity)
-                ? minAlertQuantity
-                : 0,
-              currentQuantity: Number.isFinite(currentQuantity)
-                ? currentQuantity
-                : 0,
-              description,
-              assignedUsers: [],
-              createdBy: actorId,
-              isActive: true,
-            });
+              {
+                org_id,
+                name,
+                category: categoryId || undefined,
+                startingPrice: Number.isFinite(startingPrice) ? startingPrice : 0,
+                sellingPrice: Number.isFinite(sellingPrice) ? sellingPrice : 0,
+                minAlertQuantity: Number.isFinite(minAlertQuantity)
+                  ? minAlertQuantity
+                  : 0,
+                currentQuantity: Number.isFinite(currentQuantity)
+                  ? currentQuantity
+                  : 0,
+                description,
+                assignedUsers: [],
+                createdBy: actorId,
+                isActive: true,
+              },
+              {
+                sku,
+                manufacturerBarcode,
+                category: categoryId,
+                productType: "physical",
+              },
+            );
+            const created = await StockProduct.create(createdPayload);
             productId = String(created._id);
             createdCount += 1;
           }

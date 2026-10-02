@@ -190,6 +190,7 @@ export default function TeamManagement() {
                 <option value="hr">HR</option>
                 <option value="employee">Employee</option>
                 <option value="sales_rep">Sales Representative</option>
+                <option value="pos_cashier">Cashier (POS)</option>
               </select>
             </div>
             <Input

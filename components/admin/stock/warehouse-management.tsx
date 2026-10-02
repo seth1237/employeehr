@@ -15,6 +15,9 @@ import {
 } from "@/components/ui/accordion";
 import { API_URL } from "@/lib/apiBase";
 import { fetchJson } from "@/lib/fetchUtils";
+import { stockApi } from "@/lib/api";
+import { BarcodeScanField } from "@/components/stock/barcode-scan-field";
+import { printBinLabels } from "@/components/stock/barcode-print";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1716,6 +1719,8 @@ function WarehouseManagementWrapper({
   const [newWarehouseCols, setNewWarehouseCols] = useState("10");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [putawayProduct, setPutawayProduct] = useState<any>(null);
+  const [putawayMessage, setPutawayMessage] = useState("");
 
   // Fetch warehouses on mount
   useEffect(() => {
@@ -1812,7 +1817,50 @@ function WarehouseManagementWrapper({
           >
             + New Warehouse
           </button>
+          <button
+            type="button"
+            onClick={() => {
+              const bins = (warehouseLocations || []).filter(
+                (row: any) =>
+                  row.code &&
+                  (!selectedWarehouseId ||
+                    String(row.branchId || "") === String(selectedWarehouseId)),
+              );
+              void printBinLabels(bins);
+            }}
+            className="px-3 py-2 text-sm font-medium rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+          >
+            Print bin labels
+          </button>
         </div>
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
+            <BarcodeScanField
+              label="Scan product to put away"
+              onCode={async (code) => {
+                const result = await stockApi.lookupProductByCode(code, "wms-putaway");
+                setPutawayProduct({ ...result.data, scannedCode: code });
+                setPutawayMessage(`${result.data.name} ready — scan a bin`);
+              }}
+            />
+            <BarcodeScanField
+              label="Scan bin"
+              disabled={!putawayProduct}
+              onCode={async (code) => {
+                if (!putawayProduct) return;
+                const result = await stockApi.scanPutaway({
+                  productCode: putawayProduct.sku || putawayProduct.barcode || putawayProduct.scannedCode,
+                  locationCode: code,
+                  warehouseId: selectedWarehouseId || undefined,
+                  quantity: 1,
+                });
+                setPutawayMessage(result.message || "Put away");
+                onRefreshLocations?.();
+              }}
+            />
+            {putawayMessage ? (
+              <p className="md:col-span-2 text-sm text-slate-600">{putawayMessage}</p>
+            ) : null}
+          </div>
 
         {/* Create Warehouse Form */}
         {showCreateForm && (

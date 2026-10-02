@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { stockApi } from "@/lib/api";
+import { BarcodeScanField } from "@/components/stock/barcode-scan-field";
 import { finishDataLoad, startDataLoad } from "@/lib/silent-load";
 import * as XLSX from "xlsx";
 import {
@@ -65,6 +66,7 @@ import {
 interface Product {
   _id: string;
   name: string;
+  sku?: string;
   sellingPrice: number;
   currentQuantity: number;
   isOutsourced?: boolean;
@@ -759,6 +761,7 @@ export default function QuotationsPage() {
     if (!query || isQuickCreateCode(productSearch)) return false;
     return (
       product.name.toLowerCase().includes(query) ||
+      (product.sku || "").toLowerCase().includes(query) ||
       (product.categoryDetails?.name || "").toLowerCase().includes(query)
     );
   });
@@ -916,6 +919,37 @@ export default function QuotationsPage() {
     setItemQuantity("1");
     setItemUnitPrice("");
     setItemDescription("");
+  };
+
+  const addItemFromScan = (product: Product) => {
+    const unitPrice = Number(product.sellingPrice || 0);
+    setItems((prev) => {
+      const existing = prev.find((item) => item.productId === product._id);
+      if (existing) {
+        return prev.map((item) =>
+          item.productId === product._id
+            ? { ...item, quantity: Number(item.quantity || 0) + 1 }
+            : item,
+        );
+      }
+      return [
+        ...prev,
+        {
+          productId: product._id,
+          quantity: 1,
+          productName: product.name,
+          productUnitPrice: unitPrice,
+          soldUnitPrice: unitPrice,
+          unitPrice,
+          taxable: Boolean(product.taxable),
+          taxRate: Boolean(product.taxable) ? Number(product.taxRate || DEFAULT_VAT_RATE) : 0,
+          description: product.description || "",
+          imageUrl: product.imageUrl,
+          showImageOnQuote: true,
+        },
+      ];
+    });
+    toast({ title: product.name, description: "Added from scan" });
   };
 
   const addQuickCreatedProduct = async () => {
@@ -2065,6 +2099,15 @@ export default function QuotationsPage() {
                           } else if (quickCreateOpen && value.trim() !== "99") {
                             // keep panel open only while code is 99 / user actively creating
                           }
+                        }}
+                      />
+                    </div>
+                    <div className="mt-2">
+                      <BarcodeScanField
+                        label="Scan to add"
+                        onCode={async (code) => {
+                          const result = await stockApi.lookupProductByCode(code, "quotation");
+                          addItemFromScan(result.data);
                         }}
                       />
                     </div>

@@ -4,11 +4,13 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
 import { fetchJson } from "@/lib/fetchUtils"
+import { stockApi } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { PageLoadingSkeleton } from "@/components/admin/ui/page-states"
+import { BarcodeScanField } from "@/components/stock/barcode-scan-field"
 
 interface CountEntry {
   productId: string
@@ -39,6 +41,7 @@ interface StockCheck {
 interface ProductRow {
   _id: string
   name: string
+  sku?: string
   currentQuantity: number
   expiryEnabled?: boolean
   expiryDate?: string | null
@@ -59,6 +62,7 @@ export default function StockCheckReviewPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [lastScannedId, setLastScannedId] = useState("")
   const saveTimeoutRef = useRef<number | null>(null)
 
   const productFilter = useMemo(() => {
@@ -66,6 +70,7 @@ export default function StockCheckReviewPage() {
     if (!normalized) return products
     return products.filter((product) =>
       product.name.toLowerCase().includes(normalized) ||
+      product.sku?.toLowerCase().includes(normalized) ||
       product.categoryDetails?.name?.toLowerCase().includes(normalized),
     )
   }, [products, searchTerm])
@@ -112,6 +117,7 @@ export default function StockCheckReviewPage() {
           return {
             _id: String(product._id),
             name: String(product.name || ""),
+            sku: product.sku || "",
             currentQuantity: Number(product.currentQuantity || 0),
             expiryEnabled: Boolean(product.expiryEnabled),
             expiryDate: product.expiryDate ? String(product.expiryDate) : null,
@@ -267,6 +273,23 @@ export default function StockCheckReviewPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-2">
+              <BarcodeScanField
+                label="Scan to count"
+                autoFocus
+                onCode={async (code) => {
+                  const result = await stockApi.lookupProductByCode(code, "stock-check")
+                  const product = products.find((row) => row._id === String(result.data._id))
+                  if (!product) {
+                    setSaveError("Not on this stock check")
+                    throw new Error("Not on this stock check")
+                  }
+                  setLastScannedId(product._id)
+                  setSearchTerm(product.sku || product.name)
+                  updateProductCount(product._id, Number(product.countedQuantity || 0) + 1)
+                }}
+              />
+            </div>
+            <div className="grid gap-2">
               <Label>Search products</Label>
               <Input
                 value={searchTerm}
@@ -302,9 +325,12 @@ export default function StockCheckReviewPage() {
               productFilter.map((product) => (
                 <div
                   key={product._id}
-                  className="grid grid-cols-6 gap-4 items-center py-3 border-b last:border-b-0"
+                  className={`grid grid-cols-6 gap-4 items-center py-3 border-b last:border-b-0 ${lastScannedId === product._id ? "bg-sky-50" : ""}`}
                 >
-                  <div>{product.name}</div>
+                  <div>
+                    <p>{product.name}</p>
+                    {product.sku ? <p className="text-xs text-muted-foreground">{product.sku}</p> : null}
+                  </div>
                   <div>{product.categoryDetails?.name || "—"}</div>
                   <div>{product.expectedQuantity}</div>
                   <div>

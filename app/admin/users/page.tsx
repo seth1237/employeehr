@@ -5,7 +5,7 @@ import {
   Plus, Search, Edit2, Trash2, Lock, Unlock, Eye, FileText, 
   Calendar, Award, BarChart3, MessageSquare, CheckSquare, Mail,
   Phone, MapPin, Briefcase, Clock, Download, Filter, MoreVertical,
-  UserCheck, UserX, Send, TrendingUp, Target, AlertCircle, ShieldCheck, Package
+  UserCheck, UserX, Send, TrendingUp, Target, AlertCircle, ShieldCheck, Package, ShoppingCart
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PageLoadingSkeleton } from '@/components/admin/ui/page-states';
@@ -277,9 +277,13 @@ export default function AdminUsersPage() {
             ? 'sales_rep'
             : newUser.role === 'dispatch'
               ? 'dispatch'
-              : newUser.isManager || newUser.role === 'manager'
-                ? 'manager'
-                : 'employee'
+              : newUser.role === 'technical_service_engineer'
+                ? 'technical_service_engineer'
+                : newUser.role === 'pos_cashier'
+                  ? 'pos_cashier'
+                  : newUser.isManager || newUser.role === 'manager'
+                    ? 'manager'
+                    : 'employee'
       const payload = {
         firstName,
         lastName,
@@ -490,6 +494,7 @@ export default function AdminUsersPage() {
             <Badge variant="secondary" className="bg-white/80 text-slate-700">{users.length} employees</Badge>
             <Badge variant="secondary" className="bg-white/80 text-slate-700">{users.filter(u => u.role === 'sales_rep').length} sales reps</Badge>
             <Badge variant="secondary" className="bg-white/80 text-slate-700">{users.filter(u => u.role === 'dispatch').length} dispatch</Badge>
+            <Badge variant="secondary" className="bg-white/80 text-slate-700">{users.filter(u => u.role === 'pos_cashier').length} cashiers</Badge>
             <Badge variant="secondary" className="bg-white/80 text-slate-700">{users.filter(u => u.role === 'admin').length} admins</Badge>
           </div>
         </div>
@@ -577,6 +582,7 @@ export default function AdminUsersPage() {
                   <SelectItem value="sales_rep">Sales Representative</SelectItem>
                   <SelectItem value="technical_service_engineer">Service Engineer</SelectItem>
                   <SelectItem value="dispatch">Dispatch</SelectItem>
+                  <SelectItem value="pos_cashier">Cashier (POS)</SelectItem>
                   <SelectItem value="manager">Manager</SelectItem>
                   <SelectItem value="admin">Admin</SelectItem>
                 </SelectContent>
@@ -708,15 +714,22 @@ export default function AdminUsersPage() {
                           >
                             Dispatch
                           </Button>
+                          <Button
+                            type="button"
+                            variant={newUser.role === 'pos_cashier' ? 'default' : 'outline'}
+                            onClick={() => setNewUser({ ...newUser, role: 'pos_cashier', isManager: false })}
+                          >
+                            Cashier (POS)
+                          </Button>
                         </div>
                         <p className="text-xs text-muted-foreground">
-                          Sales Reps, Engineers, and Dispatch log into their respective specialized portals, not the full admin portal.
+                          Cashiers open straight on the till. Sales reps, engineers, and dispatch use their own portals.
                         </p>
                       </div>
                       <div className="flex items-center gap-2 mt-2">
                         <Checkbox
                           checked={newUser.isManager}
-                          disabled={['admin', 'sales_rep', 'technical_service_engineer', 'dispatch'].includes(newUser.role)}
+                          disabled={['admin', 'sales_rep', 'technical_service_engineer', 'dispatch', 'pos_cashier'].includes(newUser.role)}
                           onCheckedChange={(v: any) =>
                             setNewUser({
                               ...newUser,
@@ -729,9 +742,11 @@ export default function AdminUsersPage() {
                                     ? 'sales_rep'
                                     : newUser.role === 'technical_service_engineer'
                                       ? 'technical_service_engineer'
-                                      : newUser.role === 'dispatch'
-                                        ? 'dispatch'
-                                        : 'employee',
+                                  : newUser.role === 'dispatch'
+                                    ? 'dispatch'
+                                    : newUser.role === 'pos_cashier'
+                                      ? 'pos_cashier'
+                                      : 'employee',
                             })
                           }
                         />
@@ -775,7 +790,15 @@ export default function AdminUsersPage() {
                             user.role === 'dispatch' ? 'outline' :
                             user.role === 'sales_rep' || user.role === 'technical_service_engineer' ? 'outline' : 'secondary'
                           }>
-                            {user.role === 'sales_rep' ? 'Sales Representative' : user.role === 'technical_service_engineer' ? 'Service Engineer' : user.role === 'dispatch' ? 'Dispatch' : user.role}
+                            {user.role === 'sales_rep'
+                              ? 'Sales Representative'
+                              : user.role === 'technical_service_engineer'
+                                ? 'Service Engineer'
+                                : user.role === 'dispatch'
+                                  ? 'Dispatch'
+                                  : user.role === 'pos_cashier'
+                                    ? 'Cashier'
+                                    : user.role}
                           </Badge>
                           {user.status === 'inactive' && (
                             <Badge variant="outline">Inactive</Badge>
@@ -852,6 +875,10 @@ export default function AdminUsersPage() {
                           <DropdownMenuItem onClick={() => handleUpdateRole(user._id, 'dispatch')}>
                             <Package className="h-4 w-4 mr-2" />
                             Assign as Dispatch
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleUpdateRole(user._id, 'pos_cashier')}>
+                            <ShoppingCart className="h-4 w-4 mr-2" />
+                            Assign as Cashier (POS)
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleUpdateRole(user._id, 'employee')}>
                             <UserCheck className="h-4 w-4 mr-2" />

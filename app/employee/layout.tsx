@@ -53,6 +53,11 @@ export default function EmployeeLayout({
       return
     }
 
+    if (user.role === "pos_cashier") {
+      router.push("/pos")
+      return
+    }
+
     setLoading(false)
   }, [router])
 

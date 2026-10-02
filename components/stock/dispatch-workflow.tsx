@@ -10,6 +10,8 @@ import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import API_URL from "@/lib/apiBase"
 import { getToken } from "@/lib/auth"
+import { stockApi } from "@/lib/api"
+import { BarcodeScanField } from "@/components/stock/barcode-scan-field"
 
 interface DispatchWorkflowProps {
   invoiceId: string
@@ -21,6 +23,7 @@ interface PackingItem {
   productName: string
   requiredQuantity: number
   packedQuantity: number
+  serials?: string[]
 }
 
 interface DispatchState {
@@ -73,6 +76,8 @@ export function DispatchWorkflow({ invoiceId, allowBackTo }: DispatchWorkflowPro
   const [inquiryMode, setInquiryMode] = useState<"client" | "courier">("client")
   const [inquiryNote, setInquiryNote] = useState("")
   const [delivery, setDelivery] = useState({ condition: "good" as "good" | "not_good", arrivalTime: "", everythingPacked: true, note: "" })
+  const [lastScannedId, setLastScannedId] = useState("")
+  const [packSerial, setPackSerial] = useState("")
 
   const headers = useMemo(
     () => ({
@@ -136,7 +141,13 @@ export function DispatchWorkflow({ invoiceId, allowBackTo }: DispatchWorkflowPro
       const response = await fetch(`${API_URL}/api/stock/invoices/${invoiceId}/dispatch/packing`, {
         method: "PUT",
         headers,
-        body: JSON.stringify({ items: packingItems.map((item) => ({ productId: item.productId, packedQuantity: item.packedQuantity })) }),
+        body: JSON.stringify({
+          items: packingItems.map((item) => ({
+            productId: item.productId,
+            packedQuantity: item.packedQuantity,
+            serials: item.serials || [],
+          })),
+        }),
       })
       const json = await response.json()
       if (!response.ok) throw new Error(json.message || "Failed to save packing")
@@ -147,6 +158,26 @@ export function DispatchWorkflow({ invoiceId, allowBackTo }: DispatchWorkflowPro
       setError(saveError.message || "Failed to save packing")
     } finally {
       setSaving(false)
+    }
+  }
+
+  const scanPacking = async (code: string) => {
+    setError("")
+    setSuccess("")
+    try {
+      const result = await stockApi.scanDispatchItem(invoiceId, {
+        code,
+        serial: packSerial.trim() || undefined,
+      })
+      const nextInvoice = result.data?.invoice || result.data
+      setInvoice(nextInvoice)
+      setPackingItems(nextInvoice?.dispatch?.packingItems || packingItems)
+      setLastScannedId(String(result.data?.line?.productId || result.data?.product?._id || ""))
+      setPackSerial("")
+      setSuccess(result.message || "Scanned")
+    } catch (scanError: any) {
+      setError(scanError.message || "Unknown barcode")
+      throw scanError
     }
   }
 
@@ -358,15 +389,38 @@ export function DispatchWorkflow({ invoiceId, allowBackTo }: DispatchWorkflowPro
                 </CardTitle>
               </CardHeader>
                 <CardContent className="space-y-3">
+                  <div className="grid gap-3 lg:grid-cols-[1fr_180px]">
+                    <BarcodeScanField
+                      label={`Scan items for ${invoice.invoiceNumber}`}
+                      autoFocus
+                      disabled={saving}
+                      onCode={(code) => scanPacking(code)}
+                    />
+                    <div className="space-y-2">
+                      <Label>Serial (optional)</Label>
+                      <Input
+                        value={packSerial}
+                        onChange={(event) => setPackSerial(event.target.value)}
+                        placeholder="Capture unit SN"
+                        autoComplete="off"
+                      />
+                    </div>
+                  </div>
                   <div className="grid gap-3 lg:grid-cols-2">
                     {packingItems.map((item, index) => {
                       const complete = Number(item.packedQuantity) >= Number(item.requiredQuantity)
                       return (
-                        <div key={item.productId} className="rounded-lg border p-3 space-y-2">
+                        <div
+                          key={item.productId}
+                          className={`rounded-lg border p-3 space-y-2 ${lastScannedId === item.productId ? "ring-2 ring-sky-500" : ""}`}
+                        >
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex-1">
                               <p className="font-medium text-sm">{item.productName}</p>
                               <p className="text-xs text-muted-foreground">Need: {item.requiredQuantity}</p>
+                              {item.serials?.length ? (
+                                <p className="text-xs text-muted-foreground">SN {item.serials.join(", ")}</p>
+                              ) : null}
                             </div>
                             <Checkbox checked={complete} disabled />
                           </div>

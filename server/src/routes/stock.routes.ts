@@ -17,6 +17,7 @@ import { MachineServiceController } from "../controllers/machineServiceControlle
 import { TenderController } from "../controllers/tenderController";
 import { ClientCrmController } from "../controllers/clientCrmController";
 import { EmailMarketingController } from "../controllers/emailMarketingController";
+import { BarcodeController } from "../controllers/barcodeController";
 
 const router = Router();
 
@@ -217,6 +218,10 @@ router.put(
   StockController.updateDispatchPacking,
 );
 router.post(
+  "/invoices/:invoiceId/dispatch/scan",
+  BarcodeController.scanDispatch,
+);
+router.post(
   "/invoices/:invoiceId/dispatch/dispatch",
   StockController.markInvoiceDispatched,
 );
@@ -266,7 +271,15 @@ router.post(
   StockController.createProduct,
 );
 router.get("/products", StockController.getProducts);
+router.get("/products/lookup", BarcodeController.lookupProduct);
+router.get("/locations/lookup", BarcodeController.lookupLocation);
+router.post(
+  "/products/barcodes/generate-missing",
+  BarcodeController.generateMissingBarcodes,
+);
 router.post("/products/purge-all", StockController.deleteAllInventory);
+router.post("/products/:id/barcode", BarcodeController.generateProductBarcode);
+router.post("/products/:id/labels/printed", BarcodeController.recordLabelsPrinted);
 router.put(
   "/products/:id",
   uploadProductImage.single("image"),
@@ -327,6 +340,7 @@ router.post(
 );
 
 // Product location endpoints
+router.post("/wms/putaway-scan", BarcodeController.scanPutaway);
 router.post(
   "/products/:productId/locations",
   WarehouseController.assignProductLocation,

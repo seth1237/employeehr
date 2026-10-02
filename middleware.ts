@@ -5,11 +5,13 @@ const TOKEN_COOKIE = "elevate_auth_token"
 const ADMIN_ROLES = new Set(["company_admin", "admin", "hr", "super_admin", "dispatch"])
 const SALES_ROLES = new Set(["sales_rep"])
 const ENGINEER_ROLES = new Set(["technical_service_engineer"])
+const POS_ROLES = new Set(["pos_cashier", "company_admin", "admin", "hr", "super_admin"])
 
 function homeForRole(role: string): string {
   if (role === "super_admin") return "/owner"
   if (role === "company_admin" || role === "admin" || role === "hr") return "/admin"
   if (role === "dispatch") return "/admin/stock/dispatch"
+  if (role === "pos_cashier") return "/pos"
   if (role === "manager") return "/manager"
   if (SALES_ROLES.has(role)) return "/sales"
   if (ENGINEER_ROLES.has(role)) return "/engineer"
@@ -54,7 +56,8 @@ export function middleware(request: NextRequest) {
     pathname.startsWith("/manager") ||
     pathname.startsWith("/sales") ||
     pathname.startsWith("/owner") ||
-    pathname.startsWith("/engineer")
+    pathname.startsWith("/engineer") ||
+    pathname.startsWith("/pos")
 
   if (!isProtected) {
     return NextResponse.next()
@@ -114,6 +117,14 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL(homeForRole(role), request.url))
   }
 
+  if (pathname.startsWith("/pos") && !POS_ROLES.has(role)) {
+    return NextResponse.redirect(new URL(homeForRole(role), request.url))
+  }
+
+  if (role === "pos_cashier" && !pathname.startsWith("/pos")) {
+    return NextResponse.redirect(new URL("/pos", request.url))
+  }
+
   // /owner: authenticated only — page + API enforce platform owner
   return NextResponse.next()
 }
@@ -130,5 +141,7 @@ export const config = {
     "/owner/:path*",
     "/engineer",
     "/engineer/:path*",
+    "/pos",
+    "/pos/:path*",
   ],
 }

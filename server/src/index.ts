@@ -64,6 +64,7 @@ import cashBankingRoutes from "./routes/cashBanking.routes"
 import resourcesRoutes from "./routes/resources.routes"
 import crmRoutes from "./routes/crm.routes"
 import salesRoutes from "./routes/sales.routes"
+import posRoutes from "./routes/pos.routes"
 import etimsRoutes from "./routes/etims.routes"
 import { JobController } from "./controllers/jobController"
 import { ApplicationFormController } from "./controllers/applicationFormController"
@@ -253,6 +254,7 @@ app.use("/api/stamps", stampRoutes)
 app.use("/api/resources", resourcesRoutes)
 app.use("/api/crm", crmRoutes)
 app.use("/api/sales", salesRoutes)
+app.use("/api/pos", posRoutes)
 app.use("/api/exhibitions", exhibitionRoutes)
 app.use("/api/etims", etimsRoutes)
 app.use("/api/complaints", complaintRoutes)

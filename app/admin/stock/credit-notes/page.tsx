@@ -19,7 +19,8 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { useToast } from "@/hooks/use-toast"
 import { finishDataLoad, startDataLoad } from "@/lib/silent-load"
 import { TableSkeleton } from "@/components/admin/ui/page-states"
-import { api } from "@/lib/api"
+import { api, stockApi } from "@/lib/api"
+import { BarcodeScanField } from "@/components/stock/barcode-scan-field"
 
 interface CreditNote {
   _id: string
@@ -526,6 +527,29 @@ export default function CreditNotesPage() {
                     {/* Items Selection */}
                     <div>
                       <h4 className="font-semibold mb-3">Select Items to Credit</h4>
+                      <div className="mb-3">
+                        <BarcodeScanField
+                          label="Scan returned item"
+                          onCode={async (code) => {
+                            const result = await stockApi.lookupProductByCode(code, "credit-note")
+                            const item = selectedInvoice.items.find(
+                              (row) => String(row.productId) === String(result.data._id),
+                            )
+                            if (!item) {
+                              toast({
+                                title: "Not on this invoice",
+                                description: result.data?.name || code,
+                                variant: "destructive",
+                              })
+                              throw new Error("Not on this invoice")
+                            }
+                            const current = selectedItems[item.productId] || 0
+                            const next = Math.min(item.quantity, current + 1)
+                            setSelectedItems({ ...selectedItems, [item.productId]: next })
+                            toast({ title: item.productName, description: `${next}/${item.quantity}` })
+                          }}
+                        />
+                      </div>
                       <div className="space-y-3">
                         {selectedInvoice.items.map((item) => (
                           <div key={item.productId} className="border rounded-lg p-3">

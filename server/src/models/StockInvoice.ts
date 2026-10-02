@@ -59,6 +59,8 @@ export interface IStockInvoice {
       productName: string
       requiredQuantity: number
       packedQuantity: number
+      scannedAt?: Date
+      serials?: string[]
     }>
     packingCompleted: boolean
     packingCompletedAt?: Date
@@ -170,6 +172,8 @@ const stockInvoiceSchema = new Schema<IStockInvoice>(
           productName: { type: String, required: true },
           requiredQuantity: { type: Number, required: true, min: 1 },
           packedQuantity: { type: Number, required: true, min: 0, default: 0 },
+          scannedAt: { type: Date },
+          serials: [{ type: String, trim: true }],
         },
       ],
       packingCompleted: { type: Boolean, default: false },

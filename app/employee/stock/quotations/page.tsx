@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import API_URL from "@/lib/apiBase";
 import { getToken, getUser } from "@/lib/auth";
 import { stockApi } from "@/lib/api";
+import { BarcodeScanField } from "@/components/stock/barcode-scan-field";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +29,7 @@ import {
 interface Product {
   _id: string;
   name: string;
+  sku?: string;
   sellingPrice: number;
   currentQuantity: number;
   isOutsourced?: boolean;
@@ -429,6 +431,7 @@ export default function EmployeeQuotationsPage() {
     if (!query) return false;
     return (
       product.name.toLowerCase().includes(query) ||
+      (product.sku || "").toLowerCase().includes(query) ||
       (product.categoryDetails?.name || product.category || "")
         .toLowerCase()
         .includes(query)
@@ -580,6 +583,33 @@ export default function EmployeeQuotationsPage() {
     setItemQuantity("1");
     setItemUnitPrice("");
     setItemDescription("");
+  };
+
+  const addItemFromScan = (product: Product) => {
+    const unitPrice = Number(product.sellingPrice || 0);
+    setItems((prev) => {
+      const existing = prev.find((item) => item.productId === product._id);
+      if (existing) {
+        return prev.map((item) =>
+          item.productId === product._id
+            ? { ...item, quantity: Number(item.quantity || 0) + 1 }
+            : item,
+        );
+      }
+      return [
+        ...prev,
+        {
+          productId: product._id,
+          quantity: 1,
+          productName: product.name,
+          productUnitPrice: unitPrice,
+          soldUnitPrice: unitPrice,
+          unitPrice,
+          description: "",
+        },
+      ];
+    });
+    toast({ title: product.name, description: "Added from scan" });
   };
 
   const removeDraftItem = (index: number) => {
@@ -1197,6 +1227,15 @@ export default function EmployeeQuotationsPage() {
                       onChange={(event) => setProductSearch(event.target.value)}
                       autoComplete="off"
                     />
+                    <div className="mt-2">
+                      <BarcodeScanField
+                        label="Scan to add"
+                        onCode={async (code) => {
+                          const result = await stockApi.lookupProductByCode(code, "quotation");
+                          addItemFromScan(result.data);
+                        }}
+                      />
+                    </div>
                   </div>
                   <div>
                     <Label>Quantity</Label>

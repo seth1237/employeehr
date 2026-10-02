@@ -43,6 +43,8 @@ import type {
 } from "@/lib/stock-document-pdf";
 import { STOCK_VIEW_FETCHES } from "@/lib/stock-view-fetch";
 import { stockApi } from "@/lib/api";
+import { BarcodeScanField } from "@/components/stock/barcode-scan-field";
+import { printProductLabels } from "@/components/stock/barcode-print";
 const WarehouseManagement = dynamic(() => import("./warehouse-management"), {
   ssr: false,
 });
@@ -107,6 +109,8 @@ interface Product {
   _id: string;
   name: string;
   sku?: string;
+  barcode?: string;
+  manufacturerBarcode?: string;
   category: string;
   startingPrice: number;
   sellingPrice: number;
@@ -273,6 +277,8 @@ export function StockManagerContent({ view }: { view: StockView }) {
     intervalDays: "",
     manufacturer: "none",
     description: "",
+    sku: "",
+    manufacturerBarcode: "",
   });
   const [stockForm, setStockForm] = useState({
     productId: "",
@@ -306,6 +312,8 @@ export function StockManagerContent({ view }: { view: StockView }) {
   const [uploadingProducts, setUploadingProducts] = useState(false);
   const [bulkProductBranchId, setBulkProductBranchId] = useState("");
   const [productBranchId, setProductBranchId] = useState("");
+  const [scannedProduct, setScannedProduct] = useState<Product | null>(null);
+  const [generatingBarcodes, setGeneratingBarcodes] = useState(false);
   const filteredClientSuggestions = useMemo(() => {
     const seen = new Set<string>();
     const q = clientSearch.trim().toLowerCase();
@@ -1776,6 +1784,8 @@ export function StockManagerContent({ view }: { view: StockView }) {
     formData.append("manufacturer", productForm.manufacturer || "");
     formData.append("branchId", productBranchId || "");
     formData.append("description", productForm.description || "");
+    formData.append("sku", productForm.sku || "");
+    formData.append("manufacturerBarcode", productForm.manufacturerBarcode || "");
 
     if (productForm.assignedUsers?.length > 0) {
       productForm.assignedUsers.forEach((userId) =>
@@ -1822,6 +1832,8 @@ export function StockManagerContent({ view }: { view: StockView }) {
       intervalDays: "",
       manufacturer: "none",
       description: "",
+      sku: "",
+      manufacturerBarcode: "",
     });
     setSelectedImage(null);
     setProductBranchId("");
@@ -2398,6 +2410,96 @@ export function StockManagerContent({ view }: { view: StockView }) {
       {view === "add-inventory" && (
         <>
           <h1 className="text-2xl font-bold">Add Inventory</h1>
+          <Card>
+            <CardHeader>
+              <CardTitle>Barcodes</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+              <div className="space-y-3">
+                <BarcodeScanField
+                  label="Scan to confirm a product"
+                  onCode={async (code) => {
+                    try {
+                      const result = await stockApi.lookupProductByCode(code, "confirm");
+                      const product = result.data;
+                      setScannedProduct(product);
+                      setStockForm((prev) => ({ ...prev, productId: product._id }));
+                      toast({
+                        title: product.name,
+                        description: `${product.sku || code} · ${product.currentQuantity ?? 0} on hand`,
+                      });
+                    } catch (error: any) {
+                      setScannedProduct(null);
+                      toast({
+                        title: "Unknown barcode",
+                        description: error.message || "No product for this code",
+                        variant: "destructive",
+                      });
+                      throw error;
+                    }
+                  }}
+                />
+                {scannedProduct ? (
+                  <div className="rounded-lg border p-3 text-sm">
+                    <p className="font-medium">{scannedProduct.name}</p>
+                    <p className="text-muted-foreground">
+                      SKU {scannedProduct.sku || "—"} · {scannedProduct.currentQuantity} in stock
+                    </p>
+                    {scannedProduct.sku ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="mt-2"
+                        onClick={() =>
+                          void printProductLabels(scannedProduct, 1).catch((error) =>
+                            toast({
+                              title: "Could not print",
+                              description: error.message,
+                              variant: "destructive",
+                            }),
+                          )
+                        }
+                      >
+                        Print 1 label
+                      </Button>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  Physical products get a Code 128 SKU automatically. Generate any that were added before barcodes.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={generatingBarcodes}
+                  onClick={async () => {
+                    setGeneratingBarcodes(true);
+                    try {
+                      const result = await stockApi.generateMissingBarcodes();
+                      toast({
+                        title: "Barcodes",
+                        description: result.message || "Done",
+                      });
+                      await fetchAll({ silent: true });
+                    } catch (error: any) {
+                      toast({
+                        title: "Could not generate barcodes",
+                        description: error.message,
+                        variant: "destructive",
+                      });
+                    } finally {
+                      setGeneratingBarcodes(false);
+                    }
+                  }}
+                >
+                  {generatingBarcodes ? "Generating…" : "Generate missing barcodes"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
           <div className="grid gap-6 lg:grid-cols-2">
             <Card>
               <CardHeader>
@@ -2483,6 +2585,34 @@ export function StockManagerContent({ view }: { view: StockView }) {
                 <CardTitle>Add Stock</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
+                <BarcodeScanField
+                  label="Scan to select product"
+                  onCode={async (code) => {
+                    try {
+                      const result = await stockApi.lookupProductByCode(code, "receive");
+                      const product = result.data;
+                      setStockForm((prev) => ({
+                        ...prev,
+                        productId: product._id,
+                        quantityAdded:
+                          prev.productId === product._id && prev.quantityAdded
+                            ? String(Number(prev.quantityAdded) + 1)
+                            : prev.quantityAdded || "1",
+                      }));
+                      toast({
+                        title: product.name,
+                        description: "Selected for receiving",
+                      });
+                    } catch (error: any) {
+                      toast({
+                        title: "Unknown barcode",
+                        description: error.message,
+                        variant: "destructive",
+                      });
+                      throw error;
+                    }
+                  }}
+                />
                 <div>
                   <Label>Product</Label>
                   <Select
@@ -2903,6 +3033,36 @@ export function StockManagerContent({ view }: { view: StockView }) {
                     }
                   />
                 </div>
+                {productForm.productType === "physical" ? (
+                  <>
+                    <div>
+                      <Label>SKU (optional)</Label>
+                      <Input
+                        value={productForm.sku}
+                        onChange={(event) =>
+                          setProductForm((prev) => ({
+                            ...prev,
+                            sku: event.target.value,
+                          }))
+                        }
+                        placeholder="Auto-generated on save"
+                      />
+                    </div>
+                    <div>
+                      <Label>Manufacturer barcode (optional)</Label>
+                      <Input
+                        value={productForm.manufacturerBarcode}
+                        onChange={(event) =>
+                          setProductForm((prev) => ({
+                            ...prev,
+                            manufacturerBarcode: event.target.value,
+                          }))
+                        }
+                        placeholder="Supplier EAN / UPC"
+                      />
+                    </div>
+                  </>
+                ) : null}
                 <div>
                   <Label>Category</Label>
                   <Select
@@ -4274,7 +4434,8 @@ export function StockManagerContent({ view }: { view: StockView }) {
                       <thead>
                         <tr className="text-left border-b">
                           <th className="py-2">Product</th>
-                          <th className="py-2">Category</th>
+                            <th className="py-2">SKU</th>
+                            <th className="py-2">Category</th>
                           {shouldIncludeUnassignedColumn && (
                             <th className="py-2">No Branch</th>
                           )}
@@ -4296,6 +4457,7 @@ export function StockManagerContent({ view }: { view: StockView }) {
                         {filteredProductsForInventory.map((product) => (
                           <tr key={product._id} className="border-b">
                             <td className="py-2">{product.name}</td>
+                            <td className="py-2 font-mono text-xs">{product.sku || "—"}</td>
                             <td className="py-2">
                               {product.categoryDetails?.name
                                 ? getCategoryPath(product.category)
@@ -4351,6 +4513,8 @@ export function StockManagerContent({ view }: { view: StockView }) {
                   category: String(p.category || ""),
                   description: p.categoryDetails?.name,
                   sku: p.sku,
+                  barcode: p.barcode,
+                  manufacturerBarcode: p.manufacturerBarcode,
                   unitPrice: p.sellingPrice,
                   quantity: p.currentQuantity,
                   reorderLevel: p.minAlertQuantity,

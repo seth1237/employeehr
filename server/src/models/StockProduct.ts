@@ -26,6 +26,12 @@ export interface IStockProduct {
   kraItemClassificationCode?: string
   manufacturer?: string
   imageUrl?: string
+  sku?: string
+  barcode?: string
+  manufacturerBarcode?: string
+  barcodeSymbology?: "code128" | "ean13" | "qr"
+  labelsPrintedAt?: Date
+  labelsPrintedCount?: number
   createdAt?: Date
   updatedAt?: Date
 }
@@ -56,6 +62,16 @@ const stockProductSchema = new Schema<IStockProduct>(
     kraItemClassificationCode: { type: String, trim: true },
     manufacturer: { type: String, required: false },
     imageUrl: { type: String, required: false },
+    sku: { type: String, trim: true, uppercase: true },
+    barcode: { type: String, trim: true, uppercase: true },
+    manufacturerBarcode: { type: String, trim: true },
+    barcodeSymbology: {
+      type: String,
+      enum: ["code128", "ean13", "qr"],
+      default: "code128",
+    },
+    labelsPrintedAt: { type: Date },
+    labelsPrintedCount: { type: Number, min: 0, default: 0 },
   },
   { timestamps: true },
 )
@@ -63,5 +79,8 @@ const stockProductSchema = new Schema<IStockProduct>(
 stockProductSchema.index({ org_id: 1, category: 1 })
 stockProductSchema.index({ org_id: 1, name: 1 })
 stockProductSchema.index({ org_id: 1, expiryEnabled: 1, expiryDate: 1 })
+stockProductSchema.index({ org_id: 1, sku: 1 }, { unique: true, sparse: true })
+stockProductSchema.index({ org_id: 1, barcode: 1 }, { unique: true, sparse: true })
+stockProductSchema.index({ org_id: 1, manufacturerBarcode: 1 }, { sparse: true })
 
 export const StockProduct = mongoose.model<IStockProduct>("StockProduct", stockProductSchema)

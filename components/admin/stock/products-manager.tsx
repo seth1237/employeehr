@@ -1,16 +1,19 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Checkbox } from "@/components/ui/checkbox"
 import { useToast } from "@/hooks/use-toast"
-import { Edit, Trash2, Plus, AlertCircle } from "lucide-react"
+import { Edit, Trash2, Plus, AlertCircle, Printer } from "lucide-react"
 import API_URL from "@/lib/apiBase"
 import { getToken } from "@/lib/auth"
 import { ProductEditDialog } from "./product-edit-dialog"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { printProductLabels, printSelectedProductLabels } from "@/components/stock/barcode-print"
 
 interface Category {
   id: string
@@ -24,6 +27,8 @@ interface Product {
   category?: string
   description?: string
   sku?: string
+  barcode?: string
+  manufacturerBarcode?: string
   unitPrice?: number
   quantity?: number
   reorderLevel?: number
@@ -43,6 +48,9 @@ export function ProductsManager({ products, categories, onRefresh }: ProductsMan
   const [deleteConfirm, setDeleteConfirm] = useState<Product | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [deleting, setDeleting] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [printCopies, setPrintCopies] = useState("1")
+  const [printing, setPrinting] = useState(false)
 
   const getCategoryName = (categoryId: string) => {
     return categories.find((c) => c.id === categoryId)?.name || "Unknown"
@@ -54,8 +62,68 @@ export function ProductsManager({ products, categories, onRefresh }: ProductsMan
       p.sku?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       getCategoryName(p.categoryId || p.category || "").toLowerCase().includes(searchTerm.toLowerCase())
   )
-
   const lowStockProducts = filteredProducts.filter((p) => p.quantity && p.reorderLevel && p.quantity <= p.reorderLevel)
+
+  const printableProducts = useMemo(
+    () => filteredProducts.filter((product) => Boolean(product.sku)),
+    [filteredProducts],
+  )
+  const allVisibleSelected =
+    printableProducts.length > 0 && printableProducts.every((product) => selectedIds.has(product.id))
+  const someVisibleSelected = printableProducts.some((product) => selectedIds.has(product.id))
+  const selectedProducts = products.filter((product) => selectedIds.has(product.id) && product.sku)
+  const copiesEach = Math.max(1, Number(printCopies || 1) || 1)
+  const labelCount = selectedProducts.length * copiesEach
+
+  const toggleSelected = (productId: string, checked: boolean) => {
+    setSelectedIds((current) => {
+      const next = new Set(current)
+      if (checked) next.add(productId)
+      else next.delete(productId)
+      return next
+    })
+  }
+
+  const toggleSelectAllVisible = (checked: boolean) => {
+    setSelectedIds((current) => {
+      const next = new Set(current)
+      printableProducts.forEach((product) => {
+        if (checked) next.add(product.id)
+        else next.delete(product.id)
+      })
+      return next
+    })
+  }
+
+  const handleBulkPrint = async () => {
+    if (!selectedProducts.length) {
+      toast({
+        title: "Select products",
+        description: "Tick the products whose barcodes you want on the sheet.",
+        variant: "destructive",
+      })
+      return
+    }
+    setPrinting(true)
+    try {
+      const result = await printSelectedProductLabels(selectedProducts, Number(printCopies || 1))
+      toast({
+        title: "Print dialog opened",
+        description:
+          result.skipped > 0
+            ? `${result.printed} barcode${result.printed === 1 ? "" : "s"} ready. ${result.skipped} without a SKU were skipped.`
+            : `${result.printed} barcode${result.printed === 1 ? "" : "s"} on the sheet.`,
+      })
+    } catch (error: any) {
+      toast({
+        title: "Could not print",
+        description: error.message || "Generate barcodes first, then print.",
+        variant: "destructive",
+      })
+    } finally {
+      setPrinting(false)
+    }
+  }
 
   const handleEditProduct = (product: Product) => {
     setEditingProduct(product)
@@ -142,8 +210,49 @@ export function ProductsManager({ products, categories, onRefresh }: ProductsMan
 
       {/* Products Table */}
       <Card>
-        <CardHeader>
-          <CardTitle>Products ({filteredProducts.length})</CardTitle>
+        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="space-y-1">
+            <CardTitle>Products ({filteredProducts.length})</CardTitle>
+            <CardDescription>
+              Tick products, set copies, then print a 3-up barcode sheet. Products without a SKU stay unselectable until barcodes are generated.
+            </CardDescription>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2">
+              <Label htmlFor="barcode-copies" className="text-xs text-muted-foreground whitespace-nowrap">
+                Copies each
+              </Label>
+              <Input
+                id="barcode-copies"
+                type="number"
+                min={1}
+                max={50}
+                className="h-9 w-20"
+                value={printCopies}
+                onChange={(event) => setPrintCopies(event.target.value)}
+              />
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => toggleSelectAllVisible(!allVisibleSelected)}
+              disabled={!printableProducts.length}
+            >
+              {allVisibleSelected ? "Clear selection" : "Select all with SKU"}
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void handleBulkPrint()}
+              disabled={printing || selectedProducts.length === 0}
+            >
+              <Printer className="mr-1.5 h-4 w-4" />
+              {printing
+                ? "Preparing…"
+                : selectedProducts.length
+                  ? `Print barcodes (${labelCount})`
+                  : "Print barcodes"}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {filteredProducts.length > 0 ? (
@@ -151,6 +260,16 @@ export function ProductsManager({ products, categories, onRefresh }: ProductsMan
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50">
+                    <TableHead className="w-10">
+                      <Checkbox
+                        checked={
+                          allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false
+                        }
+                        onCheckedChange={(value) => toggleSelectAllVisible(Boolean(value))}
+                        aria-label="Select all products with a SKU"
+                        disabled={!printableProducts.length}
+                      />
+                    </TableHead>
                     <TableHead>Product</TableHead>
                     <TableHead>Category</TableHead>
                     <TableHead className="text-right">Unit Price</TableHead>
@@ -164,6 +283,14 @@ export function ProductsManager({ products, categories, onRefresh }: ProductsMan
                     const isLowStock = product.quantity && product.reorderLevel && product.quantity <= product.reorderLevel
                     return (
                       <TableRow key={product.id} className={isLowStock ? "bg-amber-50" : ""}>
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedIds.has(product.id)}
+                            disabled={!product.sku}
+                            onCheckedChange={(value) => toggleSelected(product.id, Boolean(value))}
+                            aria-label={`Select ${product.name}`}
+                          />
+                        </TableCell>
                         <TableCell>
                           <div>
                             <p className="font-medium">{product.name}</p>
@@ -182,6 +309,24 @@ export function ProductsManager({ products, categories, onRefresh }: ProductsMan
                         <TableCell className="truncate max-w-[150px]">{product.supplier || "—"}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-1">
+                            {product.sku ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                title="Print barcode label"
+                                onClick={() =>
+                                  void printProductLabels({
+                                    id: product.id,
+                                    name: product.name,
+                                    sku: product.sku,
+                                    sellingPrice: product.unitPrice,
+                                  }, 1)
+                                }
+                              >
+                                <Printer className="h-4 w-4" />
+                              </Button>
+                            ) : null}
                             <Button
                               type="button"
                               variant="ghost"

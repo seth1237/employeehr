@@ -913,6 +913,30 @@ export const stockApi = {
     client.delete<any>(`/api/stock/clients/groups/${groupId}`),
 
   getProducts: () => client.get<any[]>("/api/stock/products"),
+  lookupProductByCode: (code: string, context = "confirm") =>
+    client.get<any>(
+      `/api/stock/products/lookup?code=${encodeURIComponent(code)}&context=${encodeURIComponent(context)}`,
+    ),
+  generateMissingBarcodes: () =>
+    client.post<any>("/api/stock/products/barcodes/generate-missing", {}),
+  generateProductBarcode: (productId: string, data?: { sku?: string; force?: boolean }) =>
+    client.post<any>(`/api/stock/products/${productId}/barcode`, data || {}),
+  recordProductLabelsPrinted: (productId: string, copies: number) =>
+    client.post<any>(`/api/stock/products/${productId}/labels/printed`, { copies }),
+  scanDispatchItem: (
+    invoiceId: string,
+    data: { code: string; increment?: number; serial?: string; allowOverscan?: boolean },
+  ) => client.post<any>(`/api/stock/invoices/${invoiceId}/dispatch/scan`, data),
+  lookupLocationByCode: (code: string, warehouseId?: string) =>
+    client.get<any>(
+      `/api/stock/locations/lookup?code=${encodeURIComponent(code)}${warehouseId ? `&warehouseId=${encodeURIComponent(warehouseId)}` : ""}`,
+    ),
+  scanPutaway: (data: {
+    productCode: string
+    locationCode: string
+    warehouseId?: string
+    quantity?: number
+  }) => client.post<any>("/api/stock/wms/putaway-scan", data),
   deleteAllInventory: (confirm: string) =>
     client.post<any>("/api/stock/products/purge-all", { confirm }),
   getStockCategories: () => client.get<any[]>("/api/stock/categories"),
@@ -1905,6 +1929,27 @@ export const engineeringApi = {
   },
 }
 
+export const posApi = {
+  bootstrap: () => client.get<any>("/api/pos/bootstrap"),
+  catalog: (q = "", categoryId = "") => {
+    const search = new URLSearchParams()
+    if (q) search.set("q", q)
+    if (categoryId) search.set("categoryId", categoryId)
+    const query = search.toString()
+    return client.get<any[]>(`/api/pos/catalog${query ? `?${query}` : ""}`)
+  },
+  lookup: (code: string) => client.post<any>("/api/pos/lookup", { code }),
+  hold: (data: any) => client.post<any>("/api/pos/hold", data),
+  listHolds: () => client.get<any[]>("/api/pos/holds"),
+  resumeHold: (id: string) => client.post<any>(`/api/pos/holds/${id}/resume`, {}),
+  checkout: (data: any) => client.post<any>("/api/pos/checkout", data),
+  listSales: (q = "") =>
+    client.get<any[]>(`/api/pos/sales${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+  getSale: (id: string) => client.get<any>(`/api/pos/sales/${id}`),
+  stkPush: (data: { phone: string; amount: number }) =>
+    client.post<any>("/api/pos/mpesa/stk", data),
+}
+
 export const salesApi = {
   getDashboard: (date?: string) =>
     client.get<any>(`/api/sales/dashboard${date ? `?date=${encodeURIComponent(date)}` : ""}`),
@@ -2107,6 +2152,7 @@ export const api = {
   aiAssistant: aiAssistantApi,
   crm: crmApi,
   sales: salesApi,
+  pos: posApi,
   engineering: engineeringApi,
   etims: etimsApi,
   dashboard: {

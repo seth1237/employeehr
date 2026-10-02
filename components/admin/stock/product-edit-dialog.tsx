@@ -23,6 +23,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import API_URL from "@/lib/apiBase";
 import { getToken } from "@/lib/auth";
+import { printProductLabels } from "@/components/stock/barcode-print";
 
 interface Category {
   id: string;
@@ -36,6 +37,7 @@ interface Product {
   category?: string;
   description?: string;
   sku?: string;
+  manufacturerBarcode?: string;
   unitPrice?: number;
   quantity?: number;
   reorderLevel?: number;
@@ -68,6 +70,7 @@ export function ProductEditDialog({
     categoryId: "",
     description: "",
     sku: "",
+    manufacturerBarcode: "",
     unitPrice: "",
     quantity: "",
     reorderLevel: "",
@@ -86,6 +89,7 @@ export function ProductEditDialog({
         categoryId: product.categoryId || product.category || "",
         description: product.description || "",
         sku: product.sku || "",
+        manufacturerBarcode: product.manufacturerBarcode || "",
         unitPrice:
           (product.unitPrice ?? product.unitPrice === 0)
             ? String(product.unitPrice)
@@ -191,6 +195,7 @@ export function ProductEditDialog({
       submitData.append("category", formData.categoryId);
       submitData.append("description", formData.description.trim() || "");
       submitData.append("sku", formData.sku.trim() || "");
+      submitData.append("manufacturerBarcode", formData.manufacturerBarcode.trim() || "");
       submitData.append("sellingPrice", String(unitPrice));
       submitData.append("minAlertQuantity", String(reorderLevel));
       submitData.append("supplier", formData.supplier.trim() || "");
@@ -303,11 +308,25 @@ export function ProductEditDialog({
                 name="sku"
                 value={formData.sku}
                 onChange={handleInputChange}
-                placeholder="e.g., SKU-001"
+                placeholder="Auto-generated if blank"
                 disabled={loading}
               />
             </div>
 
+            <div className="space-y-2">
+              <Label htmlFor="manufacturerBarcode">Manufacturer barcode</Label>
+              <Input
+                id="manufacturerBarcode"
+                name="manufacturerBarcode"
+                value={formData.manufacturerBarcode}
+                onChange={handleInputChange}
+                placeholder="Supplier EAN / UPC"
+                disabled={loading}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="supplier">Supplier (Optional)</Label>
               <Input
@@ -319,9 +338,6 @@ export function ProductEditDialog({
                 disabled={loading}
               />
             </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="unitPrice">Unit Price</Label>
               <Input
@@ -444,6 +460,21 @@ export function ProductEditDialog({
             disabled={loading}
           >
             Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={loading || !formData.sku}
+            onClick={() =>
+              void printProductLabels({
+                id: product?.id,
+                name: formData.name,
+                sku: formData.sku,
+                sellingPrice: Number(formData.unitPrice || 0),
+              }, 1)
+            }
+          >
+            Print label
           </Button>
           <Button onClick={handleSave} disabled={loading}>
             {loading ? "Saving..." : "Save Changes"}

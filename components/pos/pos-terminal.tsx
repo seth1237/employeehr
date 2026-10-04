@@ -71,6 +71,32 @@ function money(value: number) {
   return `KSh ${Number(value || 0).toLocaleString("en-KE", { maximumFractionDigits: 2 })}`
 }
 
+function kes(value: number) {
+  return Number(value || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function esc(value: unknown) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+}
+
+function payLabel(method: string) {
+  const key = String(method || "").toLowerCase()
+  if (key === "mpesa") return "M-PESA"
+  return key.toUpperCase() || "CASH"
+}
+
+function saleWhen(sale: any) {
+  const when = new Date(sale?.completedAt || Date.now())
+  return {
+    date: when.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
+    time: when.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
+  }
+}
+
 function imageSrc(url?: string) {
   if (!url) return ""
   if (url.startsWith("http")) return url
@@ -94,20 +120,69 @@ function playBeep(ok: boolean) {
   }
 }
 
+function receiptLinesHtml(sale: any) {
+  return (sale.items || [])
+    .map((item: any) => {
+      const name = esc(item.productName)
+      const sku = item.sku ? `<div class="dim">${esc(item.sku)}</div>` : ""
+      return `<div class="line">
+        <div>${name}${sku}</div>
+        <div class="row"><span>${Number(item.quantity)} x ${kes(item.unitPrice)}</span><span>${kes(item.lineTotal)}</span></div>
+      </div>`
+    })
+    .join("")
+}
+
+function receiptPaymentsHtml(sale: any) {
+  return (sale.payments || [])
+    .map((row: any) => {
+      const extra = row.reference || row.mpesaReceiptCode || row.phone || ""
+      const change = Number(row.change || 0)
+      return `<div class="row"><span>${payLabel(row.method)}</span><span>${kes(row.tendered ?? row.amount)}</span></div>
+        ${extra ? `<div class="dim">${esc(extra)}</div>` : ""}
+        ${change > 0 ? `<div class="row"><span>CHANGE</span><span>${kes(change)}</span></div>` : ""}`
+    })
+    .join("")
+}
+
+function receiptSlipHtml(sale: any, company: any) {
+  const { date, time } = saleWhen(sale)
+  const logo = company.logo ? `<img src="${esc(imageSrc(company.logo))}" alt=""/>` : ""
+  const pin = [company.pinNumber ? `PIN: ${esc(company.pinNumber)}` : "", company.vatNumber ? `VAT: ${esc(company.vatNumber)}` : ""]
+    .filter(Boolean)
+    .join("  ")
+  const discount = Number(sale.discountAmount || 0)
+  const tax = Number(sale.taxTotal || 0)
+  return `
+    <div class="cut">--------------------------------</div>
+    ${logo}
+    <h1>${esc(company.name || "Receipt")}</h1>
+    ${company.address ? `<div>${esc(company.address)}</div>` : ""}
+    ${company.phone ? `<div>Tel: ${esc(company.phone)}</div>` : ""}
+    ${pin ? `<div>${pin}</div>` : ""}
+    <div class="cut">--------------------------------</div>
+    <div class="row"><span>Rcpt</span><span>${esc(sale.receiptNo)}</span></div>
+    <div class="row"><span>${esc(date)}</span><span>${esc(time)}</span></div>
+    <div class="row"><span>Cashier</span><span>${esc(sale.cashierName || "")}</span></div>
+    <div class="row"><span>Customer</span><span>${esc(sale.customerName || "Walk-in")}</span></div>
+    <div class="cut">--------------------------------</div>
+    ${receiptLinesHtml(sale)}
+    <div class="cut">--------------------------------</div>
+    <div class="row"><span>SUBTOTAL</span><span>${kes(sale.subtotal)}</span></div>
+    ${discount > 0 ? `<div class="row"><span>DISCOUNT</span><span>${kes(discount)}</span></div>` : ""}
+    ${tax > 0 ? `<div class="row"><span>VAT</span><span>${kes(tax)}</span></div>` : ""}
+    <div class="row total"><span>TOTAL</span><span>KSh ${kes(sale.total)}</span></div>
+    ${receiptPaymentsHtml(sale)}
+    <div class="cut">--------------------------------</div>
+    <div class="center">CUSTOMER COPY</div>
+    <div class="center">Goods returnable with this receipt</div>
+    <div class="center">*** THANK YOU ***</div>
+    <div class="cut">--------------------------------</div>`
+}
+
 function printReceipt(sale: any, company: any) {
-  const items = (sale.items || [])
-    .map(
-      (item: any) =>
-        `<tr><td>${item.productName}<br/><span style="color:#64748b;font-size:11px">${item.sku || ""}</span></td><td style="text-align:center">${item.quantity}</td><td style="text-align:right">${Number(item.unitPrice).toLocaleString("en-KE")}</td><td style="text-align:right">${Number(item.lineTotal).toLocaleString("en-KE")}</td></tr>`,
-    )
-    .join("")
-  const payments = (sale.payments || [])
-    .map(
-      (row: any) =>
-        `<div>${String(row.method).toUpperCase()} ${Number(row.amount).toLocaleString("en-KE")}${row.reference ? ` · ${row.reference}` : ""}</div>`,
-    )
-    .join("")
   const frame = document.createElement("iframe")
+  frame.setAttribute("aria-hidden", "true")
   frame.style.position = "fixed"
   frame.style.right = "0"
   frame.style.bottom = "0"
@@ -118,34 +193,116 @@ function printReceipt(sale: any, company: any) {
   const doc = frame.contentDocument
   if (!doc) return
   doc.open()
-  doc.write(`<!doctype html><html><head><title>${sale.receiptNo}</title>
+  doc.write(`<!doctype html><html><head><title>${esc(sale.receiptNo)}</title>
   <style>
-    body{font-family:ui-sans-serif,system-ui,sans-serif;padding:16px;color:#0f172a}
-    h1{font-size:18px;margin:0}
-    table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}
-    td,th{padding:6px 0;border-bottom:1px solid #e2e8f0;vertical-align:top}
-    .muted{color:#64748b;font-size:12px}
-    .total{font-size:20px;font-weight:700;margin-top:10px}
+    @page { size: 80mm auto; margin: 0; }
+    html, body { width: 80mm; margin: 0; padding: 0; background: #fff; }
+    body {
+      font-family: "Courier New", Courier, ui-monospace, monospace;
+      font-size: 11px;
+      line-height: 1.25;
+      color: #111;
+      padding: 4mm 3mm 8mm;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    h1 { font-size: 13px; margin: 0 0 2px; text-align: center; text-transform: uppercase; }
+    img { display: block; height: 36px; margin: 0 auto 4px; object-fit: contain; }
+    .center { text-align: center; }
+    .cut { text-align: center; letter-spacing: 0.5px; margin: 4px 0; }
+    .row { display: flex; justify-content: space-between; gap: 8px; }
+    .line { margin-bottom: 4px; }
+    .dim { opacity: 0.75; font-size: 10px; }
+    .total { font-size: 13px; font-weight: 700; margin: 4px 0; }
   </style></head><body>
-  ${company.logo ? `<img src="${company.logo}" style="height:40px"/>` : ""}
-  <h1>${company.name || "Receipt"}</h1>
-  <div class="muted">${company.address || ""}</div>
-  <div class="muted">${company.pinNumber ? `KRA PIN ${company.pinNumber}` : ""} ${company.vatNumber ? `· VAT ${company.vatNumber}` : ""}</div>
-  <p><strong>${sale.receiptNo}</strong><br/>${new Date(sale.completedAt || Date.now()).toLocaleString()}<br/>Cashier: ${sale.cashierName}<br/>Customer: ${sale.customerName || "Walk-in"}</p>
-  <table><thead><tr><th align="left">Item</th><th>Qty</th><th align="right">Price</th><th align="right">Total</th></tr></thead><tbody>${items}</tbody></table>
-  <p>Subtotal ${Number(sale.subtotal).toLocaleString("en-KE")}<br/>
-  Discount ${Number(sale.discountAmount || 0).toLocaleString("en-KE")}<br/>
-  Tax ${Number(sale.taxTotal || 0).toLocaleString("en-KE")}</p>
-  <div class="total">TOTAL KSh ${Number(sale.total).toLocaleString("en-KE")}</div>
-  ${payments}
-  <p class="muted">Thank you for shopping with us. Goods once sold are returnable with this receipt.</p>
+  ${receiptSlipHtml(sale, company)}
   </body></html>`)
   doc.close()
-  setTimeout(() => {
+  const runPrint = () => {
     frame.contentWindow?.focus()
     frame.contentWindow?.print()
-    setTimeout(() => frame.remove(), 800)
-  }, 250)
+  }
+  frame.contentWindow?.addEventListener("afterprint", () => frame.remove())
+  setTimeout(runPrint, company.logo ? 400 : 180)
+  setTimeout(() => {
+    if (frame.parentNode) frame.remove()
+  }, 60000)
+}
+
+function ReceiptSlip({ sale, company }: { sale: any; company: any }) {
+  const { date, time } = saleWhen(sale)
+  const discount = Number(sale.discountAmount || 0)
+  const tax = Number(sale.taxTotal || 0)
+  return (
+    <div className="mx-auto w-[80mm] bg-[#f4ecd8] px-3 py-3 font-mono text-[11px] leading-tight text-black shadow-[0_8px_24px_rgba(0,0,0,0.18)]">
+      <div className="mb-1 text-center tracking-widest text-black/50">--------------------------------</div>
+      {company.logo ? (
+        <img src={imageSrc(company.logo)} alt="" className="mx-auto mb-1 h-9 object-contain" />
+      ) : null}
+      <p className="text-center text-[13px] font-bold uppercase">{company.name || "Receipt"}</p>
+      {company.address ? <p className="text-center">{company.address}</p> : null}
+      {company.phone ? <p className="text-center">Tel: {company.phone}</p> : null}
+      {company.pinNumber || company.vatNumber ? (
+        <p className="text-center">
+          {company.pinNumber ? `PIN: ${company.pinNumber}` : ""}
+          {company.pinNumber && company.vatNumber ? "  " : ""}
+          {company.vatNumber ? `VAT: ${company.vatNumber}` : ""}
+        </p>
+      ) : null}
+      <div className="my-1 text-center tracking-widest text-black/50">--------------------------------</div>
+      <div className="flex justify-between gap-2"><span>Rcpt</span><span>{sale.receiptNo}</span></div>
+      <div className="flex justify-between gap-2"><span>{date}</span><span>{time}</span></div>
+      <div className="flex justify-between gap-2"><span>Cashier</span><span>{sale.cashierName}</span></div>
+      <div className="flex justify-between gap-2"><span>Customer</span><span>{sale.customerName || "Walk-in"}</span></div>
+      <div className="my-1 text-center tracking-widest text-black/50">--------------------------------</div>
+      {(sale.items || []).map((item: any, index: number) => (
+        <div key={`${item.productId || item.sku || index}-${index}`} className="mb-1">
+          <div>{item.productName}</div>
+          {item.sku ? <div className="text-[10px] text-black/70">{item.sku}</div> : null}
+          <div className="flex justify-between gap-2">
+            <span>{Number(item.quantity)} x {kes(item.unitPrice)}</span>
+            <span>{kes(item.lineTotal)}</span>
+          </div>
+        </div>
+      ))}
+      <div className="my-1 text-center tracking-widest text-black/50">--------------------------------</div>
+      <div className="flex justify-between gap-2"><span>SUBTOTAL</span><span>{kes(sale.subtotal)}</span></div>
+      {discount > 0 ? (
+        <div className="flex justify-between gap-2"><span>DISCOUNT</span><span>{kes(discount)}</span></div>
+      ) : null}
+      {tax > 0 ? (
+        <div className="flex justify-between gap-2"><span>VAT</span><span>{kes(tax)}</span></div>
+      ) : null}
+      <div className="my-1 flex justify-between gap-2 text-[13px] font-bold">
+        <span>TOTAL</span>
+        <span>KSh {kes(sale.total)}</span>
+      </div>
+      {(sale.payments || []).map((row: any, index: number) => {
+        const extra = row.reference || row.mpesaReceiptCode || row.phone || ""
+        const change = Number(row.change || 0)
+        return (
+          <div key={`${row.method}-${index}`}>
+            <div className="flex justify-between gap-2">
+              <span>{payLabel(row.method)}</span>
+              <span>{kes(row.tendered ?? row.amount)}</span>
+            </div>
+            {extra ? <div className="text-[10px] text-black/70">{extra}</div> : null}
+            {change > 0 ? (
+              <div className="flex justify-between gap-2">
+                <span>CHANGE</span>
+                <span>{kes(change)}</span>
+              </div>
+            ) : null}
+          </div>
+        )
+      })}
+      <div className="my-1 text-center tracking-widest text-black/50">--------------------------------</div>
+      <p className="text-center">CUSTOMER COPY</p>
+      <p className="text-center">Goods returnable with this receipt</p>
+      <p className="text-center">*** THANK YOU ***</p>
+      <div className="mt-1 text-center tracking-widest text-black/50">--------------------------------</div>
+    </div>
+  )
 }
 
 export function PosTerminal() {
@@ -487,6 +644,12 @@ export function PosTerminal() {
       if (event.key === "F8") {
         event.preventDefault()
         if (cart.length) setPayOpen(true)
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "p") {
+        if (receipt) {
+          event.preventDefault()
+          printReceipt(receipt, company)
+        }
       }
       if (event.key === "Escape") {
         setPayOpen(false)
@@ -835,24 +998,27 @@ export function PosTerminal() {
           if (!open) startNewSale()
         }}
       >
-        <DialogContent>
-          <DialogHeader>
+        <DialogContent className="max-w-[340px] sm:max-w-[340px] gap-0 border-0 bg-transparent p-0 shadow-none" showCloseButton={false}>
+          <DialogHeader className="sr-only">
             <DialogTitle>Payment received</DialogTitle>
             <DialogDescription>
               Receipt {receipt?.receiptNo} is ready.
             </DialogDescription>
           </DialogHeader>
-          <p className="text-2xl font-bold">{money(Number(receipt?.total || 0))}</p>
-          <p className="text-sm text-slate-500">{receipt?.customerName} · {receipt?.cashierName}</p>
-          <DialogFooter className="gap-2 sm:justify-between">
-            <Button variant="outline" onClick={() => printReceipt(receipt, company)}>
+          {receipt ? <ReceiptSlip sale={receipt} company={company} /> : null}
+          <div className="mt-3 flex gap-2">
+            <Button
+              variant="outline"
+              className="flex-1 bg-white"
+              onClick={() => printReceipt(receipt, company)}
+            >
               <Printer className="mr-1 h-4 w-4" />
-              Print
+              Print slip
             </Button>
-            <Button onClick={startNewSale} style={{ backgroundColor: brand }}>
-              Start new sale
+            <Button className="flex-1" onClick={startNewSale} style={{ backgroundColor: brand }}>
+              New sale
             </Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 

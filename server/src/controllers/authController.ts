@@ -3,6 +3,15 @@ import { AuthService } from "../services/authService"
 import type { AuthenticatedRequest } from "../middleware/auth"
 
 export class AuthController {
+  private static isLocalRequestHost(value: string) {
+    const text = String(value || "").toLowerCase()
+    if (!text) return false
+    if (text.includes("localhost") || text.includes("127.0.0.1") || text.includes("[::1]")) {
+      return true
+    }
+    return /\b(10\.|192\.168\.|172\.(1[6-9]|2\d|3[0-1])\.)/.test(text)
+  }
+
   private static shouldRequireLoginOtp(req: AuthenticatedRequest) {
     // Login OTP is on by default for non-local hosts (including deployed).
     // Force off with SKIP_LOGIN_OTP=true. Local dev always skips.
@@ -19,17 +28,15 @@ export class AuthController {
 
     const origin = (req.get("origin") || "").toLowerCase()
     const referer = (req.get("referer") || "").toLowerCase()
-    const combined = `${origin} ${referer}`
+    const host = (req.get("host") || "").toLowerCase()
+    const combined = `${origin} ${referer} ${host}`
 
-    // Never require OTP for local browsers, even if FRONTEND_URL is a prod domain.
-    if (
-      combined.includes("localhost") ||
-      combined.includes("127.0.0.1") ||
-      combined.includes("[::1]")
-    ) {
+    // Never require OTP for local / LAN browsers, even if FRONTEND_URL is a prod domain.
+    if (AuthController.isLocalRequestHost(combined)) {
       console.log("Login OTP skipped: request from local/dev environment", {
         origin,
         referer,
+        host,
       })
       return false
     }

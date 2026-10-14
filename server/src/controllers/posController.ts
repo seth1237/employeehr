@@ -9,8 +9,16 @@ import { StockProduct } from "../models/StockProduct"
 import { StockSale } from "../models/StockSale"
 import { User } from "../models/User"
 import { lookupProductByCode } from "../lib/productBarcode"
-import { mpesaService } from "../services/mpesa.service"
 import { postInvoicePaymentToCashbook } from "../services/cashBankingPosting.service"
+import {
+  consumeConfirmedMpesa,
+  createPosStkPayment,
+  listRecentPosMpesa,
+  lookupPosMpesaPayment,
+  markPosMpesaUsed,
+  refreshPosMpesaStatus,
+  resolveStkParty,
+} from "../services/posMpesa.service"
 import {
   generateDocumentNumber,
   resolveLineTax,
@@ -36,6 +44,18 @@ function canSeeAllSales(role?: string) {
 function cashierNameFrom(user: { firstName?: string; lastName?: string } | null, fallback: string) {
   const name = `${user?.firstName || ""} ${user?.lastName || ""}`.trim()
   return name || fallback
+}
+
+function customerFromRequest(body: any, extraPhone = "") {
+  const rawName = String(body?.customerName || "").trim()
+  const name = !rawName || /^walk[\s-]?in$/i.test(rawName) ? "" : rawName
+  const phone = String(body?.customerPhone || extraPhone || "").trim()
+  const isWalkIn = !name && !phone
+  return {
+    customerName: name || (phone ? "Customer" : "Walk-in"),
+    customerPhone: phone,
+    isWalkIn,
+  }
 }
 
 function todayRange() {
@@ -175,8 +195,9 @@ function normalizePayments(input: any[], total: number) {
     if (amount <= 0) throw new Error("Each payment needs an amount")
     const reference = String(row.reference || row.mpesaReceiptCode || "").trim()
     const phone = String(row.phone || "").trim()
-    if (method === "mpesa" && !reference && !phone) {
-      throw new Error("Enter the M-Pesa code or the customer phone number")
+    const mpesaCheckoutRequestId = String(row.mpesaCheckoutRequestId || "").trim()
+    if (method === "mpesa" && !reference && !phone && !mpesaCheckoutRequestId) {
+      throw new Error("Send the M-Pesa prompt or enter the M-Pesa receipt code")
     }
     if ((method === "card" || method === "bank") && !reference) {
       throw new Error("Enter the card or bank reference")
@@ -189,8 +210,8 @@ function normalizePayments(input: any[], total: number) {
       reference,
       phone,
       mpesaReceiptCode: method === "mpesa" ? reference : "",
-      mpesaCheckoutRequestId: String(row.mpesaCheckoutRequestId || "").trim(),
-      status: "confirmed" as const,
+      mpesaCheckoutRequestId,
+      status: (method === "mpesa" ? "pending" : "confirmed") as "pending" | "confirmed",
     }
   })
   const paid = KES(payments.reduce((sum, row) => sum + row.amount, 0))
@@ -216,7 +237,7 @@ export class PosController {
         ? {}
         : { cashierId: String(req.user?.userId) }
 
-      const [company, user, categories, products, heldCount, todaySales] = await Promise.all([
+      const [company, user, categories, products, heldCount, todaySales, mpesa] = await Promise.all([
         Company.findById(orgId)
           .select("name logo primaryColor phone city country invoiceSettings")
           .lean(),
@@ -238,6 +259,7 @@ export class PosController {
         })
           .select("total")
           .lean(),
+        resolveStkParty(orgId),
       ])
 
       const categoryMap = new Map(categories.map((row) => [String(row._id), row.name]))
@@ -270,6 +292,12 @@ export class PosController {
             total: KES(todaySales.reduce((sum, sale) => sum + Number(sale.total || 0), 0)),
           },
           discountLimit: canSeeAllSales(req.user?.role) ? 100 : CASHIER_DISCOUNT_LIMIT,
+          mpesa: {
+            label: mpesa.label,
+            mode: mpesa.mode,
+            sandbox: mpesa.sandbox,
+            configured: Boolean(mpesa.configured),
+          },
         },
       })
     } catch (error: any) {
@@ -363,8 +391,7 @@ export class PosController {
         cashierId,
         cashierName: cashierNameFrom(user, "Cashier"),
         status: "held",
-        customerName: String(req.body?.customerName || "Walk-in").trim() || "Walk-in",
-        customerPhone: String(req.body?.customerPhone || "").trim(),
+        ...customerFromRequest(req.body),
         items: priced.lines,
         subtotal: priced.subtotal,
         discountAmount: priced.discountAmount,
@@ -431,10 +458,28 @@ export class PosController {
         req.user?.role,
       )
       const payments = normalizePayments(req.body?.payments || [], priced.total)
+      const mpesaPhone = payments.find((row) => row.method === "mpesa")?.phone || ""
+      const { customerName, customerPhone, isWalkIn } = customerFromRequest(req.body, mpesaPhone)
+
+      for (const payment of payments) {
+        if (payment.method !== "mpesa") continue
+        const confirmed = await consumeConfirmedMpesa({
+          orgId,
+          amount: payment.amount,
+          checkoutRequestId: payment.mpesaCheckoutRequestId,
+          code: payment.mpesaReceiptCode || payment.reference,
+          phone: payment.phone,
+        })
+        payment.status = "confirmed"
+        payment.mpesaReceiptCode = confirmed.mpesaReceiptCode || payment.mpesaReceiptCode
+        payment.mpesaCheckoutRequestId = confirmed.checkoutRequestId
+        payment.reference = confirmed.mpesaReceiptCode || payment.reference
+        payment.phone = confirmed.phone || payment.phone
+        ;(payment as any)._posMpesaId = String(confirmed._id)
+      }
+
       const user = await User.findById(cashierId).select("firstName lastName").lean()
       const { seq, receiptNo } = await nextReceipt(orgId)
-      const customerName = String(req.body?.customerName || "Walk-in").trim() || "Walk-in"
-      const customerPhone = String(req.body?.customerPhone || "").trim() || "WALK-IN"
 
       const invoiceItems = priced.lines.map((line) => ({
         productId: line.productId,
@@ -501,7 +546,7 @@ export class PosController {
             buyerName: customerName,
             buyerNumber: customerPhone,
             buyerLocation: "POS",
-            isWalkInClient: true,
+            isWalkInClient: isWalkIn,
             isSalesCompany: false,
             invoiceId: String(invoice._id),
             receiptNumber: receiptNo,
@@ -562,6 +607,11 @@ export class PosController {
         completedAt: new Date(),
       })
 
+      for (const payment of payments) {
+        const posMpesaId = String((payment as any)._posMpesaId || "")
+        if (posMpesaId) await markPosMpesaUsed(posMpesaId, String(sale._id))
+      }
+
       return res.status(201).json({
         success: true,
         message: `Payment received. Receipt ${receiptNo} is ready.`,
@@ -606,35 +656,85 @@ export class PosController {
 
   static async stkPush(req: AuthenticatedRequest, res: Response) {
     try {
+      const orgId = orgIdOf(req)
+      const cashierId = String(req.user?.userId || "")
+      if (!orgId || !cashierId) return res.status(401).json({ success: false, message: "Unauthorized" })
       if (!canUsePos(req.user?.role)) {
         return res.status(403).json({ success: false, message: "This login is not a POS till" })
       }
-      const phone = String(req.body?.phone || "").trim()
-      const amount = KES(req.body?.amount || 0)
-      if (!phone || amount <= 0) {
-        return res.status(400).json({ success: false, message: "Enter the customer phone and amount" })
-      }
-      const result = await mpesaService.initiateStkPush({
-        payerPhone: phone,
-        amount,
-        accountReference: `POS-${String(req.user?.userId || "").slice(-6)}`,
-        transactionDesc: "POS sale",
+      const result = await createPosStkPayment({
+        orgId,
+        cashierId,
+        phone: String(req.body?.phone || "").trim(),
+        amount: KES(req.body?.amount || 0),
       })
-      if (!result.success) {
-        return res.status(400).json({
-          success: false,
-          message:
-            result.responseMessage ||
-            "M-Pesa payment failed. The customer didn't confirm the request. Try again or choose another payment method.",
-        })
-      }
       return res.json({
         success: true,
-        message: "Waiting for M-Pesa. Ask the customer to enter their PIN.",
-        data: result,
+        message: result.message,
+        data: result.payment,
       })
     } catch (error: any) {
-      return res.status(500).json({ success: false, message: error.message || "M-Pesa request failed" })
+      return res.status(400).json({ success: false, message: error.message || "M-Pesa request failed" })
+    }
+  }
+
+  static async stkStatus(req: AuthenticatedRequest, res: Response) {
+    try {
+      const orgId = orgIdOf(req)
+      if (!orgId) return res.status(401).json({ success: false, message: "Unauthorized" })
+      if (!canUsePos(req.user?.role)) {
+        return res.status(403).json({ success: false, message: "This login is not a POS till" })
+      }
+      const data = await refreshPosMpesaStatus(orgId, String(req.params.checkoutRequestId || ""))
+      return res.json({
+        success: true,
+        message:
+          data.status === "confirmed"
+            ? `M-Pesa confirmed${data.mpesaReceiptCode ? ` · ${data.mpesaReceiptCode}` : ""}`
+            : data.status === "failed"
+              ? data.resultDesc || "The customer did not complete M-Pesa"
+              : "Waiting for the customer to enter their M-Pesa PIN",
+        data,
+      })
+    } catch (error: any) {
+      return res.status(400).json({ success: false, message: error.message || "Could not check M-Pesa" })
+    }
+  }
+
+  static async lookupMpesa(req: AuthenticatedRequest, res: Response) {
+    try {
+      const orgId = orgIdOf(req)
+      if (!orgId) return res.status(401).json({ success: false, message: "Unauthorized" })
+      if (!canUsePos(req.user?.role)) {
+        return res.status(403).json({ success: false, message: "This login is not a POS till" })
+      }
+      const data = await lookupPosMpesaPayment({
+        orgId,
+        code: String(req.body?.code || req.body?.mpesaReceiptCode || "").trim(),
+        amount: KES(req.body?.amount || 0),
+        phone: String(req.body?.phone || "").trim(),
+      })
+      return res.json({
+        success: true,
+        message: `M-Pesa payment found · ${data.mpesaReceiptCode}`,
+        data,
+      })
+    } catch (error: any) {
+      return res.status(400).json({ success: false, message: error.message || "No matching M-Pesa payment" })
+    }
+  }
+
+  static async recentMpesa(req: AuthenticatedRequest, res: Response) {
+    try {
+      const orgId = orgIdOf(req)
+      if (!orgId) return res.status(401).json({ success: false, message: "Unauthorized" })
+      if (!canUsePos(req.user?.role)) {
+        return res.status(403).json({ success: false, message: "This login is not a POS till" })
+      }
+      const data = await listRecentPosMpesa(orgId)
+      return res.json({ success: true, data })
+    } catch (error: any) {
+      return res.status(500).json({ success: false, message: error.message || "Could not load recent M-Pesa payments" })
     }
   }
 }

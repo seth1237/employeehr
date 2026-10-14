@@ -18,5 +18,8 @@ router.post("/checkout", PosController.checkout)
 router.get("/sales", PosController.listSales)
 router.get("/sales/:id", PosController.getSale)
 router.post("/mpesa/stk", PosController.stkPush)
+router.get("/mpesa/stk/:checkoutRequestId", PosController.stkStatus)
+router.post("/mpesa/lookup", PosController.lookupMpesa)
+router.get("/mpesa/recent", PosController.recentMpesa)
 
 export default router

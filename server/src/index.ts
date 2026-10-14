@@ -53,6 +53,7 @@ import stockRoutes from "./routes/stock.routes"
 import stampRoutes from "./routes/stamp.routes"
 import smsWebhookRoutes from "./routes/smsWebhook.routes"
 import mpesaWebhookRoutes from "./routes/mpesaWebhook.routes"
+import websiteOrderRoutes from "./routes/websiteOrder.routes"
 import ownerRoutes from "./routes/owner.routes"
 import complaintRoutes from "./routes/complaint.routes"
 import branchRoutes from "./routes/branch.routes"
@@ -77,6 +78,7 @@ import exhibitionRoutes from "./routes/exhibition.routes"
 import glRoutes from "./routes/gl.routes"
 import projectRoutes from "./routes/project.routes"
 import procurementRoutes from "./routes/procurement.routes"
+import { isProcurementEnabled } from "./lib/moduleFlags"
 import engineeringRoutes from "./routes/engineering.routes"
 import { startCftIngestScheduler } from "./services/cft/cftIngestScheduler"
 import { startMaintenanceScheduler } from "./jobs/maintenanceScheduler"
@@ -198,6 +200,7 @@ app.post("/api/meetings/by-meeting-id/:meetingId/join", MeetingController.joinMe
 app.post("/api/quotes", StockController.createWebsiteQuotationRequest)
 app.use("/api/sms", smsWebhookRoutes)
 app.use("/api/mpesa", mpesaWebhookRoutes)
+app.use("/api/website-orders", websiteOrderRoutes)
 
 // API Routes
 app.use("/api/auth", authRoutes)
@@ -266,7 +269,13 @@ app.use("/api/ai-assistant", aiAssistantRoutes)
 app.use("/api/dashboard", dashboardRoutes)
 app.use("/api/gl", glRoutes)
 app.use("/api/projects", projectRoutes)
-app.use("/api/procurement", procurementRoutes)
+if (isProcurementEnabled()) {
+  app.use("/api/procurement", procurementRoutes)
+} else {
+  app.use("/api/procurement", (_req, res) => {
+    res.status(404).json({ success: false, message: "Procurement is not available yet" })
+  })
+}
 app.use("/api/engineering", engineeringRoutes)
 
 // 404 handler

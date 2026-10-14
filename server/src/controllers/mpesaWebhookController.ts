@@ -1,31 +1,9 @@
 import type { Request, Response } from "express"
+import { parseStkCallback } from "../lib/mpesaCallback"
 import { StockExpense } from "../models/StockExpense"
+import { applyPosMpesaCallback } from "../services/posMpesa.service"
+import { applyWebsiteOrderCallback } from "../routes/websiteOrder.routes"
 import { postExpenseToCashbook } from "../services/cashBankingPosting.service"
-
-function parseStkCallback(body: any) {
-  const stkCallback = body?.Body?.stkCallback
-  const merchantRequestId = String(stkCallback?.MerchantRequestID || "").trim()
-  const checkoutRequestId = String(stkCallback?.CheckoutRequestID || "").trim()
-  const resultCode = Number(stkCallback?.ResultCode)
-  const resultDesc = String(stkCallback?.ResultDesc || "").trim()
-
-  const items = Array.isArray(stkCallback?.CallbackMetadata?.Item)
-    ? stkCallback.CallbackMetadata.Item
-    : []
-
-  const findValue = (name: string) => items.find((item: any) => item?.Name === name)?.Value
-
-  const mpesaReceiptNumber = String(findValue("MpesaReceiptNumber") || "").trim()
-
-  return {
-    merchantRequestId,
-    checkoutRequestId,
-    resultCode,
-    resultDesc,
-    mpesaReceiptNumber,
-    rawPayload: body,
-  }
-}
 
 export class MpesaWebhookController {
   static async stkCallback(req: Request, res: Response) {
@@ -44,40 +22,45 @@ export class MpesaWebhookController {
         return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" })
       }
 
+      const posPayment = await applyPosMpesaCallback(parsed)
+      const websiteOrder = await applyWebsiteOrderCallback(parsed)
       const expense = await StockExpense.findOne({ mpesaCheckoutRequestId: parsed.checkoutRequestId })
 
-      if (!expense) {
-        console.warn("[mpesa-callback] Expense not found", {
+      if (!posPayment && !expense && !websiteOrder) {
+        console.warn("[mpesa-callback] Payment not found", {
           checkoutRequestId: parsed.checkoutRequestId,
           merchantRequestId: parsed.merchantRequestId,
         })
         return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" })
       }
 
-      const isSuccess = parsed.resultCode === 0
-      expense.status = isSuccess ? "completed" : "failed"
-      expense.responseMessage = parsed.resultDesc || (isSuccess ? "Payment completed" : "Payment failed")
+      if (expense) {
+        const isSuccess = parsed.resultCode === 0
+        expense.status = isSuccess ? "completed" : "failed"
+        expense.responseMessage = parsed.resultDesc || (isSuccess ? "Payment completed" : "Payment failed")
 
-      if (parsed.mpesaReceiptNumber) {
-        expense.mpesaReceiptNumber = parsed.mpesaReceiptNumber
-      }
+        if (parsed.mpesaReceiptNumber) {
+          expense.mpesaReceiptNumber = parsed.mpesaReceiptNumber
+        }
 
-      if (parsed.merchantRequestId) {
-        expense.mpesaMerchantRequestId = parsed.merchantRequestId
-      }
+        if (parsed.merchantRequestId) {
+          expense.mpesaMerchantRequestId = parsed.merchantRequestId
+        }
 
-      await expense.save()
+        await expense.save()
 
-      if (isSuccess) {
-        await postExpenseToCashbook({
-          orgId: String(expense.org_id),
-          userId: String(expense.initiatedBy || "mpesa-webhook"),
-          expense,
-        })
+        if (isSuccess) {
+          await postExpenseToCashbook({
+            orgId: String(expense.org_id),
+            userId: String(expense.initiatedBy || "mpesa-webhook"),
+            expense,
+          })
+        }
       }
 
       console.log("[mpesa-callback] Processed", {
-        expenseId: String(expense._id),
+        posPaymentId: posPayment ? String(posPayment._id) : undefined,
+        expenseId: expense ? String(expense._id) : undefined,
         checkoutRequestId: parsed.checkoutRequestId,
         resultCode: parsed.resultCode,
         resultDesc: parsed.resultDesc,

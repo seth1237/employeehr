@@ -13,9 +13,33 @@ import {
   isGuestUserId,
 } from "../lib/meeting-users"
 import crypto from "crypto"
+import bcrypt from "bcryptjs"
 
 const aiService = new AIAnalysisService()
 const aiMeetingService = new AIMeetingService()
+
+async function hashMeetingPassword(raw?: string) {
+  const password = String(raw || "").trim()
+  if (!password) return undefined
+  return bcrypt.hash(password, 10)
+}
+
+async function verifyMeetingPassword(stored?: string, provided?: string) {
+  const input = String(provided || "")
+  const saved = String(stored || "")
+  if (!saved) return !input
+  if (saved.startsWith("$2")) return bcrypt.compare(input, saved)
+  return input === saved
+}
+
+function meetingPasswordFromRequest(req: { body?: any; headers?: any }) {
+  return String(req.body?.password || req.headers?.["x-meeting-password"] || "").trim()
+}
+
+function stripMeetingPassword<T extends Record<string, any>>(meeting: T) {
+  const { password: _password, ...rest } = meeting
+  return rest
+}
 
 /**
  * Generate a unique meeting ID
@@ -68,8 +92,6 @@ export class MeetingController {
         password,
       } = req.body
 
-      console.log('Received attendees:', JSON.stringify(attendees))
-
       // Validate required fields
       if (!title || !scheduled_at) {
         return res.status(400).json({
@@ -107,7 +129,7 @@ export class MeetingController {
         }).filter(Boolean)
       }
 
-      console.log('Formatted attendees:', JSON.stringify(formattedAttendees))
+      const hashedPassword = require_password ? await hashMeetingPassword(password) : undefined
 
       const meeting = await Meeting.create({
         org_id,
@@ -119,7 +141,7 @@ export class MeetingController {
         meeting_type: meeting_type || "video",
         meeting_id,
         meeting_link,
-        password: require_password ? password : undefined,
+        password: hashedPassword,
         require_password: require_password || false,
         attendees: formattedAttendees,
         agenda,
@@ -134,11 +156,8 @@ export class MeetingController {
             "firstName lastName email",
           )
 
-          console.log(`Found ${attendeeUsers.length} attendee users out of ${formattedAttendees.length} attendees`)
-
           for (const user of attendeeUsers) {
             try {
-              console.log(`Sending meeting invitation email to: ${user.email}`)
               await emailService.sendEmail({
                 to: user.email,
                 subject: `Meeting invitation: ${title}`,
@@ -154,7 +173,6 @@ export class MeetingController {
                   password: require_password ? password : undefined,
                 }),
               })
-              console.log(`✓ Email sent successfully to: ${user.email}`)
             } catch (emailError) {
               console.error(`✗ Failed to send email to ${user.email}:`, emailError)
               // Continue sending to other attendees even if one fails
@@ -166,7 +184,7 @@ export class MeetingController {
         }
       }
 
-      res.status(201).json({ success: true, data: meeting })
+      res.status(201).json({ success: true, data: stripMeetingPassword(meeting.toObject()) })
     } catch (error: any) {
       console.error("Create meeting error:", error)
       res.status(500).json({ success: false, message: error.message })
@@ -202,7 +220,7 @@ export class MeetingController {
 
       // Populate organizer and attendee details (skip guest_* IDs — not User ObjectIds)
       const meetingsWithDetails = await Promise.all(
-        meetings.map((meeting) => enrichMeeting(meeting)),
+        meetings.map((meeting) => enrichMeeting(stripMeetingPassword(meeting))),
       )
 
       res.status(200).json({ success: true, data: meetingsWithDetails })
@@ -238,7 +256,7 @@ export class MeetingController {
         }
       }
 
-      const meetingWithDetails = await enrichMeeting(meeting)
+      const meetingWithDetails = await enrichMeeting(stripMeetingPassword(meeting))
 
       res.status(200).json({
         success: true,
@@ -256,26 +274,30 @@ export class MeetingController {
   static async getMeetingByMeetingIdPublic(req: any, res: Response) {
     try {
       const { meetingId } = req.params
-      const { password } = req.query
-
       const meeting = await Meeting.findOne({ meeting_id: meetingId }).lean()
 
       if (!meeting) {
         return res.status(404).json({ success: false, message: "Meeting not found" })
       }
 
-      // Check password if required
       if (meeting.require_password) {
-        if (!password || password !== meeting.password) {
-          return res.status(403).json({ 
-            success: false, 
-            message: "Invalid or missing password",
-            require_password: true
-          })
-        }
+        return res.status(200).json({
+          success: true,
+          require_password: true,
+          locked: true,
+          data: {
+            meeting_id: meeting.meeting_id,
+            title: meeting.title,
+            scheduled_at: meeting.scheduled_at,
+            meeting_type: meeting.meeting_type,
+            status: meeting.status,
+            require_password: true,
+            duration_minutes: meeting.duration_minutes,
+          },
+        })
       }
 
-      const meetingWithDetails = await enrichMeeting(meeting)
+      const meetingWithDetails = await enrichMeeting(stripMeetingPassword(meeting))
 
       res.status(200).json({
         success: true,
@@ -284,6 +306,38 @@ export class MeetingController {
     } catch (error: any) {
       console.error("Get meeting by meeting_id error:", error)
       res.status(500).json({ success: false, message: error.message })
+    }
+  }
+
+  /**
+   * Unlock a password-protected public meeting. Password is never accepted in the URL.
+   */
+  static async unlockMeetingByMeetingIdPublic(req: any, res: Response) {
+    try {
+      const { meetingId } = req.params
+      const password = meetingPasswordFromRequest(req)
+      const meeting = await Meeting.findOne({ meeting_id: meetingId }).lean()
+
+      if (!meeting) {
+        return res.status(404).json({ success: false, message: "Meeting not found" })
+      }
+
+      if (meeting.require_password) {
+        const ok = await verifyMeetingPassword(meeting.password, password)
+        if (!ok) {
+          return res.status(403).json({
+            success: false,
+            message: "Invalid or missing password",
+            require_password: true,
+          })
+        }
+      }
+
+      const meetingWithDetails = await enrichMeeting(stripMeetingPassword(meeting))
+      return res.status(200).json({ success: true, data: meetingWithDetails })
+    } catch (error: any) {
+      console.error("Unlock meeting error:", error)
+      return res.status(500).json({ success: false, message: error.message })
     }
   }
 
@@ -312,7 +366,8 @@ export class MeetingController {
       }
 
       if (meeting.require_password) {
-        if (!password || password !== meeting.password) {
+        const ok = await verifyMeetingPassword(meeting.password, password)
+        if (!ok) {
           return res.status(403).json({
             success: false,
             message: "Invalid or missing password",
@@ -349,7 +404,7 @@ export class MeetingController {
 
       await meeting.save()
 
-      const meetingWithDetails = await enrichMeeting(meeting.toObject())
+      const meetingWithDetails = await enrichMeeting(stripMeetingPassword(meeting.toObject()))
 
       return res.status(200).json({
         success: true,
@@ -371,7 +426,6 @@ export class MeetingController {
   static async getMeetingByMeetingId(req: AuthenticatedRequest, res: Response) {
     try {
       const { meetingId } = req.params
-      const { password } = req.query
       const org_id = req.user?.org_id
 
       const meeting = await Meeting.findOne({ meeting_id: meetingId, org_id }).lean()
@@ -380,17 +434,7 @@ export class MeetingController {
         return res.status(404).json({ success: false, message: "Meeting not found" })
       }
 
-      // Check password if required
-      if (meeting.require_password) {
-        if (!password || password !== meeting.password) {
-          return res.status(403).json({ 
-            success: false, 
-            message: "Invalid or missing password" 
-          })
-        }
-      }
-
-      const meetingWithDetails = await enrichMeeting(meeting)
+      const meetingWithDetails = await enrichMeeting(stripMeetingPassword(meeting))
 
       res.status(200).json({
         success: true,

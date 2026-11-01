@@ -13,6 +13,7 @@ import {
   CommandShortcut,
 } from "@/components/ui/command"
 import { ADMIN_NAV_ITEMS } from "@/lib/admin-nav"
+import { isInterBranchNavHref, useCompanyBranches } from "@/lib/company-branches"
 import { stockApi } from "@/lib/api"
 import {
   getFavoriteHrefs,
@@ -39,6 +40,7 @@ type RecordHit = {
 
 export function AdminCommandPalette() {
   const router = useRouter()
+  const { hasBranches } = useCompanyBranches()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState("")
   const [records, setRecords] = useState<RecordHit[]>([])
@@ -147,12 +149,15 @@ export function AdminCommandPalette() {
     [router],
   )
 
-  const favoriteItems = ADMIN_NAV_ITEMS.filter((item) =>
+  const visibleNavItems = ADMIN_NAV_ITEMS.filter(
+    (item) => hasBranches || !isInterBranchNavHref(item.href),
+  )
+  const favoriteItems = visibleNavItems.filter((item) =>
     favoriteHrefs.includes(item.href),
   )
 
   const qLower = query.toLowerCase()
-  const navMatches = ADMIN_NAV_ITEMS.filter((item) => {
+  const navMatches = visibleNavItems.filter((item) => {
     if (!qLower) return true
     const hay = `${item.label} ${item.section} ${(item.keywords || []).join(" ")}`.toLowerCase()
     return hay.includes(qLower)

@@ -33,6 +33,40 @@ export const SELLING_CALL_PURPOSES = new Set([
   "Project inquiry",
 ])
 
+const UNKNOWN_CLIENT_NAME = "—"
+
+function pickCustomerFields(body: Record<string, any>) {
+  return {
+    name: String(body.name || "").trim(),
+    hospital: body.hospital,
+    county: body.county,
+    department: body.department,
+    contactPerson: body.contactPerson,
+    position: body.position,
+    phoneNumbers: Array.isArray(body.phoneNumbers) ? body.phoneNumbers : [],
+    email: body.email,
+    physicalAddress: body.physicalAddress,
+    kraPin: body.kraPin,
+    category: body.category,
+    leadSource: body.leadSource,
+    status: body.status,
+  }
+}
+
+function pickLeadFields(body: Record<string, any>) {
+  return {
+    customer_id: body.customer_id,
+    title: String(body.title || "").trim(),
+    stage: body.stage,
+    leadStatus: body.leadStatus,
+    source: body.source,
+    owner_id: body.owner_id,
+    value: body.value,
+    expectedCloseDate: body.expectedCloseDate,
+    notes: body.notes,
+  }
+}
+
 function normalizeDate(value: unknown) {
   if (value === null || value === undefined || value === "") return undefined
   const date = new Date(value as string)
@@ -221,7 +255,7 @@ async function closeOpenLeadFollowUps(params: {
   if (params.leadId) matchers.push({ lead_id: String(params.leadId) })
   if (params.customerId) matchers.push({ customer_id: String(params.customerId) })
   if (params.clientPhone) matchers.push({ clientPhone: String(params.clientPhone) })
-  if (params.clientName && params.clientName !== "—") {
+  if (params.clientName && params.clientName !== UNKNOWN_CLIENT_NAME) {
     matchers.push({
       clientName: new RegExp(`^${escapeRegex(params.clientName)}$`, "i"),
     })
@@ -309,7 +343,7 @@ export class CrmController {
   static async createCustomer(req: AuthenticatedRequest, res: Response) {
     try {
       const customer = new Customer({
-        ...req.body,
+        ...pickCustomerFields(req.body || {}),
         org_id: req.org_id,
         createdBy: req.user?.userId
       })
@@ -616,12 +650,33 @@ export class CrmController {
   // === Leads ===
   static async getLeads(req: AuthenticatedRequest, res: Response) {
     try {
-      const leads = await Lead.find({ org_id: req.org_id })
-        .sort({ createdAt: -1 })
-        .populate("customer_id", "name hospital")
-        .populate("owner_id", "firstName lastName")
+      const page = Math.max(1, Number(req.query.page) || 1)
+      const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 25))
+      const from = req.query.from ? new Date(String(req.query.from)) : null
+      const to = req.query.to ? new Date(String(req.query.to)) : null
+      const filter: Record<string, unknown> = { org_id: req.org_id }
+      if (from || to) {
+        filter.createdAt = {
+          ...(from && !Number.isNaN(from.getTime()) ? { $gte: from } : {}),
+          ...(to && !Number.isNaN(to.getTime()) ? { $lte: to } : {}),
+        }
+      }
 
-      return res.status(200).json({ success: true, data: leads })
+      const [leads, total] = await Promise.all([
+        Lead.find(filter)
+          .sort({ createdAt: -1 })
+          .skip((page - 1) * limit)
+          .limit(limit)
+          .populate("customer_id", "name hospital")
+          .populate("owner_id", "firstName lastName"),
+        Lead.countDocuments(filter),
+      ])
+
+      return res.status(200).json({
+        success: true,
+        data: leads,
+        pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+      })
     } catch (error) {
       return res.status(500).json({ success: false, message: "Failed to fetch leads", error })
     }
@@ -629,10 +684,11 @@ export class CrmController {
 
   static async createLead(req: AuthenticatedRequest, res: Response) {
     try {
+      const fields = pickLeadFields(req.body || {})
       const lead = new Lead({
-        ...req.body,
+        ...fields,
         org_id: req.org_id,
-        owner_id: req.body.owner_id || req.user?.userId
+        owner_id: fields.owner_id || req.user?.userId
       })
       await lead.save()
       return res.status(201).json({ success: true, data: lead })

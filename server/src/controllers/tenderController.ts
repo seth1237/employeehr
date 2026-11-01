@@ -205,6 +205,79 @@ export class TenderController {
     }
   }
 
+  public static async duplicateTender(req: Request, res: Response) {
+    try {
+      const { tenderId } = req.params
+      const org_id = (req as any).user?.org_id || (req as any).org_id
+      const createdBy = (req as any).user?.userId
+
+      if (!org_id) {
+        return res.status(400).json({ success: false, message: "Organization ID is missing" })
+      }
+
+      const source = await StockTender.findOne({ _id: tenderId, org_id })
+      if (!source) {
+        return res.status(404).json({ success: false, message: "Tender not found" })
+      }
+
+      const {
+        clientName,
+        clientNumber,
+        clientLocation,
+        clientContactPerson,
+        tenderName,
+      } = req.body || {}
+
+      const nextClientName = String(clientName || "").trim()
+      if (!nextClientName) {
+        return res.status(400).json({
+          success: false,
+          message: "Choose another facility or client name for the duplicate",
+        })
+      }
+
+      const items = (source.items || []).map((item: any) => {
+        const plain = typeof item?.toObject === "function" ? item.toObject() : { ...item }
+        delete plain._id
+        return plain
+      })
+
+      if (!items.length) {
+        return res.status(400).json({ success: false, message: "This tender has no items to duplicate" })
+      }
+
+      const duplicate = new StockTender({
+        org_id,
+        tenderNumber: generateDocumentNumber("TND"),
+        tenderName: String(tenderName || source.tenderName || "").trim() || source.tenderName,
+        department: source.department,
+        client: {
+          name: nextClientName,
+          number: String(clientNumber || source.client?.number || "N/A").trim() || "N/A",
+          location: String(clientLocation || source.client?.location || "N/A").trim() || "N/A",
+          contactPerson: String(clientContactPerson || "").trim() || undefined,
+        },
+        items,
+        subTotal: source.subTotal,
+        categoryOrder: Array.isArray(source.categoryOrder) ? source.categoryOrder.filter(Boolean) : [],
+        status: "draft",
+        createdBy,
+        ownerUserId: source.ownerUserId || createdBy,
+        branchId: source.branchId || undefined,
+      })
+
+      await duplicate.save()
+
+      return res.status(201).json({ success: true, data: duplicate })
+    } catch (error: any) {
+      console.error("Error duplicating tender:", error)
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to duplicate tender",
+      })
+    }
+  }
+
   public static async convertTenderToInvoice(req: Request, res: Response) {
     try {
       const { tenderId } = req.params

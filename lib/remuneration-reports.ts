@@ -1,5 +1,6 @@
 import { format } from "date-fns"
 import * as XLSX from "xlsx"
+import { getDeductionAmountByAliases } from "@/lib/payroll-calculator"
 
 export type RemunerationReportType = 'net' | 'sha' | 'tax' | 'nssf' | 'helb'
 
@@ -17,7 +18,11 @@ const getFullName = (employee: any) => {
 }
 
 const getDeductionAmount = (payroll: any, name: string) => {
-    return payroll.deduction_items?.find((item: any) => item.name === name)?.amount || 0
+    if (name === "SHA" || name === "SHIF") {
+        return getDeductionAmountByAliases(payroll, ["SHA", "SHIF", "NHIF"])
+    }
+    if (name === "PAYE") return getDeductionAmountByAliases(payroll, ["PAYE", "tax"])
+    return getDeductionAmountByAliases(payroll, [name])
 }
 
 const getEmployeeField = (employee: any, keys: string[]) => {
@@ -168,10 +173,10 @@ export const exportToExcel = (data: any[], fileName: string, sheetName = 'Report
 export const calculateReportSummaries = (payrolls: any[]) => {
     return {
         netSalaries: payrolls.reduce((sum, p) => sum + p.net_pay, 0),
-        totalSHA: payrolls.reduce((sum, p) => sum + (p.deduction_items?.find((item: any) => item.name === 'SHA')?.amount || 0), 0),
-        totalTax: payrolls.reduce((sum, p) => sum + (p.deduction_items?.find((item: any) => item.name === 'PAYE')?.amount || 0), 0),
-        totalNSSF: payrolls.reduce((sum, p) => sum + (p.deduction_items?.find((item: any) => item.name === 'NSSF')?.amount || 0), 0),
-        totalHELB: payrolls.reduce((sum, p) => sum + (p.deduction_items?.find((item: any) => item.name === 'HELB')?.amount || 0), 0),
+        totalSHA: payrolls.reduce((sum, p) => sum + getDeductionAmount(p, "SHA"), 0),
+        totalTax: payrolls.reduce((sum, p) => sum + getDeductionAmount(p, "PAYE"), 0),
+        totalNSSF: payrolls.reduce((sum, p) => sum + getDeductionAmount(p, "NSSF"), 0),
+        totalHELB: payrolls.reduce((sum, p) => sum + getDeductionAmount(p, "HELB"), 0),
         totalEmployees: payrolls.length,
     }
 }

@@ -220,6 +220,11 @@ const companySchema = new Schema<ICompany>(
     stockSettings: {
       bypassWebsiteQuotationApproval: { type: Boolean, default: false },
     },
+    attendanceSettings: {
+      lateHour: { type: Number, default: 9 },
+      lateMinute: { type: Number, default: 15 },
+      requireGps: { type: Boolean, default: false },
+    },
     crmSettings: {
       callPurposes: { type: [String], default: [] },
       removedContactRoles: { type: [String], default: [] },

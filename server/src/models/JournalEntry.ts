@@ -7,15 +7,38 @@ export interface IJournalLine {
   credit: number;
 }
 
+export type JournalType =
+  | "sales"
+  | "purchases"
+  | "inventory"
+  | "miscellaneous"
+  | "carry-forward"
+  | "closing";
+
+export type JournalNature = "manual" | "automatic" | "template" | "recurring" | "reversing";
+
 export interface IJournalEntry extends Document {
   org_id: string;
-  entryNumber: string; // e.g., JE-0001
+  entryNumber: string;
   date: Date;
-  reference?: string; // e.g., Invoice number, Receipt number
+  reference?: string;
   description: string;
   lines: IJournalLine[];
   status: "draft" | "posted" | "voided";
-  source: "manual" | "invoice" | "payment" | "expense" | "payroll" | "system";
+  source: "manual" | "invoice" | "payment" | "expense" | "payroll" | "system" | "depreciation" | "inventory" | "asset";
+  journalType: JournalType;
+  nature: JournalNature;
+  currency: string;
+  exchangeRate: number;
+  reversedFrom?: string;
+  reversedBy?: string;
+  isTemplate?: boolean;
+  recurring?: {
+    interval: "weekly" | "monthly" | "yearly";
+    nextRunAt?: Date;
+    endDate?: Date;
+    enabled?: boolean;
+  };
   createdBy: string;
   postedBy?: string;
   postedAt?: Date;
@@ -45,8 +68,29 @@ const journalEntrySchema = new Schema<IJournalEntry>(
     },
     source: {
       type: String,
-      enum: ["manual", "invoice", "payment", "expense", "payroll", "system"],
+      enum: ["manual", "invoice", "payment", "expense", "payroll", "system", "depreciation", "inventory", "asset"],
       default: "manual",
+    },
+    journalType: {
+      type: String,
+      enum: ["sales", "purchases", "inventory", "miscellaneous", "carry-forward", "closing"],
+      default: "miscellaneous",
+    },
+    nature: {
+      type: String,
+      enum: ["manual", "automatic", "template", "recurring", "reversing"],
+      default: "manual",
+    },
+    currency: { type: String, default: "KES" },
+    exchangeRate: { type: Number, default: 1 },
+    reversedFrom: { type: String },
+    reversedBy: { type: String },
+    isTemplate: { type: Boolean, default: false },
+    recurring: {
+      interval: { type: String, enum: ["weekly", "monthly", "yearly"] },
+      nextRunAt: { type: Date },
+      endDate: { type: Date },
+      enabled: { type: Boolean, default: false },
     },
     createdBy: { type: String, required: true },
     postedBy: { type: String },

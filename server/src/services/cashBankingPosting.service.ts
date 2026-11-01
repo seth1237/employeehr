@@ -4,6 +4,7 @@ import {
   type ICashBankAccount,
 } from "../models/CashBankAccount"
 import { CashTransaction } from "../models/CashTransaction"
+import { FinanceService } from "./finance.service"
 
 type AccountDoc = ICashBankAccount & { _id: any; save: () => Promise<any> }
 
@@ -102,6 +103,7 @@ async function postTransaction(params: {
   if (!Number.isFinite(amount) || amount <= 0) {
     throw new Error("Cashbook amount must be a positive number")
   }
+  await FinanceService.assertPeriodOpen(params.orgId, params.occurredAt)
 
   const signed = params.direction === "in" ? amount : -amount
   const updated = await CashBankAccount.findOneAndUpdate(
@@ -285,6 +287,46 @@ export async function postPayrollToCashbook(params: {
     description: `Salary payment · ${params.payroll.month || ""} · ${who}`.trim(),
     reference: params.payroll.month,
     counterparty: who,
+    sourceType: "payroll",
+    sourceId,
+    createdBy: params.userId,
+  })
+}
+
+export async function postMonthPayrollToCashbook(params: {
+  orgId: string
+  userId: string
+  month: string
+  amount: number
+  employeeCount: number
+}) {
+  const amount = Number(params.amount || 0)
+  if (!Number.isFinite(amount) || amount <= 0) return null
+
+  await ensureDefaultCashAccounts(params.orgId, params.userId)
+  const sourceId = `payroll-month:${params.month}`
+  const exists = await CashTransaction.findOne({
+    org_id: params.orgId,
+    sourceType: "payroll",
+    sourceId,
+  }).lean()
+  if (exists) return exists
+
+  const account = await findDefaultAccountForMethod(params.orgId, "bank")
+  if (!account) {
+    throw new Error("No cashbook bank account configured for the monthly payroll payment.")
+  }
+
+  return postTransaction({
+    orgId: params.orgId,
+    account: account as any,
+    direction: "out",
+    kind: "payroll",
+    amount,
+    occurredAt: new Date(),
+    description: `Salary payment · ${params.month} · ${params.employeeCount} employees`,
+    reference: params.month,
+    counterparty: `${params.employeeCount} employees`,
     sourceType: "payroll",
     sourceId,
     createdBy: params.userId,

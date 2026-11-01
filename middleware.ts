@@ -7,6 +7,13 @@ const SALES_ROLES = new Set(["sales_rep"])
 const ENGINEER_ROLES = new Set(["technical_service_engineer"])
 const POS_ROLES = new Set(["pos_cashier", "company_admin", "admin", "hr", "super_admin"])
 
+function isProcurementEnabled() {
+  const flag = process.env.NEXT_PUBLIC_PROCUREMENT_ENABLED
+  if (flag === "true") return true
+  if (flag === "false") return false
+  return process.env.NODE_ENV !== "production"
+}
+
 function homeForRole(role: string): string {
   if (role === "super_admin") return "/owner"
   if (role === "company_admin" || role === "admin" || role === "hr") return "/admin"
@@ -16,6 +23,7 @@ function homeForRole(role: string): string {
   if (SALES_ROLES.has(role)) return "/sales"
   if (ENGINEER_ROLES.has(role)) return "/engineer"
   if (role === "employee") return "/employee"
+  if (role === "portal_client") return "/portal"
   return "/auth/login"
 }
 
@@ -57,7 +65,8 @@ export function middleware(request: NextRequest) {
     pathname.startsWith("/sales") ||
     pathname.startsWith("/owner") ||
     pathname.startsWith("/engineer") ||
-    pathname.startsWith("/pos")
+    pathname.startsWith("/pos") ||
+    pathname.startsWith("/portal")
 
   if (!isProtected) {
     return NextResponse.next()
@@ -74,7 +83,15 @@ export function middleware(request: NextRequest) {
   }
 
   if (pathname.startsWith("/admin") && !ADMIN_ROLES.has(role)) {
-    return NextResponse.redirect(new URL(homeForRole(role), request.url))
+    if (role === "manager" && pathname.startsWith("/admin/stock/transfers")) {
+      // Branch admins share the transfer workspace with company admins.
+    } else {
+      return NextResponse.redirect(new URL(homeForRole(role), request.url))
+    }
+  }
+
+  if (pathname.startsWith("/admin/procurement") && !isProcurementEnabled()) {
+    return NextResponse.redirect(new URL("/admin", request.url))
   }
 
   // Prevent dispatch from seeing other admin modules (force redirect back to dashboard which is safe)
@@ -125,6 +142,14 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/pos", request.url))
   }
 
+  if (pathname.startsWith("/portal") && role !== "portal_client") {
+    return NextResponse.redirect(new URL(homeForRole(role), request.url))
+  }
+
+  if (role === "portal_client" && !pathname.startsWith("/portal")) {
+    return NextResponse.redirect(new URL("/portal", request.url))
+  }
+
   // /owner: authenticated only — page + API enforce platform owner
   return NextResponse.next()
 }
@@ -143,5 +168,7 @@ export const config = {
     "/engineer/:path*",
     "/pos",
     "/pos/:path*",
+    "/portal",
+    "/portal/:path*",
   ],
 }

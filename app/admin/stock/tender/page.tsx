@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCw } from "lucide-react";
+import { Copy, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { stockApi } from "@/lib/api";
 import { finishDataLoad, startDataLoad } from "@/lib/silent-load";
@@ -23,6 +23,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   applyStampToPdf,
   generateTenderPdf,
@@ -199,6 +207,16 @@ export default function TendersPage() {
 
   // Bulk add by category
   const [bulkCategoryId, setBulkCategoryId] = useState("");
+
+  const [duplicateTender, setDuplicateTender] = useState<Tender | null>(null);
+  const [duplicating, setDuplicating] = useState(false);
+  const [duplicateTenderName, setDuplicateTenderName] = useState("");
+  const [duplicateClientName, setDuplicateClientName] = useState("");
+  const [duplicateClientNumber, setDuplicateClientNumber] = useState("");
+  const [duplicateClientLocation, setDuplicateClientLocation] = useState("");
+  const [duplicateClientContact, setDuplicateClientContact] = useState("");
+  const [duplicateClientSearch, setDuplicateClientSearch] = useState("");
+  const [duplicateSelectedClient, setDuplicateSelectedClient] = useState("");
 
   useEffect(() => {
     const q = searchParams.get("q") || "";
@@ -490,6 +508,22 @@ export default function TendersPage() {
       client.number.toLowerCase().includes(query) ||
       (client.contactPerson || "").toLowerCase().includes(query)
     );
+  });
+
+  const duplicateFilteredClients = clients.filter((client) => {
+    const sourceName = String(duplicateTender?.client?.name || "")
+      .trim()
+      .toLowerCase();
+    const query = duplicateClientSearch.trim().toLowerCase();
+    const matchesQuery =
+      !query ||
+      client.name.toLowerCase().includes(query) ||
+      client.location.toLowerCase().includes(query) ||
+      client.number.toLowerCase().includes(query) ||
+      (client.contactPerson || "").toLowerCase().includes(query);
+    const isSameFacility =
+      sourceName && client.name.toLowerCase() === sourceName;
+    return matchesQuery && !isSameFacility;
   });
 
   const matchingProducts = products.filter((product) => {
@@ -942,6 +976,80 @@ export default function TendersPage() {
 
     toast({ title: "Rejected", description: "Tender has been rejected" });
     loadData({ silent: true });
+  };
+
+  const openDuplicateTender = (tender: Tender) => {
+    setDuplicateTender(tender);
+    setDuplicateTenderName(tender.tenderName || "");
+    setDuplicateClientName("");
+    setDuplicateClientNumber("");
+    setDuplicateClientLocation("");
+    setDuplicateClientContact("");
+    setDuplicateClientSearch("");
+    setDuplicateSelectedClient("");
+  };
+
+  const applyDuplicateClient = (client: Client) => {
+    setDuplicateSelectedClient(client.key || JSON.stringify(client));
+    setDuplicateClientName(client.name || "");
+    setDuplicateClientNumber(client.number || "");
+    setDuplicateClientLocation(client.location || "");
+    setDuplicateClientContact(client.contactPerson || "");
+  };
+
+  const submitDuplicateTender = async () => {
+    if (!duplicateTender) return;
+    if (!duplicateClientName.trim()) {
+      toast({
+        title: "Facility required",
+        description: "Pick another client or type the new facility name",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setDuplicating(true);
+    try {
+      const response = await fetch(
+        `${API_URL}/api/stock/tenders/${duplicateTender._id}/duplicate`,
+        {
+          method: "POST",
+          headers: getAuthHeaders(),
+          body: JSON.stringify({
+            tenderName: duplicateTenderName.trim() || duplicateTender.tenderName,
+            clientName: duplicateClientName.trim(),
+            clientNumber: duplicateClientNumber.trim() || "N/A",
+            clientLocation: duplicateClientLocation.trim() || "N/A",
+            clientContactPerson: duplicateClientContact.trim() || undefined,
+          }),
+        },
+      );
+      const result = await response.json();
+      if (!response.ok) {
+        toast({
+          title: "Error",
+          description: result.message || "Failed to duplicate tender",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: "Duplicated",
+        description: `${result.data.tenderNumber} created for ${duplicateClientName.trim()}`,
+      });
+      setDuplicateTender(null);
+      loadData({ silent: true });
+    } catch (error) {
+      console.error("Failed to duplicate tender:", error);
+      toast({
+        title: "Error",
+        description: "Failed to duplicate tender",
+        variant: "destructive",
+      });
+    } finally {
+      setDuplicating(false);
+    }
   };
 
   const convertToInvoice = async (tenderId: string) => {
@@ -2176,6 +2284,13 @@ export default function TendersPage() {
                           >
                             Edit
                           </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openDuplicateTender(tender)}
+                          >
+                            Duplicate
+                          </Button>
                           {canApprove ? (
                             <>
                               <Button
@@ -2325,6 +2440,13 @@ export default function TendersPage() {
                             Edit
                           </Button>
                         )}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => openDuplicateTender(tender)}
+                        >
+                          Duplicate
+                        </Button>
                         {tender.status === "draft" ? (
                           <Button
                             size="sm"
@@ -2403,6 +2525,141 @@ export default function TendersPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog
+        open={Boolean(duplicateTender)}
+        onOpenChange={(open) => {
+          if (!open && !duplicating) setDuplicateTender(null);
+        }}
+      >
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Duplicate tender for another facility</DialogTitle>
+            <DialogDescription>
+              Copies every line, price, and category from{" "}
+              {duplicateTender?.tenderNumber} onto a new draft for a different
+              client.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="rounded-lg border bg-muted/30 px-3 py-2 text-sm">
+              <p className="font-medium">{duplicateTender?.tenderName || "Tender"}</p>
+              <p className="text-xs text-muted-foreground">
+                Current facility: {duplicateTender?.client?.name || "—"} ·{" "}
+                {duplicateTender?.items?.length || 0} items · KES{" "}
+                {Number(duplicateTender?.subTotal || 0).toLocaleString("en-KE", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </p>
+            </div>
+
+            <div>
+              <Label>Tender name</Label>
+              <Input
+                value={duplicateTenderName}
+                onChange={(event) => setDuplicateTenderName(event.target.value)}
+                placeholder="Same contents, new facility"
+              />
+            </div>
+
+            <div>
+              <Label>Search another facility / client</Label>
+              <Input
+                className="mt-1 mb-2"
+                placeholder="Search by name, location, number or contact"
+                value={duplicateClientSearch}
+                onChange={(event) => setDuplicateClientSearch(event.target.value)}
+              />
+              <div className="max-h-48 overflow-auto rounded-md border divide-y">
+                {duplicateFilteredClients.length === 0 ? (
+                  <div className="p-3 text-sm text-muted-foreground">
+                    No other saved clients match. Type the new facility name below.
+                  </div>
+                ) : (
+                  duplicateFilteredClients.map((client) => {
+                    const key = client.key || JSON.stringify(client);
+                    const selected = duplicateSelectedClient === key;
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => applyDuplicateClient(client)}
+                        className={`w-full px-3 py-2.5 text-left text-sm transition hover:bg-muted/60 ${selected ? "bg-teal-50" : "bg-background"}`}
+                      >
+                        <div className="font-medium">{client.name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {client.number} · {client.location}
+                          {client.contactPerson ? ` · ${client.contactPerson}` : ""}
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <Label>New facility / client name</Label>
+                <Input
+                  value={duplicateClientName}
+                  onChange={(event) => {
+                    setDuplicateClientName(event.target.value);
+                    setDuplicateSelectedClient("");
+                  }}
+                  placeholder="e.g. Nairobi Hospital — Karen"
+                />
+              </div>
+              <div>
+                <Label>Phone</Label>
+                <Input
+                  value={duplicateClientNumber}
+                  onChange={(event) => setDuplicateClientNumber(event.target.value)}
+                  placeholder="Optional"
+                />
+              </div>
+              <div>
+                <Label>Location</Label>
+                <Input
+                  value={duplicateClientLocation}
+                  onChange={(event) => setDuplicateClientLocation(event.target.value)}
+                  placeholder="Optional"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <Label>Contact person</Label>
+                <Input
+                  value={duplicateClientContact}
+                  onChange={(event) => setDuplicateClientContact(event.target.value)}
+                  placeholder="Optional"
+                />
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={duplicating}
+              onClick={() => setDuplicateTender(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={duplicating || !duplicateClientName.trim()}
+              onClick={() => void submitDuplicateTender()}
+              className="gap-2"
+            >
+              <Copy className="h-4 w-4" />
+              {duplicating ? "Duplicating..." : "Duplicate tender"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

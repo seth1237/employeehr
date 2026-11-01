@@ -10,10 +10,15 @@ const MANAGER_ROLES = [...ADMIN_ROLES, "manager"]
 
 // Generate a sequential project code like PROJ-0001
 async function generateProjectCode(org_id: string): Promise<string> {
-  const count = await Project.countDocuments({ org_id })
-  const padded = String(count + 1).padStart(4, "0")
-  return `PROJ-${padded}`
+  const latest = await Project.findOne({ org_id, project_code: /^PROJ-\d+$/ })
+    .sort({ project_code: -1 })
+    .select("project_code")
+    .lean()
+  const current = Number(String(latest?.project_code || "PROJ-0000").split("-")[1] || 0)
+  return `PROJ-${String(current + 1).padStart(4, "0")}`
 }
+
+const PROJECT_TASK_TYPES = ["project", "other"]
 
 export class ProjectController {
   // ─────────────────────────────────────────────
@@ -45,43 +50,45 @@ export class ProjectController {
         ]
       }
 
-      const projects = await Project.find(query).sort({ createdAt: -1 })
+      const projects = await Project.find(query).sort({ createdAt: -1 }).lean()
+      const projectIds = projects.map((project) => String(project._id))
+      const memberIds = [...new Set(projects.flatMap((project) => (project.members || []).map((m: any) => String(m.user_id))))]
 
-      // Enrich with member user details and task counts
-      const enriched = await Promise.all(
-        projects.map(async (project) => {
-          const p = project.toObject()
+      const [taskCounts, users] = await Promise.all([
+        Task.aggregate([
+          {
+            $match: {
+              org_id: req.org_id,
+              related_entity_type: { $in: PROJECT_TASK_TYPES },
+              related_entity_id: { $in: projectIds },
+            },
+          },
+          {
+            $group: {
+              _id: "$related_entity_id",
+              total: { $sum: 1 },
+              completed: { $sum: { $cond: [{ $eq: ["$status", "completed"] }, 1, 0] } },
+            },
+          },
+        ]),
+        User.find({ _id: { $in: memberIds } }).select("firstName lastName avatar").lean(),
+      ])
 
-          // Count tasks linked to this project
-          const taskCount = await Task.countDocuments({
-            org_id: req.org_id,
-            related_entity_type: "other",
-            related_entity_id: String(project._id),
-          })
+      const taskMap = new Map(taskCounts.map((row) => [String(row._id), row]))
+      const userMap = new Map(users.map((user) => [String(user._id), user]))
 
-          const completedTaskCount = await Task.countDocuments({
-            org_id: req.org_id,
-            related_entity_type: "other",
-            related_entity_id: String(project._id),
-            status: "completed",
-          })
-
-          // Enrich members with names
-          const memberDetails = await Promise.all(
-            (p.members || []).map(async (m: any) => {
-              const user = await User.findById(m.user_id).select("firstName lastName avatar")
-              return { ...m, user }
-            }),
-          )
-
-          return {
-            ...p,
-            members: memberDetails,
-            task_count: taskCount,
-            completed_task_count: completedTaskCount,
-          }
-        }),
-      )
+      const enriched = projects.map((project) => {
+        const counts = taskMap.get(String(project._id))
+        return {
+          ...project,
+          members: (project.members || []).map((m: any) => ({
+            ...m,
+            user: userMap.get(String(m.user_id)) || null,
+          })),
+          task_count: counts?.total || 0,
+          completed_task_count: counts?.completed || 0,
+        }
+      })
 
       return res.status(200).json({
         success: true,
@@ -182,7 +189,7 @@ export class ProjectController {
       // Fetch linked tasks
       const tasks = await Task.find({
         org_id: req.org_id,
-        related_entity_type: "other",
+        related_entity_type: { $in: PROJECT_TASK_TYPES },
         related_entity_id: String(project._id),
       }).sort({ createdAt: -1 })
 
@@ -271,26 +278,37 @@ export class ProjectController {
         }
       }
 
-      const project = new Project({
-        org_id: req.org_id,
-        project_code,
-        title,
-        description,
-        status: status || "planning",
-        priority: priority || "medium",
-        start_date,
-        end_date,
-        budget,
-        tags: tags || [],
-        phases: phases || [],
-        members,
-        client_name,
-        client_id,
-        progress: 0,
-        created_by: req.user.userId,
-      })
-
-      const saved = await project.save()
+      let saved
+      let code = project_code
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        try {
+          saved = await Project.create({
+            org_id: req.org_id,
+            project_code: code,
+            title,
+            description,
+            status: status || "planning",
+            priority: priority || "medium",
+            start_date,
+            end_date,
+            budget,
+            tags: tags || [],
+            phases: phases || [],
+            members,
+            client_name,
+            client_id,
+            progress: 0,
+            created_by: req.user.userId,
+          })
+          break
+        } catch (error: any) {
+          if (error?.code !== 11000 || attempt === 4) throw error
+          code = await generateProjectCode(req.org_id)
+        }
+      }
+      if (!saved) {
+        return res.status(500).json({ success: false, message: "Could not allocate a unique project code" })
+      }
 
       return res.status(201).json({
         success: true,
@@ -504,7 +522,7 @@ export class ProjectController {
 
       const tasks = await Task.find({
         org_id: req.org_id,
-        related_entity_type: "other",
+        related_entity_type: { $in: PROJECT_TASK_TYPES },
         related_entity_id: projectId,
       }).sort({ createdAt: -1 })
 
@@ -567,7 +585,7 @@ export class ProjectController {
         assigned_by: req.user.userId,
         priority: priority || "medium",
         due_date,
-        related_entity_type: "other",
+        related_entity_type: "project",
         related_entity_id: projectId,
         source_label: project.project_code,
       })

@@ -24,14 +24,22 @@ export class GLController {
       const org_id = req.user?.org_id;
       if (!org_id) return res.status(401).json({ success: false, message: "Unauthorized" });
 
-      const { code, name, type, description } = req.body;
+      const { code, name, type, description, currency, controlType } = req.body;
 
       const exists = await Account.findOne({ org_id, code });
       if (exists) {
         return res.status(400).json({ success: false, message: "Account code already exists" });
       }
 
-      const account = new Account({ org_id, code, name, type, description });
+      const account = new Account({
+        org_id,
+        code,
+        name,
+        type,
+        description,
+        currency: currency || "KES",
+        controlType: ["customer", "vendor", "bank", "cash"].includes(controlType) ? controlType : "none",
+      });
       await account.save();
 
       return res.status(201).json({ success: true, data: account });
@@ -62,12 +70,12 @@ export class GLController {
       const org_id = req.user?.org_id;
       if (!org_id) return res.status(401).json({ success: false, message: "Unauthorized" });
 
-      const { date, reference, description, lines } = req.body;
+      const { date, reference, description, lines, journalType, nature, currency, exchangeRate, isTemplate, recurring } = req.body;
 
       const entry = await GeneralLedgerService.postJournalEntry(
         org_id,
-        { date, reference, description, lines, source: "manual" },
-        req.user!._id
+        { date, reference, description, lines, source: "manual", journalType, nature, currency, exchangeRate, isTemplate, recurring },
+        req.user?.userId || "system"
       );
 
       return res.status(201).json({ success: true, data: entry });
@@ -151,7 +159,6 @@ export class GLController {
 
       // Transform into a ledger view
       const ledger = [];
-      let balance = 0;
 
       for (const entry of entries) {
         for (const line of entry.lines as any) {

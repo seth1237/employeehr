@@ -1,6 +1,21 @@
 import type { Response } from "express"
 import { Attendance } from "../models/Attendance"
+import { Company } from "../models/Company"
 import type { AuthenticatedRequest } from "../middleware/auth"
+
+const ATTENDANCE_STATUSES = new Set(["present", "absent", "late", "half_day", "leave"])
+
+async function lateThresholdForOrg(orgId: string, now: Date) {
+  const company = await Company.findById(orgId).select("attendanceSettings").lean()
+  const hour = Number(company?.attendanceSettings?.lateHour ?? 9)
+  const minute = Number(company?.attendanceSettings?.lateMinute ?? 15)
+  const threshold = new Date(now)
+  threshold.setHours(Number.isFinite(hour) ? hour : 9, Number.isFinite(minute) ? minute : 15, 0, 0)
+  return {
+    threshold,
+    requireGps: Boolean(company?.attendanceSettings?.requireGps),
+  }
+}
 
 function getDayRange(referenceDate = new Date()) {
   const start = new Date(referenceDate)
@@ -76,9 +91,11 @@ export class AttendanceController {
         return res.status(400).json({ success: false, message: "Already checked in for today" })
       }
 
-      const lateThreshold = new Date(now)
-      lateThreshold.setHours(9, 15, 0, 0)
-      const status = now.getTime() > lateThreshold.getTime() ? "late" : "present"
+      const { threshold, requireGps } = await lateThresholdForOrg(req.org_id, now)
+      if (requireGps && (req.body?.latitude == null || req.body?.longitude == null)) {
+        return res.status(400).json({ success: false, message: "This company requires GPS on check-in" })
+      }
+      const status = now.getTime() > threshold.getTime() ? "late" : "present"
 
       const record = existing || new Attendance({
         org_id: req.org_id,
@@ -185,15 +202,29 @@ export class AttendanceController {
         return res.status(400).json({ success: false, message: "Organization ID required" })
       }
 
-      const { user_id, date, status, hoursWorked, remarks } = req.body
+      const { user_id, date, status, hoursWorked, remarks, checkIn } = req.body
+      if (!user_id || !date) {
+        return res.status(400).json({ success: false, message: "user_id and date are required" })
+      }
+      if (status && !ATTENDANCE_STATUSES.has(String(status))) {
+        return res.status(400).json({ success: false, message: "Invalid attendance status" })
+      }
+      if (status && status !== "absent" && status !== "leave" && !checkIn) {
+        return res.status(400).json({ success: false, message: "checkIn is required when marking a working status" })
+      }
+      const hours = hoursWorked === undefined || hoursWorked === null || hoursWorked === "" ? undefined : Number(hoursWorked)
+      if (hours !== undefined && (!Number.isFinite(hours) || hours < 0 || hours > 24)) {
+        return res.status(400).json({ success: false, message: "hoursWorked must be between 0 and 24" })
+      }
 
       const attendance = new Attendance({
         org_id: req.org_id,
         user_id,
         date: new Date(date),
         status,
-        hoursWorked,
-        remarks,
+        checkIn: checkIn ? new Date(checkIn) : undefined,
+        hoursWorked: hours,
+        remarks: remarks ? String(remarks).slice(0, 500) : undefined,
       })
 
       const savedAttendance = await attendance.save()

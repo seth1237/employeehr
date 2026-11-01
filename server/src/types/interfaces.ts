@@ -17,7 +17,8 @@ export interface IUser {
     | "sales_rep"
     | "technical_service_engineer"
     | "dispatch"
-    | "pos_cashier";
+    | "pos_cashier"
+    | "portal_client";
   department?: string;
   position?: string; // Job title
   manager_id?: string;
@@ -38,6 +39,7 @@ export interface IUser {
   employmentType?: "permanent" | "contract" | "intern" | "casual" | "consultant";
   grade?: string;
   workLocation?: string;
+  branchId?: string;
   probationEndDate?: Date;
   noticePeriodDays?: number;
   lastWorkingDay?: Date;
@@ -113,6 +115,18 @@ export interface ICompany {
   navigationAnimation?: string;
   themePreset?: string;
   salesNightOutAmount?: number;
+  stockSettings?: {
+    bypassWebsiteQuotationApproval?: boolean;
+  };
+  attendanceSettings?: {
+    lateHour?: number;
+    lateMinute?: number;
+    requireGps?: boolean;
+  };
+  crmSettings?: {
+    callPurposes?: string[];
+    removedContactRoles?: string[];
+  };
   subscription: "starter" | "professional" | "enterprise";
   emailConfig?: {
     enabled: boolean; // Tenant wants to use their own email

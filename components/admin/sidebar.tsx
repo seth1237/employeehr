@@ -45,6 +45,7 @@ import {
   ScrollText,
   MessageSquare,
   Wrench,
+  ArrowLeftRight,
 } from "lucide-react";
 import { getUser, logout } from "@/lib/auth";
 import { getToken } from "@/lib/auth";
@@ -54,6 +55,8 @@ import { parseResponse } from "@/lib/fetchUtils";
 import { companyApi } from "@/lib/api";
 import { getFavoriteHrefs } from "@/lib/admin-personalization";
 import { resolveAdminAllowedSections } from "@/lib/admin-sections";
+import { isProcurementEnabled } from "@/lib/module-flags";
+import { isInterBranchNavHref, useCompanyBranches } from "@/lib/company-branches";
 import {
   getAccountsSidebarModules,
   resolveAccountsPageFromPathname,
@@ -187,6 +190,12 @@ const adminMenuItems = [
     section: "EMPLOYEE MANAGEMENT",
   },
   {
+    label: "Staff Transfers",
+    icon: ArrowLeftRight,
+    href: "/admin/stock/transfers?type=employee",
+    section: "EMPLOYEE MANAGEMENT",
+  },
+  {
     label: "Onboarding",
     icon: UserCheck,
     href: "/admin/onboarding",
@@ -232,6 +241,12 @@ const adminMenuItems = [
     label: "Warehouse Management",
     icon: Package,
     href: "/admin/stock/wms",
+    section: "INVENTORY MANAGER",
+  },
+  {
+    label: "Inter-branch Transfers",
+    icon: ArrowLeftRight,
+    href: "/admin/stock/transfers",
     section: "INVENTORY MANAGER",
   },
   {
@@ -370,6 +385,12 @@ const adminMenuItems = [
     label: "Dispatch",
     icon: Package,
     href: "/admin/stock/dispatch",
+    section: "INVENTORY MANAGER",
+  },
+  {
+    label: "Website orders",
+    icon: Package,
+    href: "/admin/stock/website-orders",
     section: "INVENTORY MANAGER",
   },
   {
@@ -521,6 +542,7 @@ export default function AdminSidebar({
   );
 
   const currentUser = useMemo(() => getUser(), []);
+  const { hasBranches } = useCompanyBranches();
 
   useEffect(() => {
     try {
@@ -739,6 +761,13 @@ export default function AdminSidebar({
   // Group menu items by section
   const sections: { [key: string]: typeof adminMenuItems } = {};
   adminMenuItems.forEach((item) => {
+    if (item.section === "PROCUREMENT (P2P)" && !isProcurementEnabled()) {
+      return;
+    }
+    if (isInterBranchNavHref(item.href) && !hasBranches) {
+      return;
+    }
+
     // If role is dispatch, restrict to specific items
     if (currentUser?.role === "dispatch") {
       const allowedDispatchHrefs = [
@@ -746,6 +775,7 @@ export default function AdminSidebar({
         "/admin/stock/wms",
         "/admin/stock/stock-check",
         "/admin/stock/dispatch",
+        "/admin/stock/website-orders",
         "/admin/stock/status",
         "/admin/stock/history"
       ];
@@ -778,6 +808,8 @@ export default function AdminSidebar({
   const favoriteItems = useMemo(
     () =>
       adminMenuItems.filter((item) => {
+        if (item.section === "PROCUREMENT (P2P)" && !isProcurementEnabled()) return false;
+        if (isInterBranchNavHref(item.href) && !hasBranches) return false;
         if (!favoriteHrefs.includes(item.href)) return false;
         
         if (currentUser?.role === "dispatch") {
@@ -786,6 +818,7 @@ export default function AdminSidebar({
             "/admin/stock/wms",
             "/admin/stock/stock-check",
             "/admin/stock/dispatch",
+            "/admin/stock/website-orders",
             "/admin/stock/status",
             "/admin/stock/history"
           ];
@@ -795,7 +828,7 @@ export default function AdminSidebar({
         if (!allowedSections) return true;
         return allowedSections.has(item.section);
       }),
-    [favoriteHrefs, allowedSections, currentUser?.role],
+    [favoriteHrefs, allowedSections, currentUser?.role, hasBranches],
   );
 
   const showAccountsSection = (!allowedSections || allowedSections.has("ACCOUNTS")) && currentUser?.role !== "dispatch";

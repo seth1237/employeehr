@@ -1,6 +1,6 @@
-import { Account, IAccount } from "../models/Account";
-import { JournalEntry, IJournalEntry, IJournalLine } from "../models/JournalEntry";
-import mongoose from "mongoose";
+import { Account } from "../models/Account";
+import { JournalEntry, IJournalEntry, IJournalLine, JournalNature, JournalType } from "../models/JournalEntry";
+import { FiscalPeriod } from "../models/FiscalPeriod";
 
 export class GeneralLedgerService {
   /**
@@ -8,25 +8,40 @@ export class GeneralLedgerService {
    */
   static async initializeDefaultAccounts(org_id: string) {
     const defaultAccounts = [
-      { code: "1000", name: "Cash on Hand", type: "asset", isSystem: true },
-      { code: "1010", name: "Bank Account", type: "asset", isSystem: true },
-      { code: "1020", name: "M-Pesa Account", type: "asset", isSystem: true },
-      { code: "1200", name: "Accounts Receivable", type: "asset", isSystem: true },
+      { code: "1000", name: "Cash on Hand", type: "asset", isSystem: true, controlType: "cash" },
+      { code: "1010", name: "Bank Account", type: "asset", isSystem: true, controlType: "bank" },
+      { code: "1020", name: "M-Pesa Account", type: "asset", isSystem: true, controlType: "bank" },
+      { code: "1200", name: "Accounts Receivable", type: "asset", isSystem: true, controlType: "customer" },
       { code: "1300", name: "Inventory", type: "asset", isSystem: true },
-      { code: "2000", name: "Accounts Payable", type: "liability", isSystem: true },
+      { code: "1500", name: "Fixed Assets", type: "asset", isSystem: true },
+      { code: "1510", name: "Accumulated Depreciation", type: "asset", isSystem: true },
+      { code: "2000", name: "Accounts Payable", type: "liability", isSystem: true, controlType: "vendor" },
       { code: "2100", name: "VAT Payable", type: "liability", isSystem: true },
+      { code: "2200", name: "PAYE Payable", type: "liability", isSystem: true },
+      { code: "2210", name: "NSSF Payable", type: "liability", isSystem: true },
+      { code: "2220", name: "SHIF Payable", type: "liability", isSystem: true },
+      { code: "2230", name: "Housing Levy Payable", type: "liability", isSystem: true },
+      { code: "2240", name: "Withholding Tax Payable", type: "liability", isSystem: true },
       { code: "3000", name: "Owner's Equity", type: "equity", isSystem: true },
       { code: "3100", name: "Retained Earnings", type: "equity", isSystem: true },
       { code: "4000", name: "Sales Revenue", type: "revenue", isSystem: true },
       { code: "5000", name: "Cost of Goods Sold", type: "expense", isSystem: true },
       { code: "6000", name: "Operating Expenses", type: "expense", isSystem: true },
       { code: "6100", name: "Payroll Expense", type: "expense", isSystem: true },
+      { code: "6200", name: "Depreciation Expense", type: "expense", isSystem: true },
+      { code: "6300", name: "Gain/Loss on Asset Disposal", type: "expense", isSystem: true },
     ];
 
     for (const acc of defaultAccounts) {
       const exists = await Account.findOne({ org_id, code: acc.code });
       if (!exists) {
         await Account.create({ ...acc, org_id });
+        continue;
+      }
+      const patch: Record<string, any> = {};
+      if (!exists.controlType && (acc as any).controlType) patch.controlType = (acc as any).controlType;
+      if (Object.keys(patch).length) {
+        await Account.updateOne({ _id: exists._id }, { $set: patch });
       }
     }
   }
@@ -55,9 +70,25 @@ export class GeneralLedgerService {
       description: string;
       lines: IJournalLine[];
       source?: string;
+      journalType?: JournalType;
+      nature?: JournalNature;
+      currency?: string;
+      exchangeRate?: number;
+      isTemplate?: boolean;
+      recurring?: IJournalEntry["recurring"];
+      reversedFrom?: string;
     },
     userId: string
   ) {
+    const postingDate = new Date(data.date);
+    const period = await FiscalPeriod.findOne({
+      org_id,
+      year: postingDate.getFullYear(),
+      month: postingDate.getMonth() + 1,
+    });
+    if (period?.status === "closed") {
+      throw new Error(`Period ${postingDate.getFullYear()}-${String(postingDate.getMonth() + 1).padStart(2, "0")} is closed`);
+    }
     if (!data.lines || data.lines.length < 2) {
       throw new Error("A journal entry must have at least two lines.");
     }
@@ -88,6 +119,14 @@ export class GeneralLedgerService {
     }
 
     const entryNumber = await this.generateEntryNumber(org_id);
+    const isTemplate = Boolean(data.isTemplate) || data.nature === "template";
+    const nextMonth = new Date(postingDate);
+    nextMonth.setMonth(nextMonth.getMonth() + 1);
+    const recurring =
+      data.recurring ||
+      (data.nature === "recurring"
+        ? { interval: "monthly" as const, nextRunAt: nextMonth, enabled: true }
+        : undefined);
 
     const entry = new JournalEntry({
       org_id,
@@ -96,11 +135,18 @@ export class GeneralLedgerService {
       reference: data.reference,
       description: data.description,
       lines: data.lines,
-      status: "posted",
+      status: isTemplate ? "draft" : "posted",
       source: data.source || "manual",
+      journalType: data.journalType || "miscellaneous",
+      nature: data.nature || (data.source && data.source !== "manual" ? "automatic" : "manual"),
+      currency: data.currency || "KES",
+      exchangeRate: data.exchangeRate || 1,
+      isTemplate,
+      recurring,
+      reversedFrom: data.reversedFrom,
       createdBy: userId,
       postedBy: userId,
-      postedAt: new Date(),
+      postedAt: isTemplate ? undefined : new Date(),
     });
 
     await entry.save();

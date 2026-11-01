@@ -1,6 +1,7 @@
 import type { Response } from "express";
 import type { AuthenticatedRequest } from "../middleware/auth";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { Types } from "mongoose";
 import { promises as fs } from "fs";
 import path from "path";
@@ -319,7 +320,7 @@ async function ensureWebsitePortalUser(orgId: string, payload: any) {
   if (existingUser) return existingUser;
 
   const { firstName, lastName } = getFirstAndLastName(payload?.name || payload?.fullName);
-  const tempPassword = `${String(payload?.phone || "portal").replace(/\D/g, "") || "portal"}#2026`;
+  const tempPassword = crypto.randomBytes(12).toString("base64url");
   const passwordHash = await bcrypt.hash(tempPassword, 10);
 
   const createdUser = await User.create({
@@ -328,10 +329,21 @@ async function ensureWebsitePortalUser(orgId: string, payload: any) {
     lastName,
     email,
     password: passwordHash,
-    role: "employee",
+    role: "portal_client",
     phone: String(payload?.phone || "").trim() || undefined,
     status: "active",
   });
+
+  try {
+    await emailService.sendEmail({
+      to: email,
+      subject: "Your client portal login",
+      companyId: orgId,
+      html: `<p>Hello ${firstName},</p><p>Your client portal account is ready. Use this one-time password and change it after you sign in:</p><p><strong>${tempPassword}</strong></p>`,
+    });
+  } catch {
+    // Account still exists even if the welcome email fails.
+  }
 
   return createdUser;
 }
@@ -4266,8 +4278,17 @@ export class StockController {
         });
       }
 
-      const fromDate = from ? new Date(from) : new Date(0);
-      const toDate = to ? new Date(`${to}T23:59:59.999Z`) : new Date();
+      const parseDay = (value: string | undefined, fallback: Date, endOfDay = false) => {
+        if (!value || value === "undefined" || value === "null" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+          return fallback
+        }
+        const parsed = new Date(endOfDay ? `${value}T23:59:59.999` : `${value}T00:00:00`)
+        return Number.isNaN(parsed.getTime()) ? fallback : parsed
+      }
+      const yearStart = new Date(new Date().getFullYear(), 0, 1)
+      const yearEnd = new Date(new Date().getFullYear(), 11, 31, 23, 59, 59, 999)
+      const fromDate = parseDay(from, yearStart)
+      const toDate = parseDay(to, yearEnd, true)
 
       const invoices = await StockInvoice.find({
         org_id,

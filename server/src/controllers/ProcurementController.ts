@@ -10,6 +10,7 @@ import { CashBankAccount } from "../models/CashBankAccount"
 import { GeneralLedgerService } from "../services/GeneralLedgerService"
 import { Account } from "../models/Account"
 import { StockProduct } from "../models/StockProduct"
+import mongoose from "mongoose"
 
 export class ProcurementController {
   // ================= SUPPLIERS =================
@@ -174,11 +175,20 @@ export class ProcurementController {
       if (!grn) return res.status(404).json({ success: false, message: "GRN not found" })
       if (grn.status === "confirmed") return res.status(400).json({ success: false, message: "GRN already confirmed" })
 
-      // Update stock
       for (const item of grn.items) {
-        if (item.productId && item.receivedQuantity > 0) {
-          await StockProduct.findByIdAndUpdate(item.productId, {
-            $inc: { currentQuantity: item.receivedQuantity }
+        if (!item.productId || item.receivedQuantity <= 0) continue
+        if (!mongoose.Types.ObjectId.isValid(String(item.productId))) {
+          return res.status(400).json({ success: false, message: `Invalid product id on GRN item ${item.productName}` })
+        }
+        const updated = await StockProduct.findOneAndUpdate(
+          { _id: item.productId, org_id: req.org_id },
+          { $inc: { currentQuantity: item.receivedQuantity } },
+          { new: true },
+        )
+        if (!updated) {
+          return res.status(400).json({
+            success: false,
+            message: `Product ${item.productName || item.productId} was not found in this company`,
           })
         }
       }
@@ -187,10 +197,21 @@ export class ProcurementController {
       grn.stockUpdated = true
       await grn.save()
 
-      // Update PO status
-      const po = await PurchaseOrder.findById(grn.purchaseOrderId)
+      const po = await PurchaseOrder.findOne({ _id: grn.purchaseOrderId, org_id: req.org_id })
       if (po) {
-        po.status = "fulfilled" // Simplification: assume fulfilled
+        for (const received of grn.items) {
+          const match = po.items.find(
+            (row: { productId?: string; productName: string; receivedQuantity?: number }) =>
+              (received.productId && String(row.productId) === String(received.productId)) ||
+              String(row.productName).toLowerCase() === String(received.productName || "").toLowerCase(),
+          )
+          if (match) {
+            match.receivedQuantity = Number(match.receivedQuantity || 0) + Number(received.receivedQuantity || 0)
+          }
+        }
+        const fullyReceived = po.items.every((row: { receivedQuantity?: number; quantity: number }) => Number(row.receivedQuantity || 0) >= Number(row.quantity || 0))
+        const anyReceived = po.items.some((row: { receivedQuantity?: number }) => Number(row.receivedQuantity || 0) > 0)
+        po.status = fullyReceived ? "fulfilled" : anyReceived ? "partially_received" : po.status
         await po.save()
       }
 
@@ -275,10 +296,28 @@ export class ProcurementController {
       if (payAmount <= 0) return res.status(400).json({ success: false, message: "Amount must be greater than 0" })
       if (payAmount > invoice.balanceRemaining) return res.status(400).json({ success: false, message: "Amount exceeds remaining balance" })
 
+      if (!accountId) {
+        return res.status(400).json({ success: false, message: "Choose the cash or bank account to pay from" })
+      }
+
       const account = await CashBankAccount.findOne({ _id: accountId, org_id: req.org_id })
       if (!account) return res.status(404).json({ success: false, message: "Bank account not found" })
 
-      // Create transaction
+      await GeneralLedgerService.initializeDefaultAccounts(req.org_id)
+      const apAccount = await Account.findOne({ org_id: req.org_id, code: "2000" })
+      const cashAccount =
+        (await Account.findOne({
+          org_id: req.org_id,
+          name: new RegExp(`^${String(account.name || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i"),
+        })) ||
+        (await Account.findOne({ org_id: req.org_id, name: /Cash|Bank|M-Pesa/i }))
+      if (!apAccount || !cashAccount) {
+        return res.status(400).json({
+          success: false,
+          message: "No matching GL cash/bank account. Map the payment account before paying a supplier.",
+        })
+      }
+
       await CashTransaction.create({
         org_id: req.org_id,
         accountId: account._id,
@@ -291,27 +330,21 @@ export class ProcurementController {
         recordedBy: req.user?.userId
       })
 
-      // Update account balance
-      account.currentBalance -= payAmount
-      await account.save()
+      await CashBankAccount.updateOne(
+        { _id: account._id, org_id: req.org_id },
+        { $inc: { currentBalance: -payAmount } },
+      )
 
-      // GL Post for Payment
-      await GeneralLedgerService.initializeDefaultAccounts(req.org_id)
-      const apAccount = await Account.findOne({ org_id: req.org_id, code: "2000" })
-      const cashAccount = await Account.findOne({ org_id: req.org_id, name: /Cash|Bank|M-Pesa/i }) // Simplified fallback
-      
-      if (apAccount && cashAccount) {
-        await GeneralLedgerService.postJournalEntry(req.org_id, {
-          date: new Date(paymentDate || Date.now()),
-          description: `Payment for Bill: ${invoice.invoiceNumber}`,
-          reference: reference || `PAY-${invoice.invoiceNumber}`,
-          source: "AP_PAYMENT",
-          lines: [
-            { accountId: String(apAccount._id), debit: payAmount, credit: 0, description: "Accounts Payable (Reduction)" },
-            { accountId: String(cashAccount._id), debit: 0, credit: payAmount, description: "Cash/Bank Payment" }
-          ]
-        }, req.user?.userId || "system")
-      }
+      await GeneralLedgerService.postJournalEntry(req.org_id, {
+        date: new Date(paymentDate || Date.now()),
+        description: `Payment for Bill: ${invoice.invoiceNumber}`,
+        reference: reference || `PAY-${invoice.invoiceNumber}`,
+        source: "AP_PAYMENT",
+        lines: [
+          { accountId: String(apAccount._id), debit: payAmount, credit: 0, description: "Accounts Payable (Reduction)" },
+          { accountId: String(cashAccount._id), debit: 0, credit: payAmount, description: "Cash/Bank Payment" }
+        ]
+      }, req.user?.userId || "system")
 
       // Update invoice
       invoice.paidAmount = (invoice.paidAmount || 0) + payAmount

@@ -11,17 +11,63 @@ export type DeductionRule = {
 
 export type DeductionItem = { name: string; amount: number }
 
+export function statutoryKey(name: string) {
+  const normalized = String(name || "").trim().toLowerCase()
+  if (normalized === "paye" || normalized === "tax") return "paye"
+  if (normalized === "shif" || normalized === "sha" || normalized === "nhif") return "shif"
+  if (normalized === "nssf") return "nssf"
+  if (normalized.includes("housing")) return "housing"
+  if (normalized === "helb") return "helb"
+  return normalized
+}
+
+export function statutoryDisplayName(name: string) {
+  const key = statutoryKey(name)
+  if (key === "paye") return "PAYE"
+  if (key === "shif") return "SHIF"
+  if (key === "nssf") return "NSSF"
+  if (key === "housing") return "Housing Levy"
+  if (key === "helb") return "HELB"
+  return String(name || "").trim()
+}
+
+export function getDeductionAmountByAliases(payroll: any, names: string[]) {
+  const wanted = new Set(names.map(statutoryKey))
+  return (payroll?.deduction_items || []).reduce((sum: number, item: any) => {
+    return wanted.has(statutoryKey(item.name)) ? sum + Number(item.amount || 0) : sum
+  }, 0)
+}
+
+export function mergeDeductionItems(items: DeductionItem[]): DeductionItem[] {
+  const merged = new Map<string, DeductionItem>()
+  for (const item of items) {
+    const key = statutoryKey(item.name) || item.name
+    const name = statutoryDisplayName(item.name) || item.name
+    const current = merged.get(key)
+    merged.set(key, {
+      name,
+      amount: roundCurrency(Number(current?.amount || 0) + Number(item.amount || 0)),
+    })
+  }
+  return [...merged.values()]
+}
+
 export const PAYE_BANDS = [
   { upTo: 24000, rate: 10 },
   { upTo: 32333, rate: 25 },
-  { upTo: Number.POSITIVE_INFINITY, rate: 30 },
+  { upTo: 500000, rate: 30 },
+  { upTo: 800000, rate: 32.5 },
+  { upTo: Number.POSITIVE_INFINITY, rate: 35 },
 ]
 
+const PERSONAL_RELIEF = 2400
+const NSSF_CAP = 72000
+
 export const DEFAULT_DEDUCTION_RULES: DeductionRule[] = [
-  { id: "paye", name: "PAYE", type: "progressive", value: 0, enabled: true, note: "10% – 30% progressive" },
-  { id: "sha", name: "SHA", type: "percentage", value: 2.75, enabled: true, note: "~2.75%" },
-  { id: "nssf", name: "NSSF", type: "percentage", value: 3, enabled: true, note: "~3% employee" },
-  { id: "housing", name: "Housing Levy", type: "percentage", value: 1.5, enabled: true, note: "1.5% employee" },
+  { id: "paye", name: "PAYE", type: "progressive", value: 0, enabled: true, note: "10% – 35% after KES 2,400 relief" },
+  { id: "sha", name: "SHIF", type: "percentage", value: 2.75, enabled: true, note: "2.75% of gross" },
+  { id: "nssf", name: "NSSF", type: "percentage", value: 6, enabled: true, note: "6% of pensionable pay, capped at 72,000" },
+  { id: "housing", name: "Housing Levy", type: "percentage", value: 1.5, enabled: true, note: "1.5% of gross" },
 ]
 
 export const roundCurrency = (value: number) =>
@@ -40,12 +86,13 @@ export const computePaye = (gross: number) => {
     previousLimit = band.upTo
   }
 
-  return total
+  return Math.max(0, total - PERSONAL_RELIEF)
 }
 
 export const getRuleAmount = (rule: DeductionRule, gross: number) => {
   if (!rule.enabled) return 0
   if (rule.type === "progressive") return computePaye(gross)
+  if (rule.id === "nssf") return Math.min(gross, NSSF_CAP) * (rule.value / 100)
   if (rule.type === "percentage") return gross * (rule.value / 100)
   return rule.value
 }
@@ -115,7 +162,7 @@ export function calculatePayroll(input: PayrollCalculationInput): PayrollCalcula
         ? [{ name: "HELB", amount: roundCurrency(Number(helbAmount)) }]
         : []
 
-    return [...standardItems, ...helbItems, ...customOtherItems]
+    return mergeDeductionItems([...standardItems, ...helbItems, ...customOtherItems])
   }
 
   const computeFromGross = (gross: number) => {

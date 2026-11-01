@@ -67,7 +67,7 @@ function assignedToUser(
   }
   const technician = String(row.technician || "").trim().toLowerCase();
   if (technician) return aliases.has(technician);
-  return true;
+  return false;
 }
 
 function resolveTechnicianId(
@@ -544,6 +544,13 @@ export class EngineeringController {
       const machine = await InstalledMachine.findOne({ _id: machineId, org_id }).lean();
       if (!machine) {
         return res.status(404).json({ success: false, message: "Asset not found" });
+      }
+      const workType = String(body.type || body.serviceType || "").toLowerCase()
+      if (workType.includes("install") && (!machine.serialNumber || !machine.attendant)) {
+        return res.status(400).json({
+          success: false,
+          message: "Add the machine serial number and attendant before creating an installation work order",
+        })
       }
 
       const technicianId = body.technicianId

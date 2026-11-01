@@ -12,7 +12,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox"
 import { FinanceDocumentShell, FinanceTableCard } from "@/components/accounts/finance-document-shell"
 import { PageLoadingSkeleton } from "@/components/admin/ui/page-states"
-import { api } from "@/lib/api"
+import { api, glApi } from "@/lib/api"
 
 function money(n: number) {
   return Number(n || 0).toLocaleString("en-KE", {
@@ -28,6 +28,7 @@ export default function CashReconciliationPage() {
   const [accounts, setAccounts] = useState<any[]>([])
   const [accountId, setAccountId] = useState("all")
   const [rows, setRows] = useState<any[]>([])
+  const [statements, setStatements] = useState<any[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
   const load = async (silent = false) => {
@@ -52,6 +53,8 @@ export default function CashReconciliationPage() {
         nextRows = nextRows.filter((r: any) => r.accountId === accountId)
       }
       setRows(nextRows)
+      const statementRes = await glApi.getBankStatements(accountId !== "all" ? accountId : undefined)
+      setStatements(statementRes.data || [])
       setSelected(new Set())
     } catch (error: any) {
       window.alert(error?.message || "Failed to load reconciliation")
@@ -121,6 +124,7 @@ export default function CashReconciliationPage() {
         </Button>
       }
       toolbar={
+        <div className="flex flex-wrap items-end gap-3">
         <Select value={accountId} onValueChange={setAccountId}>
           <SelectTrigger className="max-w-sm">
             <SelectValue placeholder="Filter account" />
@@ -134,6 +138,35 @@ export default function CashReconciliationPage() {
             ))}
           </SelectContent>
         </Select>
+        <label className="text-sm">
+          <span className="mb-1 block text-xs text-muted-foreground">Import statement CSV</span>
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            className="text-xs"
+            onChange={async (event) => {
+              const file = event.target.files?.[0]
+              if (!file) return
+              if (accountId === "all") {
+                window.alert("Choose one bank or M-Pesa account before importing")
+                return
+              }
+              const text = await file.text()
+              const lines = text.split(/\r?\n/).slice(1).map((row) => {
+                const [date, description, amount, reference] = row.split(",").map((part) => part?.trim())
+                return { date, description, amount, reference }
+              }).filter((row) => row.date && row.amount)
+              try {
+                await glApi.importBankStatement({ accountId, fileName: file.name, lines })
+                await load(true)
+              } catch (error: any) {
+                window.alert(error?.message || "Import failed")
+              }
+              event.target.value = ""
+            }}
+          />
+        </label>
+        </div>
       }
     >
       <FinanceTableCard title="Unreconciled lines">
@@ -187,6 +220,38 @@ export default function CashReconciliationPage() {
             </tbody>
           </table>
         </div>
+      </FinanceTableCard>
+      <FinanceTableCard title="Imported statements">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/50 text-left text-xs uppercase text-muted-foreground">
+            <tr>
+              <th className="px-4 py-2">File</th>
+              <th className="px-4 py-2">Imported</th>
+              <th className="px-4 py-2 text-right">Matched</th>
+              <th className="px-4 py-2 text-right">Unmatched</th>
+            </tr>
+          </thead>
+          <tbody>
+            {statements.length === 0 ? (
+              <tr>
+                <td colSpan={4} className="py-6 text-center text-muted-foreground">
+                  Import a CSV (date, description, amount, reference) to auto-match against cashbook lines.
+                </td>
+              </tr>
+            ) : statements.map((row) => {
+              const matched = (row.lines || []).filter((line: any) => line.status === "matched").length
+              const unmatched = (row.lines || []).length - matched
+              return (
+                <tr key={row._id} className="border-b">
+                  <td className="px-4 py-2">{row.fileName || "Statement"}</td>
+                  <td className="px-4 py-2">{row.importedAt ? new Date(row.importedAt).toLocaleString() : ""}</td>
+                  <td className="px-4 py-2 text-right">{matched}</td>
+                  <td className="px-4 py-2 text-right">{unmatched}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
       </FinanceTableCard>
     </FinanceDocumentShell>
   )

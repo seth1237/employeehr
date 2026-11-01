@@ -3,6 +3,54 @@ import type { AuthenticatedRequest } from "../middleware/auth"
 import { LeaveRequest } from "../models/LeaveRequest"
 import { LeaveBalance } from "../models/LeaveBalance"
 import { User } from "../models/User"
+import { Notification } from "../models/Notification"
+import emailService from "../services/email.service"
+import { countLeaveDays } from "../lib/leaveDays"
+
+const ANNUAL_CARRY_CAP = 5
+
+async function ensureLeaveBalance(org_id: string, user_id: string, year: number) {
+    let balance = await LeaveBalance.findOne({ org_id, user_id, year })
+    if (balance) return balance
+
+    const previous = await LeaveBalance.findOne({ org_id, user_id, year: year - 1 })
+    const unusedAnnual = previous
+        ? Math.max(0, Number(previous.annual_total || 0) - Number(previous.annual_used || 0))
+        : 0
+    const carry = Math.min(ANNUAL_CARRY_CAP, unusedAnnual)
+
+    balance = await LeaveBalance.create({
+        org_id,
+        user_id,
+        year,
+        annual_total: 21 + carry,
+    })
+    return balance
+}
+
+function remainingForType(balance: any, type: string): { remaining: number; label: string } {
+    if (type === "Annual") return { remaining: Number(balance.annual_total) - Number(balance.annual_used), label: "annual" }
+    if (type === "Sick") return { remaining: Number(balance.sick_total) - Number(balance.sick_used), label: "sick" }
+    if (type === "Maternity") return { remaining: Number(balance.maternity_total || 0) - Number(balance.maternity_used || 0), label: "maternity" }
+    if (type === "Paternity") return { remaining: Number(balance.paternity_total || 0) - Number(balance.paternity_used || 0), label: "paternity" }
+    return { remaining: Number.POSITIVE_INFINITY, label: type.toLowerCase() }
+}
+
+async function populateLeaveUsers(requests: any[]) {
+    const userIds = [...new Set(requests.map((row) => String(row.user_id)))]
+    const users = await User.find({ _id: { $in: userIds } }).select("firstName lastName email avatar")
+    const map = new Map(users.map((user) => [String(user._id), user]))
+    return requests.map((row) => {
+        const plain = typeof row.toObject === "function" ? row.toObject() : row
+        const user = map.get(String(plain.user_id))
+        return {
+            ...plain,
+            user: user
+                ? { firstName: user.firstName, lastName: user.lastName, email: user.email, avatar: user.avatar }
+                : null,
+        }
+    })
+}
 
 export class LeaveController {
     // Apply for leave
@@ -16,31 +64,21 @@ export class LeaveController {
                 return res.status(401).json({ success: false, message: "Unauthorized" })
             }
 
-            // Calculate days
             const start = new Date(startDate)
             const end = new Date(endDate)
-            const diffTime = Math.abs(end.getTime() - start.getTime())
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1 // Inclusive
+            if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) {
+                return res.status(400).json({ success: false, message: "Enter a valid leave date range" })
+            }
+            const diffDays = countLeaveDays(type, start, end)
+            if (diffDays <= 0) {
+                return res.status(400).json({ success: false, message: "This date range has no leave days to deduct" })
+            }
 
-            // Check balance
             const currentYear = new Date().getFullYear()
-            let balance = await LeaveBalance.findOne({ user_id, year: currentYear })
-
-            if (!balance) {
-                // Create default balance if not exists
-                balance = await LeaveBalance.create({
-                    org_id,
-                    user_id,
-                    year: currentYear
-                })
-            }
-
-            // Simple balance check logic (expand based on types)
-            if (type === 'Annual' && (balance.annual_total - balance.annual_used) < diffDays) {
-                return res.status(400).json({ success: false, message: "Insufficient annual leave balance" })
-            }
-            if (type === 'Sick' && (balance.sick_total - balance.sick_used) < diffDays) {
-                return res.status(400).json({ success: false, message: "Insufficient sick leave balance" })
+            const balance = await ensureLeaveBalance(org_id, user_id, currentYear)
+            const { remaining, label } = remainingForType(balance, type)
+            if (Number.isFinite(remaining) && remaining < diffDays) {
+                return res.status(400).json({ success: false, message: `Insufficient ${label} leave balance` })
             }
 
             const leaveRequest = await LeaveRequest.create({
@@ -81,15 +119,9 @@ export class LeaveController {
             const user_id = req.user?.userId
             const org_id = req.user?.org_id || req.org_id
             const currentYear = new Date().getFullYear()
-            let balance = await LeaveBalance.findOne({ user_id, ...(org_id ? { org_id } : {}), year: currentYear })
-
-            if (!balance && user_id && org_id) {
-                balance = await LeaveBalance.create({
-                    org_id,
-                    user_id,
-                    year: currentYear
-                })
-            }
+            let balance = user_id && org_id
+                ? await ensureLeaveBalance(org_id, user_id, currentYear)
+                : await LeaveBalance.findOne({ user_id, ...(org_id ? { org_id } : {}), year: currentYear })
 
             res.status(200).json({ success: true, data: balance })
             return
@@ -111,12 +143,9 @@ export class LeaveController {
             const requests = await LeaveRequest.find({
                 user_id: { $in: teamIds },
                 status: 'pending'
-            }).populate('user_id', 'firstName lastName avatar') // Assuming you can populate if referencing 'User' model (might need schema adjustment if user_id is just string)
-            // Note: Schema defines user_id as String, so population might require virtuals or defining ref in schema. 
-            // For now, simpler fetch matching ID manually or relying on frontend to fetch user details if needed, 
-            // OR update Schema to use Schema.Types.ObjectId. Let's stick to simple first.
+            }).sort({ createdAt: -1 })
 
-            res.status(200).json({ success: true, data: requests })
+            res.status(200).json({ success: true, data: await populateLeaveUsers(requests) })
             return
         } catch (error: any) {
             res.status(500).json({ success: false, message: error.message })
@@ -144,20 +173,39 @@ export class LeaveController {
             request.manager_comment = comment
             await request.save()
 
-            // If approved, deduct balance
             if (status === 'approved') {
-                const start = new Date(request.startDate)
-                const end = new Date(request.endDate)
-                const diffTime = Math.abs(end.getTime() - start.getTime())
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1
+                const diffDays = countLeaveDays(request.type, new Date(request.startDate), new Date(request.endDate))
+                const balance = await ensureLeaveBalance(String(request.org_id), String(request.user_id), new Date().getFullYear())
+                if (request.type === 'Annual') balance.annual_used += diffDays
+                else if (request.type === 'Sick') balance.sick_used += diffDays
+                else if (request.type === 'Maternity') balance.maternity_used = Number(balance.maternity_used || 0) + diffDays
+                else if (request.type === 'Paternity') balance.paternity_used = Number(balance.paternity_used || 0) + diffDays
+                else if (request.type === 'Unpaid') balance.unpaid_used += diffDays
+                await balance.save()
+            }
 
-                const balance = await LeaveBalance.findOne({ user_id: request.user_id, year: new Date().getFullYear() })
-                if (balance) {
-                    if (request.type === 'Annual') balance.annual_used += diffDays
-                    else if (request.type === 'Sick') balance.sick_used += diffDays
-                    else if (request.type === 'Unpaid') balance.unpaid_used += diffDays
-                    // Add others...
-                    await balance.save()
+            const employee = await User.findById(request.user_id).select("firstName lastName email")
+            const title = status === "approved" ? "Leave approved" : "Leave rejected"
+            const message = `Your ${request.type} leave from ${new Date(request.startDate).toLocaleDateString()} to ${new Date(request.endDate).toLocaleDateString()} was ${status}.${comment ? ` ${comment}` : ""}`
+            await Notification.create({
+                org_id: request.org_id,
+                user_id: String(request.user_id),
+                title,
+                message,
+                type: status === "approved" ? "achievement" : "alert",
+                related_entity_type: "leave",
+                related_entity_id: String(request._id),
+            })
+            if (employee?.email) {
+                try {
+                    await emailService.sendEmail({
+                        to: employee.email,
+                        subject: title,
+                        companyId: String(request.org_id),
+                        html: `<p>Hello ${employee.firstName},</p><p>${message}</p>`,
+                    })
+                } catch {
+                    // In-app notification is enough if email fails.
                 }
             }
 

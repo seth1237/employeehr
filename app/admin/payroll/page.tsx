@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox"
 import { api } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
-import { Loader2, Plus, Calculator, Trash2 } from "lucide-react"
+import { Loader2, Plus, Calculator, Trash2, Download } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { format } from "date-fns"
 import { finishDataLoad, startDataLoad } from "@/lib/silent-load"
@@ -19,11 +20,14 @@ import {
     DEFAULT_DEDUCTION_RULES,
     getRuleAmount,
     roundCurrency,
+    statutoryDisplayName,
+    statutoryKey,
     type DeductionItem,
     type DeductionRule,
     type DeductionType,
 } from "@/lib/payroll-calculator"
 import { FinanceDocumentShell } from "@/components/accounts/finance-document-shell"
+import { downloadEmployeePayslip } from "@/lib/payslip-download"
 
 type SalaryMode = "gross" | "net"
 type PayrollEmployeeDetails = {
@@ -65,6 +69,7 @@ const getPreviousMonthKey = (month: string) => {
 
 export default function AdminPayrollPage() {
     const { toast } = useToast()
+    const router = useRouter()
     const [payrolls, setPayrolls] = useState<any[]>([])
     const [previousMonthPayrolls, setPreviousMonthPayrolls] = useState<any[]>([])
     const [employees, setEmployees] = useState<any[]>([])
@@ -215,8 +220,8 @@ export default function AdminPayrollPage() {
                         setStandardDeductionOverrides(lastSlip.standard_deduction_overrides)
                     }
                     // Pre-fill other items
-                    setOtherDeductionItems(lastSlip.deduction_items.filter((item: any) => 
-                        !DEFAULT_DEDUCTION_RULES.some(r => r.name === item.name)
+                    setOtherDeductionItems(lastSlip.deduction_items.filter((item: any) =>
+                        !DEFAULT_DEDUCTION_RULES.some((rule) => statutoryKey(rule.name) === statutoryKey(item.name))
                     ))
                     setOtherBonusItems(lastSlip.other_bonus_items || [])
                 }
@@ -447,6 +452,43 @@ export default function AdminPayrollPage() {
             toast({
                 variant: "destructive",
                 description: error.message || "Failed to mark payroll as paid",
+            })
+        }
+    }
+
+    const downloadReceipt = async (payrollId: string, e: React.MouseEvent) => {
+        e.stopPropagation()
+        try {
+            const [payslipRes, brandingRes] = await Promise.all([
+                api.payroll.getPayslipDetails(payrollId),
+                api.company.getBranding().catch(() => null),
+            ])
+            const detail = payslipRes.data
+            if (!detail?.payslip) {
+                toast({ variant: "destructive", description: "Payslip details were not found" })
+                return
+            }
+            downloadEmployeePayslip(detail, brandingRes?.data?.primaryColor || "#0f766e")
+        } catch (error: any) {
+            toast({
+                variant: "destructive",
+                description: error.message || "Failed to download payslip",
+            })
+        }
+    }
+
+    const markAllPaid = async () => {
+        try {
+            const res = await api.payroll.markMonthPaid(selectedMonth)
+            toast({
+                description: res.message || `Month ${selectedMonth} marked paid.`,
+            })
+            await fetchData(true)
+            router.push(`/admin/accounts/payroll/journal?month=${encodeURIComponent(selectedMonth)}`)
+        } catch (error: any) {
+            toast({
+                variant: "destructive",
+                description: error.message || "Failed to mark the month as paid",
             })
         }
     }
@@ -1189,9 +1231,9 @@ export default function AdminPayrollPage() {
                                         {calculatorResult.items.length === 0 ? (
                                             <p className="text-sm text-muted-foreground">Enter a salary amount to calculate deductions.</p>
                                         ) : (
-                                            calculatorResult.items.map((item) => (
-                                                <div key={item.name} className="flex items-center justify-between rounded-lg border bg-slate-50 px-3 py-2 text-sm">
-                                                    <span>{item.name}</span>
+                                            calculatorResult.items.map((item, index) => (
+                                                <div key={`${statutoryKey(item.name) || item.name}-${index}`} className="flex items-center justify-between rounded-lg border bg-slate-50 px-3 py-2 text-sm">
+                                                    <span>{statutoryDisplayName(item.name)}</span>
                                                     <span className="font-semibold text-muted-foreground">KES {item.amount.toLocaleString()}</span>
                                                 </div>
                                             ))
@@ -1314,8 +1356,17 @@ export default function AdminPayrollPage() {
             </div>
 
             <Card>
-                <CardHeader>
+                <CardHeader className="flex flex-row items-center justify-between gap-3">
                     <CardTitle>Payroll List - {selectedMonth}</CardTitle>
+                    {payrolls.some((row) => row.status !== "paid") ? (
+                        <Button onClick={() => void markAllPaid()}>
+                            Mark all paid · go to journal
+                        </Button>
+                    ) : payrolls.length ? (
+                        <Button variant="outline" onClick={() => router.push(`/admin/accounts/payroll/journal?month=${encodeURIComponent(selectedMonth)}`)}>
+                            Open month journal
+                        </Button>
+                    ) : null}
                 </CardHeader>
                 <CardContent>
                     {loading ? (
@@ -1370,18 +1421,29 @@ export default function AdminPayrollPage() {
                                                     ) : null}
                                                 </td>
                                                 <td className="px-4 py-3">
-                                                    {p.status !== "paid" ? (
+                                                    <div className="flex flex-wrap gap-2">
                                                         <Button
                                                             size="sm"
                                                             variant="outline"
                                                             className="h-7 text-xs"
-                                                            onClick={(e) => void markPayrollPaid(p._id, e)}
+                                                            onClick={(e) => void downloadReceipt(p._id, e)}
                                                         >
-                                                            Mark paid
+                                                            <Download className="mr-1 h-3 w-3" />
+                                                            Receipt
                                                         </Button>
-                                                    ) : (
-                                                        <span className="text-xs text-muted-foreground">In cashbook</span>
-                                                    )}
+                                                        {p.status !== "paid" ? (
+                                                            <Button
+                                                                size="sm"
+                                                                variant="outline"
+                                                                className="h-7 text-xs"
+                                                                onClick={(e) => void markPayrollPaid(p._id, e)}
+                                                            >
+                                                                Mark paid
+                                                            </Button>
+                                                        ) : (
+                                                            <span className="text-xs text-muted-foreground">Paid</span>
+                                                        )}
+                                                    </div>
                                                 </td>
                                             </tr>
                                         )

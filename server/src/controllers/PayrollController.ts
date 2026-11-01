@@ -3,7 +3,41 @@ import type { AuthenticatedRequest } from "../middleware/auth"
 import { Payroll } from "../models/Payroll"
 import { User } from "../models/User"
 import { Company } from "../models/Company"
-import { postPayrollToCashbook } from "../services/cashBankingPosting.service"
+import { postMonthPayrollToCashbook, postPayrollToCashbook } from "../services/cashBankingPosting.service"
+import { CashTransaction } from "../models/CashTransaction"
+import { computeKenyaStatutory, roundKes } from "../services/kenyaStatutory.service"
+
+const STATUTORY_NAMES = new Set(["PAYE", "SHIF", "SHA", "NHIF", "NSSF", "Housing Levy"])
+
+function buildPayrollFigures(input: {
+    baseSalary: number
+    bonus?: number
+    otherBonusItems?: { name: string; amount: number }[]
+    deductionItems?: { name: string; amount: number }[]
+    standardDeductionOverrides?: Record<string, unknown>
+    deductionsDisabled?: boolean
+}) {
+    const bonusTotal =
+        Number(input.bonus || 0) +
+        (input.otherBonusItems || []).reduce((sum, item) => sum + Number(item.amount || 0), 0)
+    const gross = roundKes(Number(input.baseSalary || 0) + bonusTotal)
+    const customItems = (input.deductionItems || []).filter((item) => !STATUTORY_NAMES.has(String(item.name)))
+    const statutoryItems = input.deductionsDisabled
+        ? []
+        : computeKenyaStatutory(gross, input.standardDeductionOverrides || {}).items.map((item) => ({
+            name: item.name,
+            amount: item.amount,
+        }))
+    const deduction_items = [...statutoryItems, ...customItems]
+    const total_deductions = roundKes(deduction_items.reduce((sum, item) => sum + Number(item.amount || 0), 0))
+    return {
+        bonusTotal,
+        gross,
+        deduction_items,
+        total_deductions,
+        net_pay: roundKes(gross - total_deductions),
+    }
+}
 
 export class PayrollController {
     // Generate Payroll (Admin)
@@ -27,9 +61,14 @@ export class PayrollController {
                 return res.status(400).json({ success: false, message: "No salary provided" })
             }
 
-            const total_deductions = deduction_items.reduce((sum: number, item: any) => sum + Number(item.amount), 0)
-            const bonusTotal = Number(bonus) + (other_bonus_items || []).reduce((sum: number, item: any) => sum + Number(item.amount || 0), 0)
-            const net_pay = salaryToUse + bonusTotal - total_deductions
+            const figures = buildPayrollFigures({
+                baseSalary: salaryToUse,
+                bonus,
+                otherBonusItems: other_bonus_items,
+                deductionItems: deduction_items,
+                standardDeductionOverrides: standard_deduction_overrides,
+                deductionsDisabled: Boolean(deductions_disabled),
+            })
 
             // Check if payroll already exists for this user/month
             const existing = await Payroll.findOne({ org_id, user_id, month })
@@ -44,15 +83,19 @@ export class PayrollController {
                 base_salary: salaryToUse,
                 bonus: Number(bonus),
                 other_bonus_items,
-                deduction_items,
+                deduction_items: figures.deduction_items,
                 standard_deduction_overrides,
                 deductions_disabled: Boolean(deductions_disabled),
-                total_deductions,
-                net_pay,
-                status: 'processed'
+                total_deductions: figures.total_deductions,
+                net_pay: figures.net_pay,
+                status: 'draft'
             })
 
-            res.status(201).json({ success: true, data: payroll })
+            res.status(201).json({
+                success: true,
+                data: payroll,
+                message: "Payslip saved as draft. Mark it processed, then paid after money leaves the bank.",
+            })
             return
         } catch (error: any) {
             res.status(500).json({ success: false, message: error.message })
@@ -80,17 +123,19 @@ export class PayrollController {
             if (other_bonus_items !== undefined) payroll.other_bonus_items = other_bonus_items
             if (standard_deduction_overrides !== undefined) payroll.standard_deduction_overrides = standard_deduction_overrides
             if (deductions_disabled !== undefined) payroll.deductions_disabled = Boolean(deductions_disabled)
-            if (deduction_items !== undefined) {
-                payroll.deduction_items = deduction_items
-                payroll.total_deductions = deduction_items.reduce((sum: number, item: any) => sum + Number(item.amount), 0)
-            }
             if (status) payroll.status = status
 
-            const bonusTotal = Number(payroll.bonus || 0) + (payroll.other_bonus_items || []).reduce(
-                (sum: number, item: any) => sum + Number(item.amount || 0),
-                0,
-            )
-            payroll.net_pay = Number(payroll.base_salary || 0) + bonusTotal - Number(payroll.total_deductions || 0)
+            const figures = buildPayrollFigures({
+                baseSalary: Number(payroll.base_salary),
+                bonus: Number(payroll.bonus || 0),
+                otherBonusItems: payroll.other_bonus_items as any,
+                deductionItems: deduction_items !== undefined ? deduction_items : (payroll.deduction_items as any),
+                standardDeductionOverrides: payroll.standard_deduction_overrides as any,
+                deductionsDisabled: Boolean(payroll.deductions_disabled),
+            })
+            payroll.deduction_items = figures.deduction_items
+            payroll.total_deductions = figures.total_deductions
+            payroll.net_pay = figures.net_pay
 
             await payroll.save()
 
@@ -107,19 +152,26 @@ export class PayrollController {
                     : String(payroll.user_id)
 
                 try {
-                    await postPayrollToCashbook({
-                        orgId: String(payroll.org_id),
-                        userId: String(actorId),
-                        payroll: {
-                            _id: payroll._id,
-                            net_pay: payroll.net_pay,
-                            month: payroll.month,
-                            user_id: String(payroll.user_id),
-                            status: payroll.status,
-                            paymentMethod: "bank",
-                            employeeName,
-                        },
-                    })
+                    const monthPosted = await CashTransaction.findOne({
+                        org_id: String(payroll.org_id),
+                        sourceType: "payroll",
+                        sourceId: `payroll-month:${payroll.month}`,
+                    }).lean()
+                    if (!monthPosted) {
+                        await postPayrollToCashbook({
+                            orgId: String(payroll.org_id),
+                            userId: String(actorId),
+                            payroll: {
+                                _id: payroll._id,
+                                net_pay: payroll.net_pay,
+                                month: payroll.month,
+                                user_id: String(payroll.user_id),
+                                status: payroll.status,
+                                paymentMethod: "bank",
+                                employeeName,
+                            },
+                        })
+                    }
                 } catch (cashbookError: any) {
                     payroll.status = previousStatus
                     await payroll.save()
@@ -178,7 +230,9 @@ export class PayrollController {
             }
             
             // Verify user can only access their own payslip
-            if (payslip.user_id.toString() !== user_id) {
+            const role = String(req.user?.role || "")
+            const canViewAny = ["company_admin", "hr", "super_admin"].includes(role)
+            if (!canViewAny && payslip.user_id.toString() !== user_id) {
                 return res.status(403).json({ success: false, message: "Access denied" })
             }
             
@@ -211,13 +265,122 @@ export class PayrollController {
 
             const query: any = { org_id }
             if (month) query.month = month
+            const page = Math.max(1, Number(req.query.page) || 1)
+            const limit = Math.min(500, Math.max(1, Number(req.query.limit) || (month ? 200 : 25)))
 
-            const payrolls = await Payroll.find(query).sort({ month: -1 })
-            res.status(200).json({ success: true, data: payrolls })
+            const [payrolls, total] = await Promise.all([
+                Payroll.find(query).sort({ month: -1, createdAt: -1 }).skip((page - 1) * limit).limit(limit),
+                Payroll.countDocuments(query),
+            ])
+            res.status(200).json({
+                success: true,
+                data: payrolls,
+                pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+            })
             return
         } catch (error: any) {
             res.status(500).json({ success: false, message: error.message })
             return
+        }
+    }
+
+    static async generateBulk(req: AuthenticatedRequest, res: Response) {
+        try {
+            const org_id = req.user?.org_id
+            const { month } = req.body
+            if (!org_id || !month) {
+                return res.status(400).json({ success: false, message: "month is required" })
+            }
+
+            const employees = await User.find({
+                org_id,
+                status: { $nin: ["terminated", "alumni", "inactive"] },
+                role: { $nin: ["portal_client", "super_admin", "pos_cashier"] },
+                salary: { $gt: 0 },
+            }).select("_id salary firstName lastName")
+
+            const created: string[] = []
+            const skipped: string[] = []
+
+            for (const employee of employees) {
+                const existing = await Payroll.findOne({ org_id, user_id: String(employee._id), month })
+                if (existing) {
+                    skipped.push(String(employee._id))
+                    continue
+                }
+                const figures = buildPayrollFigures({
+                    baseSalary: Number(employee.salary),
+                    bonus: 0,
+                    otherBonusItems: [],
+                    deductionItems: [],
+                    deductionsDisabled: false,
+                })
+                await Payroll.create({
+                    org_id,
+                    user_id: String(employee._id),
+                    month,
+                    base_salary: Number(employee.salary),
+                    bonus: 0,
+                    other_bonus_items: [],
+                    deduction_items: figures.deduction_items,
+                    total_deductions: figures.total_deductions,
+                    net_pay: figures.net_pay,
+                    status: "draft",
+                })
+                created.push(String(employee._id))
+            }
+
+            return res.status(201).json({
+                success: true,
+                message: `Created ${created.length} draft payslips. Mark them processed, then paid after payout.`,
+                data: { created: created.length, skipped: skipped.length },
+            })
+        } catch (error: any) {
+            return res.status(500).json({ success: false, message: error.message })
+        }
+    }
+
+    static async markMonthPaid(req: AuthenticatedRequest, res: Response) {
+        try {
+            const org_id = req.user?.org_id
+            const month = String(req.body?.month || "")
+            if (!org_id || !month) {
+                return res.status(400).json({ success: false, message: "month is required" })
+            }
+
+            const unpaid = await Payroll.find({ org_id, month, status: { $ne: "paid" } })
+            if (!unpaid.length) {
+                return res.status(400).json({ success: false, message: "No unpaid payroll records for that month" })
+            }
+
+            for (const row of unpaid) {
+                row.status = "paid"
+                await row.save()
+            }
+
+            const paid = await Payroll.find({ org_id, month, status: "paid" }).lean()
+            const totalNet = paid.reduce((sum, row) => sum + Number(row.net_pay || 0), 0)
+            const cashbook = await postMonthPayrollToCashbook({
+                orgId: org_id,
+                userId: String(req.user?.userId || "system"),
+                month,
+                amount: totalNet,
+                employeeCount: paid.length,
+            })
+
+            return res.json({
+                success: true,
+                message: `Marked ${unpaid.length} payslips paid. Month bank payment is KES ${totalNet.toLocaleString()}.`,
+                data: {
+                    month,
+                    paidCount: unpaid.length,
+                    employeeCount: paid.length,
+                    totalNet,
+                    cashbookId: cashbook?._id,
+                },
+            })
+        } catch (error: any) {
+            return res.status(500).json({ success: false, message: error.message })
         }
     }
 }

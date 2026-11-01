@@ -18,7 +18,7 @@ export interface AuthUser {
     email: string
     first_name: string
     last_name: string
-    role: 'company_admin' | 'admin' | 'hr' | 'manager' | 'employee' | 'sales_rep' | 'super_admin' | 'technical_service_engineer' | 'dispatch' | 'pos_cashier'
+    role: 'company_admin' | 'admin' | 'hr' | 'manager' | 'employee' | 'sales_rep' | 'super_admin' | 'technical_service_engineer' | 'dispatch' | 'pos_cashier' | 'portal_client'
     org_id: string
     token?: string
 }
@@ -158,5 +158,6 @@ export function postLoginPath(role?: string | null): string {
     if (role === "manager") return "/manager"
     if (role === "sales_rep") return "/sales"
     if (role === "technical_service_engineer") return "/engineer"
+    if (role === "portal_client") return "/portal"
     return "/employee"
 }

@@ -433,6 +433,10 @@ export class PosController {
       if (!canSeeAllSales(req.user?.role) && String(sale.cashierId) !== String(req.user?.userId)) {
         return res.status(403).json({ success: false, message: "This held sale belongs to another cashier" })
       }
+      const heldPercent = Number(sale.discountPercent || 0)
+      if (heldPercent > CASHIER_DISCOUNT_LIMIT && !canSeeAllSales(req.user?.role)) {
+        throw new Error(`Discounts over ${CASHIER_DISCOUNT_LIMIT}% need supervisor approval.`)
+      }
       return res.json({ success: true, data: sale })
     } catch (error: any) {
       return res.status(500).json({ success: false, message: error.message || "Could not resume sale" })
@@ -566,6 +570,9 @@ export class PosController {
           paidAt: new Date(),
           receivedBy: cashierId,
         })
+        if (payment.method === "mpesa" && payment.status !== "confirmed") {
+          continue
+        }
         try {
           await postInvoicePaymentToCashbook({
             orgId,

@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { api } from "@/lib/api"
+import { useCompanyBranches } from "@/lib/company-branches"
 import { getUser } from "@/lib/auth"
 import {
   BarChart3,
@@ -21,6 +22,7 @@ import {
   Mail,
   Bell,
   AlertCircle,
+  ArrowLeftRight,
 } from "lucide-react"
 import { companyApi } from "@/lib/api"
 
@@ -44,6 +46,7 @@ export default function ManagerDashboard() {
   const [brand, setBrand] = useState<Brand>({ primary: "#3b82f6", secondary: "#8b5cf6", accent: "#ec4899" })
   const [pendingApprovals, setPendingApprovals] = useState(0)
   const [unreadMessages, setUnreadMessages] = useState(3)
+  const { hasBranches } = useCompanyBranches()
 
   useEffect(() => {
     const user = getUser()
@@ -89,6 +92,9 @@ export default function ManagerDashboard() {
     { title: "Performance", desc: "Track KPIs and department performance", href: "/manager/performance", icon: TrendingUp, color: brand.primary },
     { title: "Reports", desc: "Review reports and summaries", href: "/manager/reports", icon: BarChart3, color: brand.secondary },
     { title: "Leave Requests", desc: "Monitor leave for your department", href: "/manager/leave-requests", icon: Clock, color: brand.accent },
+    ...(hasBranches
+      ? [{ title: "Branch Transfers", desc: "Issue and receive inventory, assets, and staff", href: "/manager/transfers", icon: ArrowLeftRight, color: brand.primary }]
+      : []),
   ]
 
   return (

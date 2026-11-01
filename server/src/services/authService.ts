@@ -98,7 +98,7 @@ export class AuthService {
   private static skipsLoginOtp(user: { role?: string; email?: string }) {
     const role = String(user.role || "")
     const email = String(user.email || "").toLowerCase()
-    if (role === "pos_cashier") return true
+    if (role === "pos_cashier" || role === "portal_client") return true
     if (email.endsWith(".local.test") || email.endsWith("@local.test")) return true
     return false
   }

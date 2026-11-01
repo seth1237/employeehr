@@ -324,8 +324,8 @@ async function appendFollowUpPlannerStop(params: {
   plannerStop?: { location?: string; clientId?: string }
 }) {
   const date = String(params.followUpDate || "").slice(0, 10)
-  if (!date || date <= params.visitDate) {
-    return { created: false, skipped: !date, reason: date ? "Follow-up date must be after this visit." : "" }
+  if (!date || date < params.visitDate) {
+    return { created: false, skipped: !date, reason: date ? "Follow-up date cannot be before this visit." : "" }
   }
   let planner = await SalesPlanner.findOne({ org_id: params.org_id, userId: params.userId, date })
   if (planner?.status === "approved") {

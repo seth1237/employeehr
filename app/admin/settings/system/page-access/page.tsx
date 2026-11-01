@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Loader2, ShieldCheck, Save, Lock, Eye } from "lucide-react"
 import { api, companyApi, usersApi } from "@/lib/api"
 import { getUser } from "@/lib/auth"
-import { ADMIN_SECTION_OPTIONS } from "@/lib/admin-sections"
+import { visibleAdminSectionOptions } from "@/lib/admin-sections"
 
 type RoleKey = "company_admin" | "admin" | "hr" | "manager" | "employee" | "sales_rep"
 
@@ -44,7 +44,7 @@ interface Branch {
   code?: string
 }
 
-const FALLBACK_SECTIONS = [...ADMIN_SECTION_OPTIONS]
+const FALLBACK_SECTIONS = [...visibleAdminSectionOptions()]
 
 const EDITABLE_ROLES: Array<{ key: Exclude<RoleKey, "company_admin">; label: string }> = [
   { key: "admin", label: "Admin" },

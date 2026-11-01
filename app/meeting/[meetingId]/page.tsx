@@ -22,7 +22,7 @@ interface Meeting {
   meeting_link?: string
   status: 'scheduled' | 'in-progress' | 'completed' | 'cancelled'
   organizer_id: string
-  attendees: Array<{
+  attendees?: Array<{
     user_id: string
     display_name?: string
     is_guest?: boolean
@@ -86,7 +86,11 @@ export default function MeetingPage() {
 
     const interval = setInterval(() => {
       if (isGuest) {
-        fetchMeetingPublic(guestInfo.password || undefined)
+        if (guestInfo.password) {
+          void unlockMeetingPublic(guestInfo.password).catch(() => undefined)
+        } else {
+          fetchMeetingPublic()
+        }
         return
       }
 
@@ -162,16 +166,13 @@ export default function MeetingPage() {
     }
   }
 
-  const fetchMeetingAuthenticated = async (token: string, pwd?: string) => {
+  const fetchMeetingAuthenticated = async (token: string) => {
     try {
       setLoading(true)
       setError(null)
 
       const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://backend.codewithseth.co.ke'
-      let url = `${baseUrl}/api/meetings/by-meeting-id/${meetingId}`
-      if (pwd) {
-        url += `?password=${encodeURIComponent(pwd)}`
-      }
+      const url = `${baseUrl}/api/meetings/by-meeting-id/${meetingId}`
 
       const response = await fetch(url, {
         headers: {
@@ -201,41 +202,55 @@ export default function MeetingPage() {
     }
   }
 
+  const unlockMeetingPublic = async (pwd: string) => {
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://backend.codewithseth.co.ke'
+    const response = await fetch(`${baseUrl}/api/meetings/by-meeting-id/${meetingId}/unlock`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pwd }),
+    })
+    const data = await response.json()
+    if (!response.ok) {
+      if (response.status === 403 && data.require_password) {
+        setPasswordError(true)
+        throw new Error('Password required')
+      }
+      throw new Error(data.message || 'Failed to unlock meeting')
+    }
+    setMeeting(data.data)
+    setPasswordError(false)
+    return data.data
+  }
+
   const fetchMeetingPublic = async (pwd?: string) => {
     try {
       setLoading(true)
       setError(null)
       setPasswordError(false)
 
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://backend.codewithseth.co.ke'
-      let url = `${baseUrl}/api/meetings/by-meeting-id/${meetingId}`
       if (pwd) {
-        url += `?password=${encodeURIComponent(pwd)}`
+        await unlockMeetingPublic(pwd)
+        setShowGuestForm(false)
+        return
       }
+
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://backend.codewithseth.co.ke'
+      const url = `${baseUrl}/api/meetings/by-meeting-id/${meetingId}`
 
       const response = await fetch(url)
       const data = await response.json()
 
       if (!response.ok) {
-        if (response.status === 403 && data.require_password) {
-          setPasswordError(true)
-          setMeeting(null)
-          setLoading(false)
-          return
-        }
         throw new Error(data.message || 'Failed to load meeting')
       }
 
       setMeeting(data.data)
       setPasswordError(false)
-      
-      // If password was provided and meeting loaded, hide the form
-      if (pwd) {
-        setShowGuestForm(false)
-      }
     } catch (err: any) {
       console.error('Error fetching meeting:', err)
-      setError(err.message || 'Failed to load meeting')
+      if (err.message !== 'Password required') {
+        setError(err.message || 'Failed to load meeting')
+      }
     } finally {
       setLoading(false)
     }

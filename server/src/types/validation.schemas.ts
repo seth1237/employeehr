@@ -121,6 +121,7 @@ export const createEmployeeSchema = z.object({
     "dispatch",
     "technical_service_engineer",
     "pos_cashier",
+    "portal_client",
   ]).optional(),
   department: z.string().optional(),
   manager_id: z.string().optional(),

@@ -19,6 +19,9 @@ export default function JournalEntriesPage() {
     date: new Date().toISOString().slice(0, 10),
     description: "",
     reference: "",
+    journalType: "miscellaneous",
+    nature: "manual",
+    currency: "KES",
     lines: [
       { accountId: "", debit: 0, credit: 0 },
       { accountId: "", debit: 0, credit: 0 }
@@ -76,6 +79,9 @@ export default function JournalEntriesPage() {
         date: new Date().toISOString().slice(0, 10),
         description: "",
         reference: "",
+        journalType: "miscellaneous",
+        nature: "manual",
+        currency: "KES",
         lines: [
           { accountId: "", debit: 0, credit: 0 },
           { accountId: "", debit: 0, credit: 0 }
@@ -111,6 +117,26 @@ export default function JournalEntriesPage() {
               <div>
                 <Label>Reference (Optional)</Label>
                 <Input value={form.reference} onChange={e => setForm({...form, reference: e.target.value})} placeholder="e.g. ADJ-001" />
+              </div>
+              <div>
+                <Label>Journal type</Label>
+                <select className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm" value={form.journalType} onChange={e => setForm({...form, journalType: e.target.value})}>
+                  {["sales", "purchases", "inventory", "miscellaneous", "carry-forward", "closing"].map((type) => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <Label>Nature</Label>
+                <select className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm" value={form.nature} onChange={e => setForm({...form, nature: e.target.value})}>
+                  {["manual", "automatic", "template", "recurring", "reversing"].map((type) => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <Label>Currency</Label>
+                <Input value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value.toUpperCase() })} />
               </div>
               <div className="md:col-span-3">
                 <Label>Description</Label>
@@ -190,25 +216,41 @@ export default function JournalEntriesPage() {
                 <tr className="text-left">
                   <th className="px-4 py-3">Date</th>
                   <th className="px-4 py-3">Entry #</th>
-                  <th className="px-4 py-3">Source</th>
+                  <th className="px-4 py-3">Type</th>
+                  <th className="px-4 py-3">Nature</th>
                   <th className="px-4 py-3">Description</th>
                   <th className="px-4 py-3 text-right">Amount</th>
+                  <th className="px-4 py-3" />
                 </tr>
               </thead>
               <tbody>
                 {entries.length === 0 ? (
-                  <tr><td colSpan={5} className="p-8 text-center text-muted-foreground">No entries found.</td></tr>
+                  <tr><td colSpan={7} className="p-8 text-center text-muted-foreground">No entries found.</td></tr>
                 ) : (
                   entries.map((entry, idx) => (
                     <tr key={entry._id} className={`border-b ${idx % 2 ? "bg-muted/10" : ""}`}>
                       <td className="px-4 py-3">{new Date(entry.date).toLocaleDateString()}</td>
                       <td className="px-4 py-3 font-medium">{entry.entryNumber}</td>
                       <td className="px-4 py-3">
-                        <Badge variant="outline" className="capitalize">{entry.source}</Badge>
+                        <Badge variant="outline" className="capitalize">{entry.journalType || entry.source}</Badge>
                       </td>
+                      <td className="px-4 py-3 capitalize">{entry.nature || "manual"}</td>
                       <td className="px-4 py-3">{entry.description}</td>
                       <td className="px-4 py-3 text-right font-medium">
                         {entry.lines?.reduce((s: number, l: any) => s + (l.debit || 0), 0).toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {entry.status === "posted" && !entry.reversedBy ? (
+                          <Button size="sm" variant="outline" onClick={async () => {
+                            if (!window.confirm("Reverse this journal?")) return
+                            try {
+                              await glApi.reverseJournal(entry._id)
+                              await loadData()
+                            } catch (err: any) {
+                              window.alert(err.message || "Reverse failed")
+                            }
+                          }}>Reverse</Button>
+                        ) : null}
                       </td>
                     </tr>
                   ))

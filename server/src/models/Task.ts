@@ -29,7 +29,7 @@ export interface ITask {
   attachments?: string[]
   createdAt?: Date
   updatedAt?: Date
-  related_entity_type?: "invoice" | "meeting" | "report" | "pdp" | "other"
+  related_entity_type?: "invoice" | "meeting" | "report" | "pdp" | "project" | "other"
   related_entity_id?: string
   source_label?: string
   source_status?: string
@@ -70,7 +70,7 @@ const taskSchema = new Schema<ITask>(
       },
     ],
     attachments: [{ type: String }],
-    related_entity_type: { type: String, enum: ["invoice", "meeting", "report", "pdp", "other"] },
+    related_entity_type: { type: String, enum: ["invoice", "meeting", "report", "pdp", "project", "other"] },
     related_entity_id: { type: String },
     source_label: { type: String },
     source_status: { type: String },

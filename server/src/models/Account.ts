@@ -11,6 +11,8 @@ export interface IAccount extends Document {
   isActive: boolean;
   isSystem: boolean; // System accounts cannot be deleted/modified easily
   parentAccountId?: mongoose.Types.ObjectId;
+  currency?: string;
+  controlType?: "none" | "customer" | "vendor" | "bank" | "cash";
   createdAt: Date;
   updatedAt: Date;
 }
@@ -29,6 +31,12 @@ const accountSchema = new Schema<IAccount>(
     isActive: { type: Boolean, default: true },
     isSystem: { type: Boolean, default: false },
     parentAccountId: { type: Schema.Types.ObjectId, ref: "Account" },
+    currency: { type: String, default: "KES" },
+    controlType: {
+      type: String,
+      enum: ["none", "customer", "vendor", "bank", "cash"],
+      default: "none",
+    },
   },
   { timestamps: true }
 );

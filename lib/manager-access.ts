@@ -1,4 +1,4 @@
-import { BarChart3, CheckCircle2, Clock, FileText, MessageSquare, Target, Users, Wallet, BookOpen, Briefcase, FileSearch, Mail, Send } from "lucide-react"
+import { ArrowLeftRight, BarChart3, CheckCircle2, Clock, FileText, MessageSquare, Target, Users, Wallet, BookOpen, Briefcase, FileSearch, Mail, Send } from "lucide-react"
 import { companyApi } from "@/lib/api"
 import { getUser } from "@/lib/auth"
 
@@ -24,6 +24,7 @@ export const MANAGER_MENU_ITEMS = [
   { label: "PDP Reviews", icon: FileSearch, href: "/manager/pdp-reviews", section: "PERFORMANCE" },
   { label: "Evaluations", icon: FileText, href: "/manager/evaluations", section: "PERFORMANCE" },
   { label: "Finance", icon: Wallet, href: "/manager/fees", section: "FINANCE" },
+  { label: "Inter-branch Transfers", icon: ArrowLeftRight, href: "/manager/transfers", section: "INVENTORY MANAGER" },
   { label: "Resources", icon: BookOpen, href: "/manager/resources", section: "INVENTORY MANAGER" },
   { label: "Document Library", icon: BookOpen, href: "/manager/library", section: "INVENTORY MANAGER" },
   { label: "Documents & Exams", icon: FileText, href: "/manager/examinations", section: "INVENTORY MANAGER" },

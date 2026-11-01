@@ -7,6 +7,7 @@ import { ChevronLeft, LogOut } from "lucide-react"
 import { logout } from "@/lib/auth"
 import { cn } from "@/lib/utils"
 import { getManagerAllowedSections, MANAGER_MENU_ITEMS } from "@/lib/manager-access"
+import { isInterBranchNavHref, useCompanyBranches } from "@/lib/company-branches"
 
 interface SidebarProps {
   isOpen: boolean
@@ -17,6 +18,7 @@ interface SidebarProps {
 
 export default function ManagerSidebar({ isOpen, isCollapsed, onToggle, onCollapseToggle }: SidebarProps) {
   const pathname = usePathname()
+  const { hasBranches } = useCompanyBranches()
   const [allowedSections, setAllowedSections] = useState<Set<string> | null>(null)
   const [loadingAccess, setLoadingAccess] = useState(true)
 
@@ -43,6 +45,7 @@ export default function ManagerSidebar({ isOpen, isCollapsed, onToggle, onCollap
       allowedSections === null || allowedSections.has(section)
 
     MANAGER_MENU_ITEMS.forEach((item) => {
+      if (isInterBranchNavHref(item.href) && !hasBranches) return
       const section = item.section || "OTHER"
       if (hasAccess(section)) {
         if (!grouped[section]) grouped[section] = []
@@ -51,7 +54,7 @@ export default function ManagerSidebar({ isOpen, isCollapsed, onToggle, onCollap
     })
 
     return Object.entries(grouped)
-  }, [allowedSections])
+  }, [allowedSections, hasBranches])
 
   const showLoadingPlaceholder = loadingAccess
 

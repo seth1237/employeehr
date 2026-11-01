@@ -1,24 +1,80 @@
 "use client"
 
+import { useEffect, useState } from "react"
+import { glApi } from "@/lib/api"
 import { FinanceDocumentShell, FinanceTableCard } from "@/components/accounts/finance-document-shell"
-import { AlertCircle, ScrollText } from "lucide-react"
+import { PageLoadingSkeleton } from "@/components/admin/ui/page-states"
+import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
 
 export default function SupplierStatementsPage() {
+  const [creditors, setCreditors] = useState<any[]>([])
+  const [supplierId, setSupplierId] = useState("")
+  const [data, setData] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    glApi.getPayablesCreditors().then((res) => {
+      const rows = res.data || []
+      setCreditors(rows)
+      if (rows[0]) setSupplierId(rows[0].supplierId)
+    }).finally(() => setLoading(false))
+  }, [])
+
+  const load = async (id = supplierId) => {
+    if (!id) return
+    const res = await glApi.getPayablesStatement(id)
+    setData(res.data)
+  }
+
+  useEffect(() => { if (supplierId) void load(supplierId) }, [supplierId])
+
+  if (loading) return <PageLoadingSkeleton title="Supplier Statements" />
+
   return (
     <FinanceDocumentShell
       eyebrow="Purchases & Payables"
       title="Supplier Statements"
-      description="Supplier account statements with opening and closing balances"
-    >
-      <FinanceTableCard title="Supplier Statements">
-        <div className="p-12 flex flex-col items-center justify-center text-center text-muted-foreground border-t border-dashed">
-          <ScrollText className="h-12 w-12 mb-4 opacity-50 text-indigo-500" />
-          <h3 className="text-lg font-medium text-foreground mb-2">Module Under Construction</h3>
-          <p className="max-w-md text-sm leading-relaxed">
-            The Supplier Statements module is currently in development.
-            This will provide a complete ledger of all transactions (bills, payments, credit notes) for each supplier.
-          </p>
+      description="Bills, payments, and credit notes for one vendor account"
+      kpis={[
+        { label: "Billed", value: data?.billed || 0, prefix: "KES" },
+        { label: "Paid", value: data?.paid || 0, prefix: "KES" },
+        { label: "Credits", value: data?.credits || 0, prefix: "KES" },
+        { label: "Balance", value: data?.balance || 0, prefix: "KES" },
+      ]}
+      toolbar={
+        <div className="flex items-end gap-3">
+          <div>
+            <Label className="text-xs">Vendor</Label>
+            <select className="mt-1 h-9 w-72 rounded-md border bg-background px-3 text-sm" value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
+              {creditors.map((row) => <option key={row.supplierId} value={row.supplierId}>{row.supplierId}</option>)}
+            </select>
+          </div>
+          <Button size="sm" onClick={() => void load()}>Refresh</Button>
         </div>
+      }
+    >
+      <FinanceTableCard title="Bills">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/50 text-left text-xs uppercase text-muted-foreground">
+            <tr>
+              <th className="px-4 py-2">Bill</th>
+              <th className="px-4 py-2">Date</th>
+              <th className="px-4 py-2 text-right">Total</th>
+              <th className="px-4 py-2 text-right">Balance</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(data?.bills || []).map((row: any) => (
+              <tr key={row._id} className="border-b">
+                <td className="px-4 py-2">{row.invoiceNumber}</td>
+                <td className="px-4 py-2">{row.invoiceDate ? new Date(row.invoiceDate).toLocaleDateString() : ""}</td>
+                <td className="px-4 py-2 text-right">{Number(row.grandTotal || 0).toLocaleString()}</td>
+                <td className="px-4 py-2 text-right">{Number(row.balanceRemaining || 0).toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </FinanceTableCard>
     </FinanceDocumentShell>
   )

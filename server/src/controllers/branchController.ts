@@ -170,8 +170,15 @@ export class BranchController {
    */
   static async allocateBranchToAdmin(req: AuthenticatedRequest, res: Response) {
     try {
-      const { org_id } = req.user!
+      const { org_id, role } = req.user!
       const { branchId, managerId } = req.body
+
+      if (!["admin", "company_admin", "hr", "super_admin"].includes(role)) {
+        return res.status(403).json({
+          success: false,
+          message: "Only company admins and HR can assign a branch admin",
+        })
+      }
 
       if (!branchId || !managerId) {
         return res.status(400).json({
@@ -188,32 +195,45 @@ export class BranchController {
         })
       }
 
-      // Verify manager exists and is an admin
       const manager = await User.findOne({ _id: managerId, org_id })
       if (!manager) {
         return res.status(404).json({
           success: false,
-          message: "Manager not found",
+          message: "User not found",
         })
       }
 
-      if (!["admin", "company_admin", "hr"].includes(manager.role)) {
+      const assignable = ["admin", "company_admin", "hr", "manager", "employee"]
+      if (!assignable.includes(manager.role)) {
         return res.status(400).json({
           success: false,
-          message: "Only admins can manage branches",
+          message: "This user cannot be assigned as a branch admin",
         })
       }
 
-      // Update branch with manager
-      branch.managerId = managerId
-      branch.managerName = manager.firstName + " " + manager.lastName
-      branch.managerEmail = manager.email
+      if (manager.role === "employee") {
+        manager.role = "manager"
+      }
 
+      await Branch.updateMany(
+        { org_id, managerId: String(manager._id), _id: { $ne: branch._id } },
+        { $unset: { managerId: 1, managerName: 1, managerEmail: 1 } },
+      )
+
+      branch.managerId = String(manager._id)
+      branch.managerName = `${manager.firstName} ${manager.lastName}`.trim()
+      branch.managerEmail = manager.email
       await branch.save()
+
+      manager.branchId = String(branch._id)
+      if (!manager.workLocation) {
+        manager.workLocation = branch.name
+      }
+      await manager.save()
 
       return res.status(200).json({
         success: true,
-        message: "Branch allocated to admin successfully",
+        message: "Branch admin assigned successfully",
         data: branch,
       })
     } catch (error) {
@@ -242,15 +262,22 @@ export class BranchController {
         })
       }
 
+      const previousManagerId = branch.managerId
       branch.managerId = undefined
       branch.managerName = undefined
       branch.managerEmail = undefined
-
       await branch.save()
+
+      if (previousManagerId) {
+        await User.updateOne(
+          { _id: previousManagerId, org_id, branchId: String(branch._id) },
+          { $unset: { branchId: 1 } },
+        )
+      }
 
       return res.status(200).json({
         success: true,
-        message: "Manager removed from branch successfully",
+        message: "Branch admin removed successfully",
         data: branch,
       })
     } catch (error) {

@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog"
 import { useToast } from "@/hooks/use-toast"
 import {
+  Download,
   Lock,
   LogOut,
   Minus,
@@ -63,6 +64,20 @@ type PaymentLine = {
   tendered?: number
   reference?: string
   phone?: string
+  mpesaCheckoutRequestId?: string
+  mpesaReceiptCode?: string
+}
+
+type MpesaPayment = {
+  id: string
+  phone: string
+  amount: number
+  checkoutRequestId: string
+  status: "pending" | "confirmed" | "failed" | "expired"
+  resultDesc?: string
+  mpesaReceiptCode?: string
+  used?: boolean
+  createdAt?: string
 }
 
 const NOTES = [50, 100, 200, 500, 1000]
@@ -87,6 +102,17 @@ function payLabel(method: string) {
   const key = String(method || "").toLowerCase()
   if (key === "mpesa") return "M-PESA"
   return key.toUpperCase() || "CASH"
+}
+
+function customerDisplay(sale: any) {
+  const name = String(sale?.customerName || "").trim()
+  const phone = String(sale?.customerPhone || "").trim()
+  const blankName = !name || /^walk[\s-]?in$/i.test(name)
+  const blankPhone = !phone || /^walk[\s-]?in$/i.test(phone)
+  return {
+    name: blankName ? (blankPhone ? "Walk-in" : "Customer") : name,
+    phone: blankPhone ? "" : phone,
+  }
 }
 
 function saleWhen(sale: any) {
@@ -164,7 +190,8 @@ function receiptSlipHtml(sale: any, company: any) {
     <div class="row"><span>Rcpt</span><span>${esc(sale.receiptNo)}</span></div>
     <div class="row"><span>${esc(date)}</span><span>${esc(time)}</span></div>
     <div class="row"><span>Cashier</span><span>${esc(sale.cashierName || "")}</span></div>
-    <div class="row"><span>Customer</span><span>${esc(sale.customerName || "Walk-in")}</span></div>
+    <div class="row"><span>Customer</span><span>${esc(customerDisplay(sale).name)}</span></div>
+    ${customerDisplay(sale).phone ? `<div class="row"><span>Tel</span><span>${esc(customerDisplay(sale).phone)}</span></div>` : ""}
     <div class="cut">--------------------------------</div>
     ${receiptLinesHtml(sale)}
     <div class="cut">--------------------------------</div>
@@ -193,7 +220,21 @@ function printReceipt(sale: any, company: any) {
   const doc = frame.contentDocument
   if (!doc) return
   doc.open()
-  doc.write(`<!doctype html><html><head><title>${esc(sale.receiptNo)}</title>
+  doc.write(receiptDocument(sale, company))
+  doc.close()
+  const runPrint = () => {
+    frame.contentWindow?.focus()
+    frame.contentWindow?.print()
+  }
+  frame.contentWindow?.addEventListener("afterprint", () => frame.remove())
+  setTimeout(runPrint, company.logo ? 400 : 180)
+  setTimeout(() => {
+    if (frame.parentNode) frame.remove()
+  }, 60000)
+}
+
+function receiptDocument(sale: any, company: any) {
+  return `<!doctype html><html><head><title>${esc(sale.receiptNo)}</title>
   <style>
     @page { size: 80mm auto; margin: 0; }
     html, body { width: 80mm; margin: 0; padding: 0; background: #fff; }
@@ -216,17 +257,19 @@ function printReceipt(sale: any, company: any) {
     .total { font-size: 13px; font-weight: 700; margin: 4px 0; }
   </style></head><body>
   ${receiptSlipHtml(sale, company)}
-  </body></html>`)
-  doc.close()
-  const runPrint = () => {
-    frame.contentWindow?.focus()
-    frame.contentWindow?.print()
-  }
-  frame.contentWindow?.addEventListener("afterprint", () => frame.remove())
-  setTimeout(runPrint, company.logo ? 400 : 180)
-  setTimeout(() => {
-    if (frame.parentNode) frame.remove()
-  }, 60000)
+  </body></html>`
+}
+
+function downloadReceipt(sale: any, company: any) {
+  const blob = new Blob([receiptDocument(sale, company)], { type: "text/html;charset=utf-8" })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement("a")
+  link.href = url
+  link.download = `${sale.receiptNo || "receipt"}.html`
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
 }
 
 function ReceiptSlip({ sale, company }: { sale: any; company: any }) {
@@ -253,7 +296,10 @@ function ReceiptSlip({ sale, company }: { sale: any; company: any }) {
       <div className="flex justify-between gap-2"><span>Rcpt</span><span>{sale.receiptNo}</span></div>
       <div className="flex justify-between gap-2"><span>{date}</span><span>{time}</span></div>
       <div className="flex justify-between gap-2"><span>Cashier</span><span>{sale.cashierName}</span></div>
-      <div className="flex justify-between gap-2"><span>Customer</span><span>{sale.customerName || "Walk-in"}</span></div>
+      <div className="flex justify-between gap-2"><span>Customer</span><span>{customerDisplay(sale).name}</span></div>
+      {customerDisplay(sale).phone ? (
+        <div className="flex justify-between gap-2"><span>Tel</span><span>{customerDisplay(sale).phone}</span></div>
+      ) : null}
       <div className="my-1 text-center tracking-widest text-black/50">--------------------------------</div>
       {(sale.items || []).map((item: any, index: number) => (
         <div key={`${item.productId || item.sku || index}-${index}`} className="mb-1">
@@ -310,6 +356,7 @@ export function PosTerminal() {
   const searchRef = useRef<HTMLInputElement>(null)
   const [loading, setLoading] = useState(true)
   const [company, setCompany] = useState<any>({})
+  const [mpesaDest, setMpesaDest] = useState<{ label?: string; mode?: string; sandbox?: boolean }>({})
   const [cashier, setCashier] = useState<any>({})
   const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([])
   const [products, setProducts] = useState<PosProduct[]>([])
@@ -334,12 +381,17 @@ export function PosTerminal() {
   const [cashTendered, setCashTendered] = useState("")
   const [mpesaPhone, setMpesaPhone] = useState("")
   const [mpesaCode, setMpesaCode] = useState("")
+  const [mpesaCheckoutId, setMpesaCheckoutId] = useState("")
+  const [mpesaStatus, setMpesaStatus] = useState<MpesaPayment["status"] | "">("")
+  const [mpesaMessage, setMpesaMessage] = useState("")
+  const [recentMpesa, setRecentMpesa] = useState<MpesaPayment[]>([])
   const [reference, setReference] = useState("")
 
   const load = useCallback(async () => {
     const result = await posApi.bootstrap()
     const data = result.data || {}
     setCompany(data.company || {})
+    setMpesaDest(data.mpesa || {})
     setCashier(data.cashier || {})
     setCategories(data.categories || [])
     setProducts(data.products || [])
@@ -488,6 +540,10 @@ export function PosTerminal() {
     setCashTendered("")
     setMpesaPhone("")
     setMpesaCode("")
+    setMpesaCheckoutId("")
+    setMpesaStatus("")
+    setMpesaMessage("")
+    setRecentMpesa([])
     setReference("")
   }
 
@@ -503,8 +559,8 @@ export function PosTerminal() {
 
   const salePayload = () => ({
     items: cart.map((line) => ({ productId: line.productId, quantity: line.quantity })),
-    customerName: customerName || "Walk-in",
-    customerPhone,
+    customerName: customerName.trim(),
+    customerPhone: customerPhone.trim() || mpesaPhone.trim(),
     discountPercent: Number(discountPercent || 0),
     holdId: holdId || undefined,
   })
@@ -569,8 +625,10 @@ export function PosTerminal() {
         {
           method: "mpesa",
           amount: totals.total,
-          phone: mpesaPhone,
-          reference: mpesaCode,
+          phone: mpesaPhone.trim() || customerPhone.trim(),
+          reference: mpesaCode.trim(),
+          mpesaReceiptCode: mpesaCode.trim(),
+          mpesaCheckoutRequestId: mpesaCheckoutId,
         },
       ]
     }
@@ -582,9 +640,19 @@ export function PosTerminal() {
 
   const handlePay = async () => {
     if (!cart.length) return
+    if (payMethod === "mpesa" && mpesaStatus !== "confirmed") {
+      toast({
+        title: "M-Pesa is not confirmed",
+        description: "Send STK and wait for the PIN, or enter the M-Pesa code and check payment.",
+        variant: "destructive",
+      })
+      return
+    }
     setBusy(true)
     try {
       const sold = cart
+      const snapshotName = customerName.trim()
+      const snapshotPhone = customerPhone.trim() || mpesaPhone.trim()
       const result = await posApi.checkout({
         ...salePayload(),
         payments: buildPayments(),
@@ -603,7 +671,18 @@ export function PosTerminal() {
         }),
       )
       if (holdId) setHeldCount((count) => Math.max(0, count - 1))
-      setReceipt(result.data)
+      const sale = result.data || {}
+      setReceipt({
+        ...sale,
+        customerName:
+          sale.customerName && !/^walk[\s-]?in$/i.test(String(sale.customerName))
+            ? sale.customerName
+            : snapshotName || sale.customerName || "Walk-in",
+        customerPhone:
+          sale.customerPhone && !/^walk[\s-]?in$/i.test(String(sale.customerPhone))
+            ? sale.customerPhone
+            : snapshotPhone || sale.customerPhone || "",
+      })
       setPayOpen(false)
       resetTill()
       setToday((current) => ({
@@ -618,17 +697,114 @@ export function PosTerminal() {
     }
   }
 
+  const applyMpesa = (payment: MpesaPayment, message?: string) => {
+    const desc = `${message || ""} ${payment.resultDesc || ""}`
+    const stillWaiting = /status code 500|being processed|waiting for the customer|ask the customer to enter/i.test(desc)
+    const status = payment.status === "failed" && stillWaiting ? "pending" : payment.status
+    setMpesaCheckoutId(payment.checkoutRequestId || mpesaCheckoutId)
+    setMpesaStatus(status)
+    setMpesaMessage(
+      status === "pending"
+        ? "Waiting for the customer to enter their M-Pesa PIN"
+        : message || payment.resultDesc || "",
+    )
+    if (payment.phone) setMpesaPhone(payment.phone)
+    if (payment.mpesaReceiptCode) setMpesaCode(payment.mpesaReceiptCode)
+  }
+
   const sendStk = async () => {
+    const phone = mpesaPhone.trim() || customerPhone.trim()
+    if (!phone) {
+      toast({ title: "Enter the customer phone", variant: "destructive" })
+      return
+    }
+    if (!mpesaPhone.trim() && customerPhone.trim()) setMpesaPhone(customerPhone.trim())
     setBusy(true)
     try {
-      const result = await posApi.stkPush({ phone: mpesaPhone, amount: totals.total })
+      const result = await posApi.stkPush({ phone, amount: totals.total })
+      const payment = result.data as MpesaPayment
+      applyMpesa(payment, result.message)
       toast({ title: result.message || "Waiting for M-Pesa" })
     } catch (error: any) {
+      setMpesaStatus("failed")
+      setMpesaMessage(error.message)
       toast({ title: "M-Pesa failed", description: error.message, variant: "destructive" })
     } finally {
       setBusy(false)
     }
   }
+
+  const pollStk = async (checkoutRequestId = mpesaCheckoutId) => {
+    if (!checkoutRequestId) return
+    try {
+      const result = await posApi.stkStatus(checkoutRequestId)
+      const payment = result.data as MpesaPayment
+      applyMpesa(payment, result.message)
+      return payment
+    } catch {
+      setMpesaMessage("Waiting for the customer to enter their M-Pesa PIN")
+      return null
+    }
+  }
+
+  const checkMpesaCode = async () => {
+    const code = mpesaCode.trim()
+    if (code.length < 6) {
+      toast({ title: "Enter the M-Pesa code from the customer SMS", variant: "destructive" })
+      return
+    }
+    setBusy(true)
+    try {
+      const result = await posApi.lookupMpesa({
+        code,
+        amount: totals.total,
+        phone: mpesaPhone.trim() || customerPhone.trim(),
+      })
+      applyMpesa(result.data as MpesaPayment, result.message)
+      toast({ title: result.message || "M-Pesa payment found" })
+    } catch (error: any) {
+      setMpesaStatus("")
+      toast({ title: "Payment not found", description: error.message, variant: "destructive" })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const loadRecentMpesa = async () => {
+    try {
+      const result = await posApi.recentMpesa()
+      setRecentMpesa((result.data || []) as MpesaPayment[])
+    } catch (error: any) {
+      toast({ title: "Could not load recent payments", description: error.message, variant: "destructive" })
+    }
+  }
+
+  const openPay = () => {
+    setCashTendered(String(Math.ceil(totals.total)))
+    if (!mpesaPhone.trim() && customerPhone.trim()) setMpesaPhone(customerPhone.trim())
+    setPayOpen(true)
+  }
+
+  useEffect(() => {
+    if (!payOpen || payMethod !== "mpesa" || !mpesaCheckoutId || mpesaStatus !== "pending") return
+    let cancelled = false
+    const tick = async () => {
+      if (cancelled) return
+      await pollStk(mpesaCheckoutId)
+    }
+    const interval = window.setInterval(() => void tick(), 2500)
+    const timeout = window.setTimeout(() => {
+      if (!cancelled) {
+        setMpesaMessage("Still waiting for M-Pesa. Enter the code from the SMS if the customer already paid.")
+      }
+    }, 90000)
+    void tick()
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+      window.clearTimeout(timeout)
+    }
+  }, [payOpen, payMethod, mpesaCheckoutId, mpesaStatus])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -643,7 +819,7 @@ export function PosTerminal() {
       }
       if (event.key === "F8") {
         event.preventDefault()
-        if (cart.length) setPayOpen(true)
+        if (cart.length) openPay()
       }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "p") {
         if (receipt) {
@@ -900,10 +1076,7 @@ export function PosTerminal() {
               className="h-14 w-full text-lg"
               disabled={!cart.length || busy}
               style={{ backgroundColor: brand }}
-              onClick={() => {
-                setCashTendered(String(Math.ceil(totals.total)))
-                setPayOpen(true)
-              }}
+              onClick={openPay}
             >
               Pay {money(totals.total)}
             </Button>
@@ -922,7 +1095,13 @@ export function PosTerminal() {
               <Button
                 key={method}
                 variant={payMethod === method ? "default" : "outline"}
-                onClick={() => setPayMethod(method)}
+                onClick={() => {
+                  setPayMethod(method)
+                  if (method === "mpesa") {
+                    if (!mpesaPhone.trim() && customerPhone.trim()) setMpesaPhone(customerPhone.trim())
+                    void loadRecentMpesa()
+                  }
+                }}
                 className="capitalize"
               >
                 {method === "mpesa" ? "M-Pesa" : method}
@@ -957,13 +1136,103 @@ export function PosTerminal() {
           ) : null}
           {payMethod === "mpesa" ? (
             <div className="space-y-3">
-              <Label>Customer phone</Label>
-              <Input value={mpesaPhone} onChange={(event) => setMpesaPhone(event.target.value)} placeholder="07XX XXX XXX" />
-              <Button type="button" variant="outline" onClick={() => void sendStk()} disabled={busy || !mpesaPhone}>
-                Send STK push
+              {mpesaDest.label ? (
+                <p className="text-sm text-slate-600">
+                  STK will request payment to {mpesaDest.label}
+                  {mpesaDest.sandbox ? " (sandbox test). Money does not go to your shop till until production keys and your till number are set." : "."}
+                </p>
+              ) : null}
+              <div className="space-y-1">
+                <Label>Customer phone</Label>
+                <Input
+                  value={mpesaPhone}
+                  onChange={(event) => setMpesaPhone(event.target.value)}
+                  placeholder="07XX XXX XXX"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => void sendStk()}
+                  disabled={busy || !(mpesaPhone.trim() || customerPhone.trim())}
+                >
+                  Send STK push
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void pollStk()}
+                  disabled={busy || !mpesaCheckoutId}
+                >
+                  Refresh
+                </Button>
+              </div>
+              {mpesaStatus ? (
+                <p
+                  className={
+                    mpesaStatus === "confirmed"
+                      ? "text-sm text-emerald-700"
+                      : mpesaStatus === "failed"
+                        ? "text-sm text-red-600"
+                        : "text-sm text-slate-600"
+                  }
+                >
+                  {mpesaStatus === "confirmed"
+                    ? `Payment confirmed${mpesaCode ? ` · ${mpesaCode}` : ""}`
+                    : mpesaStatus === "failed"
+                      ? mpesaMessage || "The customer did not complete M-Pesa"
+                      : mpesaMessage || "Waiting for the customer to enter their PIN…"}
+                </p>
+              ) : null}
+              <div className="space-y-1">
+                <Label>M-Pesa code</Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={mpesaCode}
+                    onChange={(event) => setMpesaCode(event.target.value.toUpperCase())}
+                    placeholder="QBR7X..."
+                    className="uppercase"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void checkMpesaCode()}
+                    disabled={busy || mpesaCode.trim().length < 6}
+                  >
+                    Check payment
+                  </Button>
+                </div>
+              </div>
+              <Button type="button" variant="ghost" className="h-8 px-0 text-sm" onClick={() => void loadRecentMpesa()}>
+                Check recent payments
               </Button>
-              <Label>M-Pesa code</Label>
-              <Input value={mpesaCode} onChange={(event) => setMpesaCode(event.target.value)} placeholder="QBR7X..." />
+              {recentMpesa.length ? (
+                <div className="max-h-36 space-y-1 overflow-y-auto rounded-md border p-2">
+                  {recentMpesa.map((row) => (
+                    <button
+                      key={row.id}
+                      type="button"
+                      disabled={Boolean(row.used) || row.status !== "confirmed"}
+                      className="flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left text-sm hover:bg-slate-50 disabled:opacity-50"
+                      onClick={() =>
+                        applyMpesa(
+                          row,
+                          row.mpesaReceiptCode ? `Matched ${row.mpesaReceiptCode}` : "Payment selected",
+                        )
+                      }
+                    >
+                      <span className="truncate">
+                        {row.mpesaReceiptCode || "Waiting"} · {row.phone || "No phone"}
+                      </span>
+                      <span className="shrink-0 text-slate-500">
+                        {money(row.amount)} · {row.used ? "used" : row.status}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </div>
           ) : null}
           {payMethod === "card" || payMethod === "bank" ? (
@@ -980,7 +1249,7 @@ export function PosTerminal() {
               disabled={
                 busy ||
                 (payMethod === "cash" && Number(cashTendered || 0) + 0.009 < totals.total) ||
-                (payMethod === "mpesa" && !mpesaPhone.trim() && !mpesaCode.trim()) ||
+                (payMethod === "mpesa" && mpesaStatus !== "confirmed") ||
                 ((payMethod === "card" || payMethod === "bank") && !reference.trim())
               }
               onClick={() => void handlePay()}
@@ -1015,10 +1284,18 @@ export function PosTerminal() {
               <Printer className="mr-1 h-4 w-4" />
               Print slip
             </Button>
-            <Button className="flex-1" onClick={startNewSale} style={{ backgroundColor: brand }}>
-              New sale
+            <Button
+              variant="outline"
+              className="flex-1 bg-white"
+              onClick={() => downloadReceipt(receipt, company)}
+            >
+              <Download className="mr-1 h-4 w-4" />
+              Download
             </Button>
           </div>
+          <Button className="mt-2 w-full" onClick={startNewSale} style={{ backgroundColor: brand }}>
+            New sale
+          </Button>
         </DialogContent>
       </Dialog>
 

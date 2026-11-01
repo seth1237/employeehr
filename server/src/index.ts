@@ -57,6 +57,7 @@ import websiteOrderRoutes from "./routes/websiteOrder.routes"
 import ownerRoutes from "./routes/owner.routes"
 import complaintRoutes from "./routes/complaint.routes"
 import branchRoutes from "./routes/branch.routes"
+import branchTransferRoutes from "./routes/branchTransfer.routes"
 import aiAssistantRoutes from "./routes/aiAssistant.routes"
 import vehicleRoutes from "./routes/vehicle.routes"
 import creditNoteRoutes from "./routes/creditNote.routes"
@@ -135,8 +136,7 @@ app.use(
       if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.vercel.app') || process.env.NODE_ENV !== "production") {
         callback(null, true)
       } else {
-        // Fallback for any other custom integrations you might have
-        callback(null, true) // Temporarily kept permissive as original (true)
+        callback(new Error("Origin not allowed"))
       }
     },
     credentials: true,
@@ -159,7 +159,7 @@ app.options("*", cors({
     if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.vercel.app') || process.env.NODE_ENV !== "production") {
       callback(null, true)
     } else {
-      callback(null, true) 
+      callback(new Error("Origin not allowed"))
     }
   }, 
   credentials: true 
@@ -196,6 +196,7 @@ app.get("/", (_req, res) => {
 app.get("/api/jobs/public/:companyName/:positionIndex", JobController.getPublicJob)
 app.get("/api/application-forms/job/:jobId", ApplicationFormController.getFormByJobId)
 app.get("/api/meetings/by-meeting-id/:meetingId", MeetingController.getMeetingByMeetingIdPublic)
+app.post("/api/meetings/by-meeting-id/:meetingId/unlock", MeetingController.unlockMeetingByMeetingIdPublic)
 app.post("/api/meetings/by-meeting-id/:meetingId/join", MeetingController.joinMeetingByMeetingIdPublic)
 app.post("/api/quotes", StockController.createWebsiteQuotationRequest)
 app.use("/api/sms", smsWebhookRoutes)
@@ -207,6 +208,7 @@ app.use("/api/auth", authRoutes)
 app.use("/api/activity", activityRoutes)
 app.use("/api/users", userRoutes)
 app.use("/api/branches", branchRoutes)
+app.use("/api/transfers", branchTransferRoutes)
 app.use("/api/performance", performanceRoutes)
 app.use("/api/kpis", kpiRoutes)
 app.use("/api/pdps", pdpRoutes)

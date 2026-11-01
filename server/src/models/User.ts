@@ -11,7 +11,7 @@ const userSchema = new Schema<IUser>(
     password: { type: String, required: true },
     role: {
       type: String,
-      enum: ["super_admin", "company_admin", "admin", "manager", "employee", "hr", "sales_rep", "technical_service_engineer", "dispatch", "pos_cashier"],
+      enum: ["super_admin", "company_admin", "admin", "manager", "employee", "hr", "sales_rep", "technical_service_engineer", "dispatch", "pos_cashier", "portal_client"],
       default: "employee",
     },
     department: { type: String },
@@ -43,6 +43,7 @@ const userSchema = new Schema<IUser>(
     },
     grade: { type: String },
     workLocation: { type: String },
+    branchId: { type: String },
     probationEndDate: { type: Date },
     noticePeriodDays: { type: Number },
     lastWorkingDay: { type: Date },
@@ -75,5 +76,6 @@ userSchema.index({ org_id: 1 }) // For getAllUsers query
 userSchema.index({ org_id: 1, email: 1 }) // Compound index for org_id and email
 userSchema.index({ org_id: 1, manager_id: 1 }) // For getTeamMembers query
 userSchema.index({ org_id: 1, status: 1 }) // For filtering by status
+userSchema.index({ org_id: 1, branchId: 1 })
 
 export const User = mongoose.model<IUser>("User", userSchema)

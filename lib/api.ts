@@ -775,7 +775,10 @@ export const payrollApi = {
     client.put<any>(`/api/payroll/${id}`, data),
 
   getAll: (month?: string) =>
-    client.get<any[]>(`/api/payroll/all${month ? `?month=${month}` : ""}`),
+    client.get<any[]>(`/api/payroll/all${month ? `?month=${encodeURIComponent(month)}&limit=200` : "?limit=200"}`),
+
+  markMonthPaid: (month: string) =>
+    client.post<any>("/api/payroll/mark-month-paid", { month }),
 };
 
 // Meetings API
@@ -1348,8 +1351,13 @@ export const stockApi = {
     from?: string;
     to?: string;
   }) => {
-    const query = new URLSearchParams(params as Record<string, string>).toString();
-    return client.get<any>(`/api/stock/accounts/receivables/statement?${query}`);
+    const query = new URLSearchParams();
+    query.set("clientName", params.clientName);
+    query.set("clientNumber", params.clientNumber);
+    if (params.clientLocation) query.set("clientLocation", params.clientLocation);
+    if (params.from && /^\d{4}-\d{2}-\d{2}$/.test(params.from)) query.set("from", params.from);
+    if (params.to && /^\d{4}-\d{2}-\d{2}$/.test(params.to)) query.set("to", params.to);
+    return client.get<any>(`/api/stock/accounts/receivables/statement?${query.toString()}`);
   },
 
   getRepeatBills: () => client.get<any[]>("/api/stock/accounts/repeat-bills"),
@@ -1390,16 +1398,64 @@ export const stockApi = {
   },
 };
 
+function glQuery(params?: Record<string, any>) {
+  if (!params) return ""
+  const search = new URLSearchParams()
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      search.set(key, String(value))
+    }
+  })
+  const query = search.toString()
+  return query ? `?${query}` : ""
+}
+
 // General Ledger API
 export const glApi = {
   getAccounts: () => client.get<any[]>("/api/gl/accounts"),
   createAccount: (data: any) => client.post<any>("/api/gl/accounts", data),
   getJournals: () => client.get<any[]>("/api/gl/journals"),
   postJournal: (data: any) => client.post<any>("/api/gl/journals", data),
-  getTrialBalance: (params?: any) => client.get<any>("/api/gl/trial-balance", params ? { params: new URLSearchParams(params) } : undefined),
-  getProfitAndLoss: (params?: any) => client.get<any>("/api/gl/profit-and-loss", params ? { params: new URLSearchParams(params) } : undefined),
-  getBalanceSheet: (params?: any) => client.get<any>("/api/gl/balance-sheet", params ? { params: new URLSearchParams(params) } : undefined),
-  getLedger: (params?: any) => client.get<any>("/api/gl/ledger", params ? { params: new URLSearchParams(params) } : undefined),
+  reverseJournal: (id: string) => client.post<any>(`/api/gl/journals/${id}/reverse`, {}),
+  getTrialBalance: (params?: any) => client.get<any>(`/api/gl/trial-balance${glQuery(params)}`),
+  getProfitAndLoss: (params?: any) => client.get<any>(`/api/gl/profit-and-loss${glQuery(params)}`),
+  getBalanceSheet: (params?: any) => client.get<any>(`/api/gl/balance-sheet${glQuery(params)}`),
+  getLedger: (params?: any) => client.get<any>(`/api/gl/ledger${glQuery(params)}`),
+  getInquiry: (params?: any) => client.get<any>(`/api/gl/inquiry${glQuery(params)}`),
+  getCashFlow: (params?: any) => client.get<any>(`/api/gl/cash-flow${glQuery(params)}`),
+  getFinancialPack: (params?: any) => client.get<any>(`/api/gl/financial-pack${glQuery(params)}`),
+  getAccountReconciliation: () => client.get<any>("/api/gl/account-reconciliation"),
+  getCurrencies: () => client.get<any[]>("/api/gl/currencies"),
+  saveCurrency: (data: any) => client.post<any>("/api/gl/currencies", data),
+  getPeriods: (year?: number) => client.get<any>(`/api/gl/periods${glQuery(year ? { year } : undefined)}`),
+  setPeriodStatus: (data: any) => client.post<any>("/api/gl/periods/status", data),
+  getBudgets: (year?: number) => client.get<any[]>(`/api/gl/budgets${glQuery(year ? { year } : undefined)}`),
+  saveBudget: (data: any) => client.post<any>("/api/gl/budgets", data),
+  getBudgetVsActual: (year?: number) => client.get<any>(`/api/gl/budgets/vs-actual${glQuery(year ? { year } : undefined)}`),
+  getAssets: () => client.get<any[]>("/api/gl/assets"),
+  saveAsset: (data: any) => client.post<any>("/api/gl/assets", data),
+  runDepreciation: () => client.post<any>("/api/gl/assets/depreciate", {}),
+  disposeAsset: (id: string, data: any) => client.post<any>(`/api/gl/assets/${id}/dispose`, data),
+  transferAsset: (id: string, data: any) => client.post<any>(`/api/gl/assets/${id}/transfer`, data),
+  getWithholding: () => client.get<any[]>("/api/gl/withholding"),
+  saveWithholding: (data: any) => client.post<any>("/api/gl/withholding", data),
+  getVat: (params?: any) => client.get<any>(`/api/gl/vat${glQuery(params)}`),
+  getTaxReports: (params?: any) => client.get<any>(`/api/gl/tax-reports${glQuery(params)}`),
+  postPayrollJournal: (data: any) => client.post<any>("/api/gl/payroll-journal", data),
+  getCogs: () => client.get<any>("/api/gl/cogs"),
+  postStockAdjustment: (data: any) => client.post<any>("/api/gl/stock-adjustments", data),
+  getInventoryReconciliation: () => client.get<any>("/api/gl/inventory-reconciliation"),
+  importBankStatement: (data: any) => client.post<any>("/api/gl/bank-statements", data),
+  getBankStatements: (accountId?: string) => client.get<any[]>(`/api/gl/bank-statements${glQuery(accountId ? { accountId } : undefined)}`),
+  getAuditLogs: () => client.get<any[]>("/api/gl/audit-logs"),
+  getPayablesBills: () => client.get<any[]>("/api/gl/payables/bills"),
+  savePayablesBill: (data: any) => client.post<any>("/api/gl/payables/bills", data),
+  payPayablesBill: (id: string, data: any) => client.post<any>(`/api/gl/payables/bills/${id}/pay`, data),
+  getPayablesCreditNotes: () => client.get<any[]>("/api/gl/payables/credit-notes"),
+  savePayablesCreditNote: (data: any) => client.post<any>("/api/gl/payables/credit-notes", data),
+  getPayablesCreditors: () => client.get<any[]>("/api/gl/payables/creditors"),
+  getPayablesAging: () => client.get<any>("/api/gl/payables/aging"),
+  getPayablesStatement: (supplierId: string) => client.get<any>(`/api/gl/payables/statement${glQuery({ supplierId })}`),
 };
 
 // Setup API for onboarding wizard
@@ -1527,6 +1583,53 @@ const branchesApi = {
 
   getAnalytics: (branchId: string) =>
     client.get<any>(`/api/branches/${branchId}/analytics`),
+};
+
+const transferQuery = (params?: Record<string, string | undefined>) => {
+  const search = new URLSearchParams();
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value) search.set(key, value);
+  });
+  const query = search.toString();
+  return query ? `?${query}` : "";
+};
+
+export const branchTransferApi = {
+  context: () => client.get<any>("/api/transfers/context"),
+  getAll: (filters?: { status?: string; kind?: string; type?: string; branchId?: string }) =>
+    client.get<any>(`/api/transfers${transferQuery(filters)}`),
+  getById: (id: string) => client.get<any>(`/api/transfers/${id}`),
+  create: (data: any) => client.post<any>("/api/transfers", data),
+  update: (id: string, data: any) => client.put<any>(`/api/transfers/${id}`, data),
+  issue: (id: string) => client.post<any>(`/api/transfers/${id}/issue`, {}),
+  receive: (id: string, notes?: string) =>
+    client.post<any>(`/api/transfers/${id}/receive`, { notes }),
+  cancel: (id: string, reason?: string) =>
+    client.post<any>(`/api/transfers/${id}/cancel`, { reason }),
+  catalogProducts: (branchId: string) =>
+    client.get<any>(`/api/transfers/catalog/products${transferQuery({ branchId })}`),
+  catalogAssets: (branchId: string) =>
+    client.get<any>(`/api/transfers/catalog/assets${transferQuery({ branchId })}`),
+  catalogEmployees: (branchId: string) =>
+    client.get<any>(`/api/transfers/catalog/employees${transferQuery({ branchId })}`),
+  downloadPdf: async (id: string, numberHint?: string) => {
+    const token = getToken();
+    const response = await fetch(`${API_URL}/api/transfers/${id}/pdf`, {
+      method: "GET",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!response.ok) throw new Error("Failed to download transfer document");
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${numberHint || "transfer"}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+    return { success: true };
+  },
 };
 
 // Credit Notes API for invoice adjustments
@@ -1948,6 +2051,11 @@ export const posApi = {
   getSale: (id: string) => client.get<any>(`/api/pos/sales/${id}`),
   stkPush: (data: { phone: string; amount: number }) =>
     client.post<any>("/api/pos/mpesa/stk", data),
+  stkStatus: (checkoutRequestId: string) =>
+    client.get<any>(`/api/pos/mpesa/stk/${encodeURIComponent(checkoutRequestId)}`),
+  lookupMpesa: (data: { code: string; amount?: number; phone?: string }) =>
+    client.post<any>("/api/pos/mpesa/lookup", data),
+  recentMpesa: () => client.get<any[]>("/api/pos/mpesa/recent"),
 }
 
 export const salesApi = {
@@ -2149,6 +2257,7 @@ export const api = {
   stamps: stampsApi,
   complaints: complaintsApi,
   branches: branchesApi,
+  transfers: branchTransferApi,
   aiAssistant: aiAssistantApi,
   crm: crmApi,
   sales: salesApi,

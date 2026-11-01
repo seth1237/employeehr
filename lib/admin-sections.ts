@@ -1,3 +1,5 @@
+import { isProcurementEnabled } from "@/lib/module-flags"
+
 /** Canonical admin sidebar / page-access sections (keep in sync with server). */
 export const ADMIN_SECTION_OPTIONS = [
   "CORE",
@@ -16,6 +18,12 @@ export const ADMIN_SECTION_OPTIONS = [
 ] as const
 
 export type AdminSection = (typeof ADMIN_SECTION_OPTIONS)[number]
+
+export function visibleAdminSectionOptions() {
+  return ADMIN_SECTION_OPTIONS.filter(
+    (section) => section !== "PROCUREMENT (P2P)" || isProcurementEnabled(),
+  )
+}
 
 /** Sections that existed before CLIENTS / FLEET / IMPORTATION were added. */
 export const LEGACY_ADMIN_SECTIONS = [
@@ -126,8 +134,8 @@ export function resolveAdminAllowedSections(params: {
 
   const applyCap = (allowed: Set<string> | null): Set<string> | null => {
     if (!platformCap) return allowed
-    if (!allowed) { platformCap.add("PROCUREMENT (P2P)"); return platformCap; }
-    const res = new Set([...allowed].filter((section) => platformCap.has(section))); res.add("PROCUREMENT (P2P)"); return res;
+    if (!allowed) return platformCap
+    return new Set([...allowed].filter((section) => platformCap.has(section)))
   }
 
   if (!role || role === "super_admin") {

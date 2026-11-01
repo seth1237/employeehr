@@ -62,6 +62,10 @@ export default function AdminLayout({
     // company_admin, admin, and hr can access the admin area
     if (!isAdmin()) {
       if (user.role === "manager") {
+        if (pathname.startsWith("/admin/stock/transfers")) {
+          setLoading(false);
+          return;
+        }
         router.push("/manager");
       } else if (user.role === "super_admin") {
         router.push("/owner");

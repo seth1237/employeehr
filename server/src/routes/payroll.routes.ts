@@ -12,6 +12,8 @@ router.get("/payslip/:id", PayrollController.getPayslipDetails)
 
 // Admin/HR routes
 router.post("/generate", roleMiddleware("company_admin", "hr"), PayrollController.generate)
+router.post("/generate-bulk", roleMiddleware("company_admin", "hr"), PayrollController.generateBulk)
+router.post("/mark-month-paid", roleMiddleware("company_admin", "hr"), PayrollController.markMonthPaid)
 router.put("/:id", roleMiddleware("company_admin", "hr"), PayrollController.update)
 router.get("/all", roleMiddleware("company_admin", "hr"), PayrollController.getAll)
 

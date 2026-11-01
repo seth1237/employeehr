@@ -15,7 +15,7 @@ export default function ChartOfAccountsPage() {
   const [accounts, setAccounts] = useState<any[]>([])
   
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ code: "", name: "", type: "asset", description: "" })
+  const [form, setForm] = useState({ code: "", name: "", type: "asset", description: "", currency: "KES", controlType: "none" })
   const [saving, setSaving] = useState(false)
 
   const loadData = async () => {
@@ -40,7 +40,7 @@ export default function ChartOfAccountsPage() {
       setSaving(true)
       await glApi.createAccount(form)
       setShowForm(false)
-      setForm({ code: "", name: "", type: "asset", description: "" })
+      setForm({ code: "", name: "", type: "asset", description: "", currency: "KES", controlType: "none" })
       await loadData()
     } catch (err: any) {
       window.alert(err.message || "Failed to create account")
@@ -81,6 +81,8 @@ export default function ChartOfAccountsPage() {
                     <th className="px-4 py-2">Code</th>
                     <th className="px-4 py-2">Account Name</th>
                     <th className="px-4 py-2">Type</th>
+                    <th className="px-4 py-2">Control</th>
+                    <th className="px-4 py-2">Currency</th>
                     <th className="px-4 py-2">System</th>
                   </tr>
                 </thead>
@@ -92,6 +94,8 @@ export default function ChartOfAccountsPage() {
                       <td className="px-4 py-2">
                         <Badge variant="outline" className="capitalize">{acc.type}</Badge>
                       </td>
+                      <td className="px-4 py-2 capitalize">{acc.controlType && acc.controlType !== "none" ? acc.controlType : "—"}</td>
+                      <td className="px-4 py-2">{acc.currency || "KES"}</td>
                       <td className="px-4 py-2">
                         {acc.isSystem && <Badge variant="secondary" className="text-[10px]">System</Badge>}
                       </td>
@@ -136,6 +140,24 @@ export default function ChartOfAccountsPage() {
                     onChange={e => setForm({ ...form, name: e.target.value })}
                     placeholder="e.g. Petty Cash"
                   />
+                </div>
+                <div>
+                  <Label>Control type</Label>
+                  <select
+                    className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
+                    value={form.controlType}
+                    onChange={(e) => setForm({ ...form, controlType: e.target.value })}
+                  >
+                    <option value="none">None</option>
+                    <option value="customer">Customer</option>
+                    <option value="vendor">Vendor</option>
+                    <option value="bank">Bank</option>
+                    <option value="cash">Cash</option>
+                  </select>
+                </div>
+                <div>
+                  <Label>Currency</Label>
+                  <Input value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value.toUpperCase() })} />
                 </div>
                 <Button className="w-full" onClick={handleSave} disabled={saving}>
                   {saving ? "Saving..." : "Save Account"}

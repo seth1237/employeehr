@@ -14,6 +14,7 @@ import {
 import { getToken } from "@/lib/auth"
 import Image from "next/image"
 import API_URL from "@/lib/apiBase"
+import { downloadEmployeePayslip } from "@/lib/payslip-download"
 
 interface Payslip {
   _id: string
@@ -142,123 +143,7 @@ export default function PayslipPage() {
 
   const downloadPayslip = () => {
     if (!selectedPayslip) return
-
-    const { payslip, user, company } = selectedPayslip
-    
-    const printContent = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Payslip - ${payslip.month}</title>
-        <style>
-          body { font-family: Arial, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; }
-          .header { text-align: center; margin-bottom: 30px; }
-          .company-logo { max-width: 150px; margin-bottom: 10px; }
-          .company-name { font-size: 24px; font-weight: bold; margin: 10px 0; color: ${primaryColor}; }
-          .payslip-title { font-size: 20px; color: #666; margin-top: 20px; }
-          .info-section { margin: 20px 0; }
-          .info-row { display: flex; justify-content: space-between; margin: 5px 0; padding: 4px 0; }
-          .info-label { font-weight: bold; }
-          table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-          th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
-          th { background-color: #f5f5f5; font-weight: bold; }
-          .total-row { font-weight: bold; font-size: 16px; background-color: #f9f9f9; }
-          .net-pay { font-size: 18px; color: #059669; }
-          .footer { margin-top: 40px; text-align: center; color: #666; font-size: 12px; }
-          @media print {
-            body { padding: 20px; }
-            .no-print { display: none; }
-          }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          ${company.logo ? `<img src="${company.logo}" alt="${company.name}" class="company-logo" />` : ''}
-          <div class="company-name">${company.name}</div>
-          <div>${company.email || ''} ${company.phone ? '• ' + company.phone : ''}</div>
-          <div>${[company.city, company.state, company.country].filter(Boolean).join(', ')}</div>
-          <div class="payslip-title">PAYSLIP - ${new Date(payslip.month + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</div>
-        </div>
-
-        <div class="info-section">
-          <div class="info-row">
-            <span class="info-label">Employee Name:</span>
-            <span>${user.firstName} ${user.lastName}</span>
-          </div>
-          <div class="info-row">
-            <span class="info-label">Employee ID:</span>
-            <span>${user.employee_id}</span>
-          </div>
-          <div class="info-row">
-            <span class="info-label">Position:</span>
-            <span>${user.position || 'N/A'}</span>
-          </div>
-          <div class="info-row">
-            <span class="info-label">Department:</span>
-            <span>${user.department || 'N/A'}</span>
-          </div>
-          <div class="info-row">
-            <span class="info-label">Payment Date:</span>
-            <span>${new Date(payslip.generated_at).toLocaleDateString()}</span>
-          </div>
-        </div>
-
-        <table>
-          <thead>
-            <tr>
-              <th>Description</th>
-              <th style="text-align: right;">Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>Base Salary</td>
-              <td style="text-align: right;">KES ${payslip.base_salary.toLocaleString()}</td>
-            </tr>
-            ${payslip.bonus > 0 ? `
-            <tr>
-              <td>Bonus</td>
-              <td style="text-align: right;">KES ${payslip.bonus.toLocaleString()}</td>
-            </tr>
-            ` : ''}
-            <tr class="total-row">
-              <td>Gross Pay</td>
-              <td style="text-align: right;">KES ${(payslip.base_salary + payslip.bonus).toLocaleString()}</td>
-            </tr>
-            ${payslip.deduction_items.map(item => `
-            <tr>
-              <td>${item.name} (Deduction)</td>
-              <td style="text-align: right; color: #dc2626;">- KES ${item.amount.toLocaleString()}</td>
-            </tr>
-            `).join('')}
-            <tr class="total-row">
-              <td>Total Deductions</td>
-              <td style="text-align: right; color: #dc2626;">- KES ${payslip.total_deductions.toLocaleString()}</td>
-            </tr>
-            <tr class="total-row net-pay">
-              <td>NET PAY</td>
-              <td style="text-align: right;">KES ${payslip.net_pay.toLocaleString()}</td>
-            </tr>
-          </tbody>
-        </table>
-
-        <div class="footer">
-          <p>This is a computer-generated document. No signature is required.</p>
-          <p>Generated on ${new Date().toLocaleDateString()}</p>
-        </div>
-      </body>
-      </html>
-    `
-
-    const printWindow = window.open('', '_blank')
-    if (printWindow) {
-      printWindow.document.write(printContent)
-      printWindow.document.close()
-      printWindow.focus()
-      setTimeout(() => {
-        printWindow.print()
-      }, 250)
-    }
+    downloadEmployeePayslip(selectedPayslip, primaryColor)
   }
 
   const formatMonth = (month: string) => {

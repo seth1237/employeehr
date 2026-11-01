@@ -5,8 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useToast } from "@/hooks/use-toast"
-import { Loader2, Plus, Edit2, Trash2, User } from "lucide-react"
+import { Loader2, Plus, Edit2, Trash2, User, ArrowLeftRight } from "lucide-react"
+import Link from "next/link"
 import { api } from "@/lib/api"
+import { rememberActiveBranchCount } from "@/lib/company-branches"
 import { finishDataLoad, startDataLoad } from "@/lib/silent-load"
 import { TableSkeleton } from "@/components/admin/ui/page-states"
 
@@ -68,7 +70,11 @@ export default function BranchManagementPage() {
     const silent = startDataLoad(opts, setLoading)
     try {
       const response = await api.branches.getAll()
-      setBranches(response?.data || [])
+      const nextBranches = response?.data || []
+      setBranches(nextBranches)
+      rememberActiveBranchCount(
+        nextBranches.filter((branch: Branch) => branch.isActive !== false).length,
+      )
     } catch (error) {
       console.error("Error fetching branches:", error)
       toast({ description: "Failed to load branches", variant: "destructive" })
@@ -152,7 +158,7 @@ export default function BranchManagementPage() {
 
     try {
       await api.branches.allocateManager(branchId, selectedAdmin)
-      toast({ description: "Branch manager assigned successfully" })
+      toast({ description: "Branch admin assigned successfully" })
       fetchBranches(true)
       setAllocatingBranchId(null)
       setSelectedAdmin("")
@@ -183,7 +189,9 @@ export default function BranchManagementPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Branch Management</h1>
-          <p className="text-muted-foreground text-sm">Create and manage company branches with assigned admins</p>
+          <p className="text-muted-foreground text-sm">
+            Each branch can have its own admin to issue and receive inventory, asset, and staff transfers
+          </p>
         </div>
         <Button onClick={() => setShowForm(!showForm)} className="gap-2">
           <Plus className="w-4 h-4" />
@@ -319,44 +327,66 @@ export default function BranchManagementPage() {
                       <div className="mt-3 p-2 bg-green-50 border border-green-200 rounded text-sm">
                         <p className="font-medium text-green-900 flex items-center gap-2">
                           <User className="w-4 h-4" />
-                          Manager: {branch.managerName}
+                          Branch admin: {branch.managerName}
                         </p>
-                        <p className="text-xs text-green-800">{branch.email}</p>
+                        <p className="text-xs text-green-800">{branch.managerEmail || branch.email}</p>
                       </div>
                     )}
                   </div>
 
                   <div className="flex gap-2 flex-col">
-                    {!branch.managerId && (
-                      <div className="space-y-2">
-                        <select
-                          value={allocatingBranchId === branch._id ? selectedAdmin : ""}
-                          onChange={(e) => {
-                            setAllocatingBranchId(branch._id)
-                            setSelectedAdmin(e.target.value)
-                          }}
-                          className="px-2 py-1 border rounded text-xs"
+                    <div className="space-y-2">
+                      <select
+                        value={allocatingBranchId === branch._id ? selectedAdmin : ""}
+                        onChange={(e) => {
+                          setAllocatingBranchId(branch._id)
+                          setSelectedAdmin(e.target.value)
+                        }}
+                        className="px-2 py-1 border rounded text-xs"
+                      >
+                        <option value="">{branch.managerId ? "Change branch admin..." : "Select branch admin..."}</option>
+                        {admins.map((admin) => (
+                          <option key={admin._id} value={admin._id}>
+                            {admin.firstName} {admin.lastName} ({admin.role})
+                          </option>
+                        ))}
+                      </select>
+                      {allocatingBranchId === branch._id && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleAllocateManager(branch._id)}
+                          className="gap-2 w-full"
                         >
-                          <option value="">Select Branch Manager...</option>
-                          {admins.map((admin) => (
-                            <option key={admin._id} value={admin._id}>
-                              {admin.firstName} {admin.lastName} ({admin.role})
-                            </option>
-                          ))}
-                        </select>
-                        {allocatingBranchId === branch._id && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleAllocateManager(branch._id)}
-                            className="gap-2 w-full"
-                          >
-                            <User className="w-4 h-4" />
-                            Assign Admin
-                          </Button>
-                        )}
-                      </div>
-                    )}
+                          <User className="w-4 h-4" />
+                          {branch.managerId ? "Reassign admin" : "Assign admin"}
+                        </Button>
+                      )}
+                      {branch.managerId && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={async () => {
+                            try {
+                              await api.branches.removeManager(branch._id)
+                              toast({ description: "Branch admin removed" })
+                              fetchBranches(true)
+                            } catch (error) {
+                              toast({ description: "Failed to remove branch admin", variant: "destructive" })
+                            }
+                          }}
+                          className="w-full"
+                        >
+                          Remove admin
+                        </Button>
+                      )}
+                    </div>
+                    <Button asChild size="sm" variant="outline" className="gap-2">
+                      <Link href={`/admin/stock/transfers?branch=${branch._id}`}>
+                        <ArrowLeftRight className="w-4 h-4" />
+                        Transfers
+                      </Link>
+                    </Button>
                     <Button size="sm" variant="outline" onClick={() => handleEdit(branch)} className="gap-2">
                       <Edit2 className="w-4 h-4" />
                       Edit

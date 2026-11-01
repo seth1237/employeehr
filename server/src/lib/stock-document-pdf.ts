@@ -836,6 +836,97 @@ function drawTermsAndPaymentChannelsSection(
   return availableBottom;
 }
 
+function drawTransferPartiesSection(
+  doc: jsPDF,
+  fromBranch: { name: string; code?: string; issuedBy?: string },
+  toBranch: { name: string; code?: string; receivedBy?: string },
+  branding?: TenantBranding,
+  startY = 90,
+) {
+  const primary = branding?.primaryColor || DEFAULT_PRIMARY;
+  const leftX = 12;
+  const rightX = 106;
+  const boxY = Math.max(startY, 72);
+  const boxW = 92;
+  const headerH = 6.5;
+  const lineH = 4;
+  const padX = 3.5;
+  const padY = 3;
+
+  const fromName = doc.splitTextToSize(fromBranch.name || "Sending branch", 84);
+  const toName = doc.splitTextToSize(toBranch.name || "Receiving branch", 84);
+  const leftHeight = headerH + padY + (fromName.length + 2) * lineH + 1;
+  const rightHeight = headerH + padY + (toName.length + 2) * lineH + 1;
+  const boxH = Math.max(leftHeight, rightHeight, headerH + 12);
+
+  setColorFromHex(doc, primary, "draw");
+  doc.setLineWidth(0.35);
+  doc.rect(leftX, boxY, boxW, boxH);
+  doc.rect(rightX, boxY, boxW, boxH);
+  setColorFromHex(doc, DEFAULT_LIGHT, "fill");
+  doc.rect(leftX, boxY, boxW, headerH, "F");
+  doc.rect(rightX, boxY, boxW, headerH, "F");
+  doc.line(leftX, boxY + headerH, leftX + boxW, boxY + headerH);
+  doc.line(rightX, boxY + headerH, rightX + boxW, boxY + headerH);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9.5);
+  setColorFromHex(doc, DEFAULT_TEXT, "text");
+  doc.text("From Branch", leftX + padX, boxY + 4.5);
+  doc.text("To Branch", rightX + padX, boxY + 4.5);
+
+  let ly = boxY + headerH + padY + 2.8;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8.8);
+  doc.text(fromName, leftX + padX, ly);
+  ly += fromName.length * lineH;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7.8);
+  setColorFromHex(doc, DEFAULT_GRAY, "text");
+  doc.text(`Code: ${fromBranch.code || "—"}`, leftX + padX, ly);
+  ly += lineH;
+  doc.text(`Issued by: ${fromBranch.issuedBy || "—"}`, leftX + padX, ly);
+
+  let ry = boxY + headerH + padY + 2.8;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8.8);
+  setColorFromHex(doc, DEFAULT_TEXT, "text");
+  doc.text(toName, rightX + padX, ry);
+  ry += toName.length * lineH;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7.8);
+  setColorFromHex(doc, DEFAULT_GRAY, "text");
+  doc.text(`Code: ${toBranch.code || "—"}`, rightX + padX, ry);
+  ry += lineH;
+  doc.text(`Received by: ${toBranch.receivedBy || "Pending receipt"}`, rightX + padX, ry);
+
+  return boxY + boxH + 2.5;
+}
+
+function drawTransferSignatures(
+  doc: jsPDF,
+  startY: number,
+  issuedBy: string,
+  receivedBy?: string,
+) {
+  let y = Math.max(startY + 10, 240);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  setColorFromHex(doc, DEFAULT_GRAY, "text");
+
+  doc.text("Issued By (Sending Branch)", 14, y);
+  doc.line(14, y + 12, 90, y + 12);
+  doc.setFontSize(8);
+  doc.text(issuedBy || "Name & Signature", 14, y + 18);
+
+  doc.setFontSize(10);
+  doc.text("Received By (Destination Branch)", 110, y);
+  doc.line(110, y + 12, 190, y + 12);
+  doc.setFontSize(8);
+  doc.text(receivedBy || "Name & Signature", 110, y + 18);
+}
+
 function drawDeliverySignatures(
   doc: jsPDF,
   startY: number,
@@ -2294,6 +2385,114 @@ export function generateDeliveryNotePdf(params: {
 
   if (params.autoSave !== false) {
     doc.save(`delivery-note-${params.deliveryNoteNumber}.pdf`);
+  }
+
+  return doc;
+}
+
+export function generateBranchTransferPdf(params: {
+  documentNumber: string;
+  createdAt: string;
+  kind: string;
+  status?: string;
+  fromBranch: { name: string; code?: string; issuedBy?: string };
+  toBranch: { name: string; code?: string; receivedBy?: string };
+  items: DocumentItem[];
+  reason?: string;
+  carrier?: string;
+  vehicleReg?: string;
+  reference?: string;
+  branding?: TenantBranding;
+  invoiceSettings?: InvoiceDocumentSettings;
+  preparedBy: string;
+  watermarkText?: string;
+  autoSave?: boolean;
+}) {
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+
+  drawWatermark(doc, params.watermarkText);
+
+  drawModernHeader(doc, {
+    title: "Transfer",
+    numberLabel: "Transfer No",
+    numberValue: params.documentNumber,
+    createdAt: params.createdAt,
+    branding: {
+      ...params.branding,
+      invoiceEmail:
+        params.invoiceSettings?.invoiceEmail || params.branding?.invoiceEmail,
+    },
+  });
+
+  const contactBottom = drawContactSlotBelowLogo(
+    doc,
+    params.branding,
+    params.invoiceSettings,
+  );
+
+  let tableY = drawTransferPartiesSection(
+    doc,
+    params.fromBranch,
+    params.toBranch,
+    params.branding,
+    contactBottom + 1,
+  );
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  setColorFromHex(doc, DEFAULT_GRAY, "text");
+  const refsY = tableY + 1;
+  const kindLabel =
+    params.kind === "inventory"
+      ? "Inventory"
+      : params.kind === "asset"
+        ? "Fixed asset"
+        : params.kind === "employee"
+          ? "Employee"
+          : "Mixed";
+  doc.text(`Type: ${kindLabel}`, 12, refsY);
+  if (params.reference) {
+    doc.text(`Reference: ${params.reference}`, 198, refsY, { align: "right" });
+  }
+  tableY = refsY + 5;
+  const meta = [
+    params.reason ? `Reason: ${params.reason}` : "",
+    params.carrier ? `Carrier: ${params.carrier}` : "",
+    params.vehicleReg ? `Vehicle: ${params.vehicleReg}` : "",
+  ]
+    .filter(Boolean)
+    .join("   ·   ");
+  if (meta) {
+    const wrapped = doc.splitTextToSize(meta, 186);
+    doc.text(wrapped, 12, tableY);
+    tableY += wrapped.length * 4 + 3;
+  } else {
+    tableY += 2;
+  }
+
+  const endY = drawItemsTable(doc, tableY, params.items, params.branding, true);
+
+  drawTransferSignatures(
+    doc,
+    endY,
+    params.preparedBy || params.fromBranch.issuedBy || "",
+    params.toBranch.receivedBy,
+  );
+
+  drawBottomFooter(
+    doc,
+    params.branding,
+    {
+      ...params.invoiceSettings,
+      includePaymentChannels: false,
+      termsAndConditions:
+        "This document authorizes movement of the listed inventory, assets, and/or employees. Goods remain in transit until the destination branch records receipt.",
+    },
+    params.preparedBy,
+  );
+
+  if (params.autoSave !== false) {
+    doc.save(`transfer-${params.documentNumber}.pdf`);
   }
 
   return doc;

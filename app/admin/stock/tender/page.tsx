@@ -121,6 +121,7 @@ interface DraftItem {
   imageUrl?: string;
   showImageOnQuote?: boolean;
   categoryGroup?: string;
+  priceOverride?: boolean;
 }
 
 interface StampOption {
@@ -668,7 +669,7 @@ export default function TendersPage() {
     const unitPrice = itemUnitPrice
       ? Number(itemUnitPrice)
       : Number(product.sellingPrice || 0);
-    if (unitPrice < 0) {
+    if (!Number.isFinite(unitPrice) || unitPrice < 0) {
       toast({
         title: "Invalid price",
         description: "Price cannot be negative",
@@ -678,13 +679,12 @@ export default function TendersPage() {
     }
 
     const minimumPrice = Number(product.sellingPrice || 0);
-    if (unitPrice < minimumPrice) {
+    const isOverride = unitPrice < minimumPrice;
+    if (isOverride) {
       toast({
-        title: "Invalid sold price",
-        description: `Sold price cannot be below minimum selling price (${minimumPrice})`,
-        variant: "destructive",
+        title: "Minimum price overridden",
+        description: `Sold at ${unitPrice} — catalog minimum is ${minimumPrice}`,
       });
-      return;
     }
 
     const inferredCategoryGroup =
@@ -699,6 +699,7 @@ export default function TendersPage() {
         productUnitPrice: Number(product.sellingPrice || 0),
         soldUnitPrice: unitPrice,
         unitPrice,
+        priceOverride: isOverride,
         description: itemDescription || product.description || "",
         imageUrl: product.imageUrl,
         showImageOnQuote: true,
@@ -723,18 +724,23 @@ export default function TendersPage() {
     setItems((prev) =>
       prev.map((item, currentIndex) => {
         if (currentIndex !== index) return item;
+        if (value === "" || value === "-" || value === ".") {
+          return {
+            ...item,
+            soldUnitPrice: 0,
+            unitPrice: 0,
+            priceOverride: Number(item.productUnitPrice ?? 0) > 0,
+          };
+        }
         const parsed = Number(value);
-        if (!Number.isFinite(parsed)) return item;
+        if (!Number.isFinite(parsed) || parsed < 0) return item;
 
-        const minimumPrice = Number(
-          item.productUnitPrice ?? item.unitPrice ?? 0,
-        );
-        const nextSoldPrice = parsed < minimumPrice ? minimumPrice : parsed;
-
+        const minimumPrice = Number(item.productUnitPrice ?? 0);
         return {
           ...item,
-          soldUnitPrice: nextSoldPrice,
-          unitPrice: nextSoldPrice,
+          soldUnitPrice: parsed,
+          unitPrice: parsed,
+          priceOverride: minimumPrice > 0 && parsed < minimumPrice,
         };
       }),
     );
@@ -908,18 +914,24 @@ export default function TendersPage() {
       const categoryGroup =
         item.categoryGroup || matchedProduct?.categoryDetails?.name || "";
 
+      const catalogPrice =
+        item.productUnitPrice ??
+        matchedProduct?.sellingPrice ??
+        item.unitPrice;
+      const soldPrice = item.soldUnitPrice ?? item.unitPrice;
       return {
         productId: item.productId,
         productName: item.productName,
         quantity: item.quantity,
-        productUnitPrice: item.productUnitPrice ?? item.unitPrice,
-        soldUnitPrice: item.soldUnitPrice ?? item.unitPrice,
-        unitPrice: item.unitPrice,
+        productUnitPrice: catalogPrice,
+        soldUnitPrice: soldPrice,
+        unitPrice: soldPrice,
         isOutsourced: Boolean(item.isOutsourced),
         description: item.description,
         imageUrl: item.imageUrl,
         showImageOnQuote: item.showImageOnQuote ?? true,
         categoryGroup: categoryGroup || undefined,
+        priceOverride: Number(catalogPrice || 0) > 0 && soldPrice < Number(catalogPrice || 0),
       };
     });
     setItems(mappedItems);
@@ -1810,9 +1822,14 @@ export default function TendersPage() {
                   <Input
                     type="number"
                     min="0"
+                    step="0.01"
                     value={itemUnitPrice}
                     onChange={(event) => setItemUnitPrice(event.target.value)}
                   />
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Leave blank to use catalog price. You can go below the
+                    minimum selling price.
+                  </p>
                 </div>
                 <div className="md:col-span-4">
                   <Label>Section / Category (optional)</Label>
@@ -1961,7 +1978,7 @@ export default function TendersPage() {
                         <th className="py-2 px-2">Product</th>
                         <th className="py-2 px-2">Qty</th>
                         <th className="py-2 px-2">Product Price</th>
-                        <th className="py-2 px-2">Sold Price (Editable)</th>
+                        <th className="py-2 px-2">Sold Price (override OK)</th>
                         <th className="py-2 px-2">Section</th>
                         <th className="py-2 px-2">Outsourced</th>
                         <th className="py-2 px-2">Total</th>
@@ -2081,7 +2098,8 @@ export default function TendersPage() {
                               <td className="py-2 px-2">
                                 <Input
                                   type="number"
-                                  min={Number(referencePrice || 0)}
+                                  min={0}
+                                  step="0.01"
                                   value={soldPrice}
                                   onChange={(event) =>
                                     updateDraftItemSoldPrice(
@@ -2089,11 +2107,21 @@ export default function TendersPage() {
                                       event.target.value,
                                     )
                                   }
-                                  className="h-8"
+                                  className={`h-8 ${
+                                    soldPrice < Number(referencePrice || 0)
+                                      ? "border-amber-400"
+                                      : ""
+                                  }`}
                                 />
-                                <div className="mt-1 text-[10px] text-muted-foreground">
-                                  Min: {referencePrice}
-                                </div>
+                                {soldPrice < Number(referencePrice || 0) ? (
+                                  <div className="mt-1 text-[10px] font-medium text-amber-700">
+                                    Override · catalog min {referencePrice}
+                                  </div>
+                                ) : (
+                                  <div className="mt-1 text-[10px] text-muted-foreground">
+                                    Catalog min: {referencePrice}
+                                  </div>
+                                )}
                               </td>
                               <td className="py-2 px-2">
                                 <Input

@@ -8,6 +8,33 @@ function generateDocumentNumber(prefix: string) {
   return `${prefix}-${ts}-${rand}`;
 }
 
+function normalizeTenderItem(item: any) {
+  const price = Number(item.soldUnitPrice ?? item.unitPrice ?? 0)
+  const qty = Number(item.quantity || 1)
+  const catalogPrice = Number(item.productUnitPrice ?? 0)
+  if (!Number.isFinite(price) || price < 0) {
+    throw new Error("Sold price cannot be negative")
+  }
+  if (!Number.isFinite(qty) || qty <= 0) {
+    throw new Error("Quantity must be at least 1")
+  }
+  return {
+    productId: item.productId,
+    productName: item.productName,
+    quantity: qty,
+    productUnitPrice: Number.isFinite(catalogPrice) ? catalogPrice : 0,
+    soldUnitPrice: price,
+    unitPrice: price,
+    lineTotal: Number((price * qty).toFixed(2)),
+    taxRate: item.taxRate,
+    isOutsourced: Boolean(item.isOutsourced),
+    description: item.description,
+    imageUrl: item.imageUrl,
+    showImageOnQuote: item.showImageOnQuote,
+    categoryGroup: item.categoryGroup,
+  }
+}
+
 export class TenderController {
   public static async createTender(req: Request, res: Response) {
     try {
@@ -35,15 +62,7 @@ export class TenderController {
         return res.status(400).json({ success: false, message: "At least one item is required" })
       }
 
-      const normalizedItems = items.map((item: any) => {
-        const price = Number(item.soldUnitPrice ?? item.unitPrice ?? 0)
-        const qty = Number(item.quantity || 1)
-        return {
-          ...item,
-          unitPrice: price,
-          lineTotal: price * qty
-        }
-      })
+      const normalizedItems = items.map((item: any) => normalizeTenderItem(item))
 
       const subTotal = normalizedItems.reduce((acc: number, cur: any) => acc + cur.lineTotal, 0)
 
@@ -115,15 +134,7 @@ export class TenderController {
         return res.status(400).json({ success: false, message: "At least one item is required" })
       }
 
-      const normalizedItems = items.map((item: any) => {
-        const price = Number(item.soldUnitPrice ?? item.unitPrice ?? 0)
-        const qty = Number(item.quantity || 1)
-        return {
-          ...item,
-          unitPrice: price,
-          lineTotal: price * qty
-        }
-      })
+      const normalizedItems = items.map((item: any) => normalizeTenderItem(item))
 
       const subTotal = normalizedItems.reduce((acc: number, cur: any) => acc + cur.lineTotal, 0)
 

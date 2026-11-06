@@ -1100,6 +1100,16 @@ export const stockApi = {
     data?: { transportCost?: number; transportNote?: string },
   ) =>
     client.post<any>(`/api/stock/quotations/${quotationId}/convert`, data || {}),
+  getSalesOrders: () => client.get<any[]>("/api/stock/sales-orders"),
+  getSalesOrderById: (orderId: string) =>
+    client.get<any>(`/api/stock/sales-orders/${orderId}`),
+  invoiceSalesOrder: (
+    orderId: string,
+    data?: { transportCost?: number; transportNote?: string },
+  ) =>
+    client.post<any>(`/api/stock/sales-orders/${orderId}/invoice`, data || {}),
+  cancelSalesOrder: (orderId: string, reason?: string) =>
+    client.post<any>(`/api/stock/sales-orders/${orderId}/cancel`, { reason }),
   approveInvoice: (invoiceId: string) =>
     client.post<any>(`/api/stock/invoices/${invoiceId}/approve`, {}),
   postInvoice: (invoiceId: string) =>

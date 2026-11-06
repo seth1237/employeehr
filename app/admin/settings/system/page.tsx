@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
-import { getUser } from "@/lib/auth"
+import { getToken, getUser } from "@/lib/auth"
 import API_URL from "@/lib/apiBase"
 import { useRouter } from "next/navigation"
 import { Settings, ShieldCheck, FileText, MapPin, Globe2, Download, Copy, Mail } from "lucide-react"
@@ -17,14 +17,21 @@ export default function SystemSettingsPage() {
   const user = getUser()
   const organizationId = user?.org_id || user?.organizationId || user?.companyId || ""
   const [bypass, setBypass] = useState<boolean | null>(null)
+  const [costingMethod, setCostingMethod] = useState<"average" | "fifo">("average")
 
   const loadStockSettings = async () => {
     try {
-      const token = undefined
-      const res = await fetch(`${API_URL}/api/company/stock-settings`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      const token = getToken()
+      const res = await fetch(`${API_URL}/api/company/stock-settings`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        credentials: "include",
+      })
       const json = await res.json()
       if (!res.ok) throw new Error(json.message || "Failed to load settings")
       setBypass(Boolean(json.data?.stockSettings?.bypassWebsiteQuotationApproval))
+      setCostingMethod(
+        json.data?.stockSettings?.inventoryCostingMethod === "fifo" ? "fifo" : "average",
+      )
     } catch (err) {
       // ignore
     }
@@ -184,11 +191,15 @@ export default function SystemSettingsPage() {
                 <div>
                   <Switch checked={!!bypass} onCheckedChange={async (val) => {
                     try {
-                      const token = undefined
+                      const token = getToken()
                       const res = await fetch(`${API_URL}/api/company/stock-settings`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-                        body: JSON.stringify({ bypassWebsiteQuotationApproval: Boolean(val) }),
+                        credentials: "include",
+                        body: JSON.stringify({
+                          bypassWebsiteQuotationApproval: Boolean(val),
+                          inventoryCostingMethod: costingMethod,
+                        }),
                       })
                       const json = await res.json()
                       if (!res.ok) throw new Error(json.message || "Failed to update")
@@ -198,6 +209,43 @@ export default function SystemSettingsPage() {
                     }
                   }} />
                 </div>
+              </div>
+              <div className="mt-4 flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium">Inventory costing</p>
+                  <p className="text-xs text-muted-foreground">
+                    Moving average (default) or FIFO layers. Every stock issue posts COGS.
+                  </p>
+                </div>
+                <select
+                  className="rounded-md border bg-background px-2 py-1.5 text-sm"
+                  value={costingMethod}
+                  onChange={async (event) => {
+                    const next = event.target.value === "fifo" ? "fifo" : "average"
+                    try {
+                      const token = getToken()
+                      const res = await fetch(`${API_URL}/api/company/stock-settings`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                        credentials: "include",
+                        body: JSON.stringify({
+                          bypassWebsiteQuotationApproval: Boolean(bypass),
+                          inventoryCostingMethod: next,
+                        }),
+                      })
+                      const json = await res.json()
+                      if (!res.ok) throw new Error(json.message || "Failed to update")
+                      setCostingMethod(
+                        json.data?.stockSettings?.inventoryCostingMethod === "fifo" ? "fifo" : "average",
+                      )
+                    } catch (err) {
+                      // ignore errors in UI
+                    }
+                  }}
+                >
+                  <option value="average">Moving average</option>
+                  <option value="fifo">FIFO</option>
+                </select>
               </div>
             </div>
           </CardContent>

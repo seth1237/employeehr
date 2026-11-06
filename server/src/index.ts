@@ -125,15 +125,27 @@ const allowedOrigins = [
   "https://tarumed.vercel.app",
   "https://www.tarumed.vercel.app",
   "https://tarumed.co.ke",
-  "https://www.tarumed.co.ke"
+  "https://www.tarumed.co.ke",
+  "https://employeehr-zeta.vercel.app",
 ];
+
+function isAllowedOrigin(origin?: string) {
+  if (!origin) return true
+  if (allowedOrigins.includes(origin)) return true
+  if (origin.endsWith(".vercel.app")) return true
+  if (process.env.NODE_ENV !== "production") return true
+  const extra = String(process.env.CORS_ORIGINS || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean)
+  return extra.includes(origin)
+}
 
 // Core middleware — explicitly allow specific domains
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps or curl) or dynamically check
-      if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.vercel.app') || process.env.NODE_ENV !== "production") {
+      if (isAllowedOrigin(origin)) {
         callback(null, true)
       } else {
         callback(new Error("Origin not allowed"))
@@ -154,15 +166,15 @@ app.use(
     optionsSuccessStatus: 204,
   }),
 )
-app.options("*", cors({ 
+app.options("*", cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.vercel.app') || process.env.NODE_ENV !== "production") {
+    if (isAllowedOrigin(origin)) {
       callback(null, true)
     } else {
       callback(new Error("Origin not allowed"))
     }
-  }, 
-  credentials: true 
+  },
+  credentials: true,
 }))
 app.use(express.json({ limit: "10mb" }))
 app.use(express.urlencoded({ extended: true, limit: "10mb" }))

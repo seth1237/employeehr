@@ -54,6 +54,7 @@ type StockQuote = {
   status: "draft" | "pending_approval" | "converted" | "cancelled"
   approvedAt?: string
   convertedInvoiceId?: string
+  convertedSalesOrderId?: string
   client?: { name?: string; number?: string; location?: string; contactPerson?: string }
   items?: Array<{
     productId?: string
@@ -210,7 +211,13 @@ export default function SalesQuotesPage() {
           unitPrice: Number(product.sellingPrice || 0),
           taxRate: Number(product.taxRate || 16),
           taxable: Boolean(product.taxable),
-          availableQtySnapshot: Number(product.currentQuantity || 0),
+          availableQtySnapshot: Math.max(
+            0,
+            Number(
+              product.availableQuantity ??
+                Number(product.currentQuantity || 0) - Number(product.reservedQuantity || 0),
+            ),
+          ),
         },
       ]
     })
@@ -273,18 +280,38 @@ export default function SalesQuotesPage() {
     }
   }
 
-  const convertToInvoice = async (
+  const convertToSalesOrder = async (quote: StockQuote) => {
+    setConvertingId(quote._id)
+    try {
+      const res = await stockApi.convertQuotation(quote._id)
+      toast({
+        title: "Sales order confirmed",
+        description: res?.data?.orderNumber
+          ? `${res.data.orderNumber} reserved stock. Create an invoice when the client is ready.`
+          : "Stock is reserved on the sales order.",
+      })
+      void load()
+    } catch (error: any) {
+      toast({ title: "Convert failed", description: error?.message, variant: "destructive" })
+    } finally {
+      setConvertingId(null)
+    }
+  }
+
+  const invoiceSalesOrder = async (
     quote: StockQuote,
     transport?: QuotationTransportInput,
   ) => {
+    const orderId = quote.convertedSalesOrderId
+    if (!orderId) return
     setConvertingId(quote._id)
     try {
-      await stockApi.convertQuotation(quote._id, transport)
+      await stockApi.invoiceSalesOrder(orderId, transport)
       toast({ title: "Invoice sent for admin approval" })
       setTransportTarget(null)
       void load()
     } catch (error: any) {
-      toast({ title: "Convert failed", description: error?.message, variant: "destructive" })
+      toast({ title: "Invoice failed", description: error?.message, variant: "destructive" })
     } finally {
       setConvertingId(null)
     }
@@ -431,7 +458,14 @@ export default function SalesQuotesPage() {
                     <span className="min-w-0 flex-1">
                       <span className="font-medium block truncate">{product.name}</span>
                       <span className="block text-xs text-muted-foreground mt-0.5">
-                        In stock: {product.currentQuantity}
+                        Available: {Math.max(
+                          0,
+                          Number(
+                            product.availableQuantity ??
+                              Number(product.currentQuantity || 0) -
+                                Number(product.reservedQuantity || 0),
+                          ),
+                        )}
                         {product.taxable ? ` · Tax ${product.taxRate || 16}%` : " · No tax"}
                       </span>
                     </span>
@@ -592,8 +626,12 @@ export default function SalesQuotesPage() {
               const canDownloadQuote = quoteIsApproved(quote) || quote.status === "converted"
               const canConvert =
                 quoteIsApproved(quote) &&
+                !quote.convertedSalesOrderId &&
                 (!invoice || invoice.status === "cancelled") &&
                 quote.status !== "converted"
+              const canInvoiceOrder =
+                Boolean(quote.convertedSalesOrderId) &&
+                (!invoice || invoice.status === "cancelled")
               const invoiceReady = invoice?.status === "issued" || invoice?.status === "paid"
               
               return (
@@ -627,18 +665,39 @@ export default function SalesQuotesPage() {
                           size="sm"
                           className="min-h-10 text-white hover:opacity-90"
                           style={{ backgroundColor: primaryColor }}
+                          onClick={() => void convertToSalesOrder(quote)}
+                          disabled={convertingId === quote._id}
+                        >
+                          {convertingId === quote._id ? (
+                            <>
+                              <Clock className="mr-1.5 h-3 w-3 animate-spin" />
+                              Reserving…
+                            </>
+                          ) : (
+                            <>
+                              <ArrowRightLeft className="mr-1.5 h-3 w-3" />
+                              Create sales order
+                            </>
+                          )}
+                        </Button>
+                      )}
+                      {canInvoiceOrder && (
+                        <Button
+                          size="sm"
+                          className="min-h-10 text-white hover:opacity-90"
+                          style={{ backgroundColor: primaryColor }}
                           onClick={() => setTransportTarget(quote)}
                           disabled={convertingId === quote._id}
                         >
                           {convertingId === quote._id ? (
                             <>
                               <Clock className="mr-1.5 h-3 w-3 animate-spin" />
-                              Converting…
+                              Invoicing…
                             </>
                           ) : (
                             <>
                               <ArrowRightLeft className="mr-1.5 h-3 w-3" />
-                              Convert to invoice
+                              Create invoice
                             </>
                           )}
                         </Button>
@@ -693,8 +752,9 @@ export default function SalesQuotesPage() {
         loading={!!transportTarget && convertingId === transportTarget._id}
         onConfirm={async (transport) => {
           if (!transportTarget) return
-          await convertToInvoice(transportTarget, transport)
+          await invoiceSalesOrder(transportTarget, transport)
         }}
+        confirmLabel="Create invoice"
       />
     </SalesPage>
   )

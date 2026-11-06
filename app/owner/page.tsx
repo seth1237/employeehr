@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Switch } from "@/components/ui/switch"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -31,10 +32,12 @@ import {
   MapPin,
   RefreshCw,
   Trash2,
+  Zap,
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { getToken, getUser } from "@/lib/auth"
 import { resolveEnabledAdminSections } from "@/lib/enabled-pages"
+import { ON_THE_GO_PAGES } from "@/lib/on-the-go"
 import API_URL from "@/lib/apiBase"
 
 interface Company {
@@ -50,6 +53,7 @@ interface Company {
   frozenReason?: string
   frozenAt?: Date
   enabledPages?: string[]
+  onTheGo?: boolean
   maxEmployees?: number
   employeeCount?: number
   createdAt?: string
@@ -139,6 +143,7 @@ const FEATURE_SECTIONS = {
 }
 
 const CLIENTS_ONLY_PAGES = ["CORE", "CLIENTS"]
+const ON_THE_GO_MODULE_PAGES = [...ON_THE_GO_PAGES]
 
 const OWNER_EMAILS = ["bellarinseth@gmail.com", "info@elevatehub.co.ke"]
 
@@ -302,16 +307,68 @@ export default function OwnerPage() {
         body: JSON.stringify({ companyId, enabledPages }),
       })
       if (res.ok) {
+        const result = await res.json().catch(() => null)
+        const nextOnTheGo = Boolean(result?.data?.onTheGo)
         toast({ description: "Permissions synchronized" })
         setSelectedCompany((current) =>
-          current && current._id === companyId ? { ...current, enabledPages } : current,
+          current && current._id === companyId
+            ? { ...current, enabledPages, onTheGo: nextOnTheGo }
+            : current,
         )
         setCompanies((current) =>
-          current.map((company) => (company._id === companyId ? { ...company, enabledPages } : company)),
+          current.map((company) =>
+            company._id === companyId
+              ? { ...company, enabledPages, onTheGo: nextOnTheGo }
+              : company,
+          ),
         )
       }
     } catch {
       toast({ description: "Update failed", variant: "destructive" })
+    }
+  }
+
+  const handleOnTheGo = async (companyId: string, onTheGo: boolean) => {
+    try {
+      const res = await fetch(`${API_URL}/api/owner/companies/${companyId}/on-the-go`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ companyId, onTheGo }),
+      })
+      if (!res.ok) {
+        toast({ description: "Could not update On the Go mode", variant: "destructive" })
+        return
+      }
+      const result = await res.json().catch(() => null)
+      const enabledPages = onTheGo
+        ? ON_THE_GO_MODULE_PAGES
+        : selectedCompany?._id === companyId
+          ? selectedCompany.enabledPages
+          : undefined
+      toast({
+        description: onTheGo
+          ? "On the Go enabled — quotes, invoices, clients, and products only"
+          : "On the Go turned off",
+      })
+      setSelectedCompany((current) =>
+        current && current._id === companyId
+          ? { ...current, onTheGo, enabledPages: enabledPages || current.enabledPages }
+          : current,
+      )
+      setCompanies((current) =>
+        current.map((company) =>
+          company._id === companyId
+            ? {
+                ...company,
+                onTheGo,
+                enabledPages: enabledPages || company.enabledPages,
+                ...(result?.data?.enabledPages ? { enabledPages: result.data.enabledPages } : {}),
+              }
+            : company,
+        ),
+      )
+    } catch {
+      toast({ description: "Could not update On the Go mode", variant: "destructive" })
     }
   }
 
@@ -976,15 +1033,22 @@ export default function OwnerPage() {
                             </div>
                           </td>
                           <td className="p-4 text-center">
-                            <Badge
-                              className={`${
-                                company.isFrozen
-                                  ? "bg-red-50 text-red-700 border-red-100"
-                                  : "bg-emerald-50 text-emerald-700 border-emerald-100"
-                              } uppercase text-[9px] px-2 py-0.5 font-bold`}
-                            >
-                              {company.isFrozen ? "Restricted" : "Operational"}
-                            </Badge>
+                            <div className="flex flex-col items-center gap-1">
+                              <Badge
+                                className={`${
+                                  company.isFrozen
+                                    ? "bg-red-50 text-red-700 border-red-100"
+                                    : "bg-emerald-50 text-emerald-700 border-emerald-100"
+                                } uppercase text-[9px] px-2 py-0.5 font-bold`}
+                              >
+                                {company.isFrozen ? "Restricted" : "Operational"}
+                              </Badge>
+                              {company.onTheGo ? (
+                                <Badge className="bg-sky-50 text-sky-700 border-sky-100 uppercase text-[9px] px-2 py-0.5 font-bold">
+                                  On the Go
+                                </Badge>
+                              ) : null}
+                            </div>
                           </td>
                           <td className="p-4 capitalize text-xs font-semibold text-slate-700">
                             {company.subscription}
@@ -1165,6 +1229,36 @@ export default function OwnerPage() {
             </div>
 
             <div className="max-h-[70vh] overflow-y-auto p-6 space-y-8">
+              <div
+                className={`p-5 rounded-lg border-l-4 ${
+                  selectedCompany.onTheGo
+                    ? "bg-sky-50 border-sky-500"
+                    : "bg-slate-50 border-slate-300"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-900 uppercase tracking-widest flex items-center gap-2 mb-2">
+                      <Zap className="h-4 w-4 text-sky-600" />
+                      On the Go
+                    </h3>
+                    <p className="text-[11px] text-slate-600 leading-relaxed">
+                      For businesses that mainly need quotes and invoices. They get a
+                      slim workspace: dashboard, clients, products, quotations,
+                      invoices, and company settings. HR, fleet, accounts, and the
+                      rest of the ERP stay off.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={Boolean(selectedCompany.onTheGo)}
+                    onCheckedChange={(checked) =>
+                      void handleOnTheGo(selectedCompany._id, Boolean(checked))
+                    }
+                    aria-label="Enable On the Go mode"
+                  />
+                </div>
+              </div>
+
               <div>
                 <div className="flex items-center gap-2 mb-4 border-b border-slate-100 pb-2">
                   <LayoutGrid className="h-4 w-4 text-slate-700" />
@@ -1173,7 +1267,9 @@ export default function OwnerPage() {
                   </h3>
                 </div>
                 <p className="mb-4 text-xs text-slate-500">
-                  Turn off areas this company should not see. Use Clients only to leave Dashboard & users plus the Clients hub.
+                  {selectedCompany.onTheGo
+                    ? "On the Go locks this company to the basics. Turn it off to restore extra modules."
+                    : "Turn off areas this company should not see. Use Clients only to leave Dashboard & users plus the Clients hub."}
                 </p>
                 <div className="mb-4 flex flex-wrap gap-2">
                   <Button
@@ -1181,6 +1277,7 @@ export default function OwnerPage() {
                     size="sm"
                     variant="outline"
                     className="h-8 text-xs"
+                    disabled={Boolean(selectedCompany.onTheGo)}
                     onClick={() => handleUpdatePages(selectedCompany._id, CLIENTS_ONLY_PAGES)}
                   >
                     Clients only
@@ -1190,6 +1287,7 @@ export default function OwnerPage() {
                     size="sm"
                     variant="ghost"
                     className="h-8 text-xs"
+                    disabled={Boolean(selectedCompany.onTheGo)}
                     onClick={() =>
                       handleUpdatePages(
                         selectedCompany._id,
@@ -1218,6 +1316,7 @@ export default function OwnerPage() {
                             <span className="text-xs font-semibold text-slate-700">{f.label}</span>
                             <Checkbox
                               checked={checked}
+                              disabled={Boolean(selectedCompany.onTheGo)}
                               onCheckedChange={(isChecked) => {
                                 const current = resolveEnabledAdminSections(selectedCompany.enabledPages)
                                 const next = isChecked

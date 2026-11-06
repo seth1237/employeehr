@@ -1127,7 +1127,7 @@ export default function InvoicesPage() {
               }
               actionHref={
                 invoices.length === 0
-                  ? "/admin/stock/quotations?action=new"
+                  ? "/admin/stock/quotations/new"
                   : undefined
               }
             />
@@ -1517,7 +1517,7 @@ export default function InvoicesPage() {
 
             <StickyActionBar label="Invoice actions">
               <Button asChild size="sm" variant="outline" className="flex-1">
-                <Link href="/admin/stock/quotations?action=new">New quote</Link>
+                <Link href="/admin/stock/quotations/new">New quote</Link>
               </Button>
               <Button
                 size="sm"

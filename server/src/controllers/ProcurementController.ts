@@ -11,6 +11,7 @@ import { GeneralLedgerService } from "../services/GeneralLedgerService"
 import { Account } from "../models/Account"
 import { StockProduct } from "../models/StockProduct"
 import mongoose from "mongoose"
+import { receiveStock, unitCostOf } from "../services/inventoryCosting.service"
 
 export class ProcurementController {
   // ================= SUPPLIERS =================
@@ -175,29 +176,39 @@ export class ProcurementController {
       if (!grn) return res.status(404).json({ success: false, message: "GRN not found" })
       if (grn.status === "confirmed") return res.status(400).json({ success: false, message: "GRN already confirmed" })
 
+      const po = await PurchaseOrder.findOne({ _id: grn.purchaseOrderId, org_id: req.org_id })
       for (const item of grn.items) {
         if (!item.productId || item.receivedQuantity <= 0) continue
         if (!mongoose.Types.ObjectId.isValid(String(item.productId))) {
           return res.status(400).json({ success: false, message: `Invalid product id on GRN item ${item.productName}` })
         }
-        const updated = await StockProduct.findOneAndUpdate(
-          { _id: item.productId, org_id: req.org_id },
-          { $inc: { currentQuantity: item.receivedQuantity } },
-          { new: true },
-        )
-        if (!updated) {
+        const product = await StockProduct.findOne({ _id: item.productId, org_id: req.org_id })
+        if (!product) {
           return res.status(400).json({
             success: false,
             message: `Product ${item.productName || item.productId} was not found in this company`,
           })
         }
+        const poItem = po?.items?.find(
+          (row: { productId?: string; productName: string; unitPrice?: number }) =>
+            (item.productId && String(row.productId) === String(item.productId)) ||
+            String(row.productName).toLowerCase() === String(item.productName || "").toLowerCase(),
+        )
+        await receiveStock({
+          orgId: String(req.org_id),
+          productId: String(item.productId),
+          quantity: Number(item.receivedQuantity),
+          unitCost: Number(poItem?.unitPrice || 0) || unitCostOf(product),
+          actorId: String(req.user?.userId || ""),
+          source: "receipt",
+          sourceId: String(grn._id),
+          branchId: grn.warehouseId,
+        })
       }
 
       grn.status = "confirmed"
       grn.stockUpdated = true
       await grn.save()
-
-      const po = await PurchaseOrder.findOne({ _id: grn.purchaseOrderId, org_id: req.org_id })
       if (po) {
         for (const received of grn.items) {
           const match = po.items.find(

@@ -38,6 +38,8 @@ type Quotation = {
   }>
   subTotal: number
   status: string
+  convertedSalesOrderId?: string
+  convertedInvoiceId?: string
   createdAt?: string
   createdByName?: string
   ownerUserName?: string
@@ -244,18 +246,29 @@ export default function QuotationDetailPage({
             kind="quotation"
             documentId={quotation._id}
             document={documentData}
-            onConverted={(invoiceId) =>
-              router.push(`/admin/stock/invoices/${invoiceId}`)
-            }
           />
+          {quotation.convertedSalesOrderId ? (
+            <Button asChild size="sm" variant="outline">
+              <Link href={`/admin/stock/sales-orders/${quotation.convertedSalesOrderId}`}>
+                Sales order
+              </Link>
+            </Button>
+          ) : null}
+          {quotation.convertedInvoiceId ? (
+            <Button asChild size="sm" variant="outline">
+              <Link href={`/admin/stock/invoices/${quotation.convertedInvoiceId}`}>
+                Invoice
+              </Link>
+            </Button>
+          ) : null}
           {quotation.status === "draft" && (
             <Button
               size="sm"
               variant="outline"
               asChild
             >
-              <Link href={`/admin/stock/quotations?edit=${quotation._id}`}>
-                Edit on list
+              <Link href={`/admin/stock/quotations/new?edit=${quotation._id}`}>
+                Edit quote
               </Link>
             </Button>
           )}

@@ -3,6 +3,7 @@ import { AuthenticatedRequest } from "../../middleware/auth"
 import { GoodsReceiptNote } from "../../models/GoodsReceiptNote"
 import { PurchaseOrder } from "../../models/PurchaseOrder"
 import { StockProduct } from "../../models/StockProduct"
+import { receiveStock, unitCostOf } from "../../services/inventoryCosting.service"
 
 export class GrnController {
   
@@ -95,13 +96,26 @@ export class GrnController {
         
         // Update Inventory Balances
         if (!grn.stockUpdated) {
+          const po = grn.purchaseOrderId
+            ? await PurchaseOrder.findOne({ _id: grn.purchaseOrderId, org_id: req.org_id })
+            : null
           for (const item of grn.items) {
-            if (item.productId && item.receivedQuantity > 0) {
-              await StockProduct.updateOne(
-                { _id: item.productId, org_id: req.org_id },
-                { $inc: { currentStock: item.receivedQuantity } }
-              )
-            }
+            if (!item.productId || item.receivedQuantity <= 0) continue
+            const product = await StockProduct.findOne({ _id: item.productId, org_id: req.org_id })
+            if (!product) continue
+            const poItem = po?.items?.find(
+              (row: { productId?: string }) => String(row.productId) === String(item.productId),
+            )
+            await receiveStock({
+              orgId: String(req.org_id),
+              productId: String(item.productId),
+              quantity: Number(item.receivedQuantity),
+              unitCost: Number((poItem as any)?.unitPrice || 0) || unitCostOf(product),
+              actorId: String(req.user?.userId || ""),
+              source: "receipt",
+              sourceId: String(grn._id),
+              branchId: grn.warehouseId,
+            })
           }
           grn.stockUpdated = true
         }

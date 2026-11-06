@@ -35,6 +35,7 @@ import {
   type PeriodKind,
   type PeriodWindow,
 } from "../lib/sales-periods"
+import { availableQuantity } from "../services/inventoryCosting.service"
 const VAT_RATE = 16
 const ADMIN_ROLES = new Set(["company_admin", "admin", "hr", "super_admin"])
 
@@ -984,20 +985,24 @@ export class SalesController {
 
       const products = await StockProduct.find(filter)
         .sort({ name: 1 })
-        .limit(40)
-        .select("_id name sellingPrice currentQuantity taxable taxRate category")
+        .limit(80)
+        .select("_id name sellingPrice currentQuantity reservedQuantity taxable taxRate category")
         .lean()
+
+      const mapped = products.map((p) => ({
+        _id: String(p._id),
+        name: p.name,
+        sellingPrice: Number(p.sellingPrice || 0),
+        currentQuantity: Number(p.currentQuantity || 0),
+        reservedQuantity: Number((p as any).reservedQuantity || 0),
+        availableQuantity: availableQuantity(p),
+        taxable: Boolean(p.taxable),
+        taxRate: Number(p.taxRate || VAT_RATE),
+      }))
 
       return res.status(200).json({
         success: true,
-        data: products.map((p) => ({
-          _id: String(p._id),
-          name: p.name,
-          sellingPrice: Number(p.sellingPrice || 0),
-          currentQuantity: Number(p.currentQuantity || 0),
-          taxable: Boolean(p.taxable),
-          taxRate: Number(p.taxRate || VAT_RATE),
-        })),
+        data: inStockOnly ? mapped.filter((p) => p.availableQuantity > 0).slice(0, 40) : mapped.slice(0, 40),
       })
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Failed to search stock"

@@ -15,6 +15,7 @@ import WarehouseController from "../controllers/warehouseController";
 import { InstalledMachineController } from "../controllers/installedMachineController";
 import { MachineServiceController } from "../controllers/machineServiceController";
 import { TenderController } from "../controllers/tenderController";
+import { SalesOrderController } from "../controllers/salesOrderController";
 import { ClientCrmController } from "../controllers/clientCrmController";
 import { EmailMarketingController } from "../controllers/emailMarketingController";
 import { BarcodeController } from "../controllers/barcodeController";
@@ -82,6 +83,13 @@ router.post(
   "/quotations/:quotationId/convert",
   StockController.convertQuotationToInvoice,
 );
+router.get("/sales-orders", SalesOrderController.list);
+router.get("/sales-orders/:orderId", SalesOrderController.getById);
+router.post(
+  "/sales-orders/:orderId/invoice",
+  SalesOrderController.convertToInvoice,
+);
+router.post("/sales-orders/:orderId/cancel", SalesOrderController.cancel);
 router.post(
   "/quotations/:quotationId/followups",
   QuotationController.addQuotationFollowUp,

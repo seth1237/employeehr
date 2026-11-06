@@ -117,6 +117,7 @@ export interface ICompany {
   salesNightOutAmount?: number;
   stockSettings?: {
     bypassWebsiteQuotationApproval?: boolean;
+    inventoryCostingMethod?: "average" | "fifo";
   };
   attendanceSettings?: {
     lateHour?: number;
@@ -202,6 +203,7 @@ export interface ICompany {
     permissionMatrixByUser?: Record<string, string[]>;
   };
   enabledPages?: string[];
+  onTheGo?: boolean;
   isFrozen?: boolean;
   frozenReason?: string | null;
   frozenAt?: Date | null;

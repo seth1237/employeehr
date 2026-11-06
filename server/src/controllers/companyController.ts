@@ -10,6 +10,7 @@ import {
   buildInvoiceDocumentSettings,
 } from "../services/companyDocumentSettings.service";
 import { resolveEnabledAdminSections } from "../lib/enabledPages";
+import { ON_THE_GO_PAGES } from "../lib/onTheGo";
 
 const ADMIN_SECTION_OPTIONS = [
   "CORE",
@@ -615,7 +616,7 @@ export class CompanyController {
       }
 
       const company = await Company.findById(req.org_id).select(
-        "pageAccessSettings enabledPages",
+        "pageAccessSettings enabledPages onTheGo",
       );
       if (!company) {
         return res
@@ -692,9 +693,10 @@ export class CompanyController {
         (branch: any) => branchSections[String(branch._id)] || [],
       );
 
-      const platformEnabledSections = resolveEnabledAdminSections(
-        (company as any).enabledPages,
-      );
+      const onTheGo = Boolean((company as any).onTheGo);
+      const platformEnabledSections = onTheGo
+        ? [...ON_THE_GO_PAGES]
+        : resolveEnabledAdminSections((company as any).enabledPages);
       const capSections = (list: string[]) =>
         platformEnabledSections.length === ADMIN_SECTION_OPTIONS.length
           ? list
@@ -732,6 +734,7 @@ export class CompanyController {
           effectiveSections,
           effectivePermissions,
           platformEnabledSections,
+          onTheGo,
           currentDepartment: matchingDepartment || null,
           managedBranches,
           availableSections:
@@ -770,10 +773,19 @@ export class CompanyController {
         }
 
         const bypass = Boolean(req.body?.bypassWebsiteQuotationApproval);
+        const methodRaw = String(req.body?.inventoryCostingMethod || "").toLowerCase()
+        const inventoryCostingMethod = methodRaw === "fifo" ? "fifo" : methodRaw === "average" ? "average" : undefined
+
+        const $set: Record<string, unknown> = {
+          "stockSettings.bypassWebsiteQuotationApproval": bypass,
+        }
+        if (inventoryCostingMethod) {
+          $set["stockSettings.inventoryCostingMethod"] = inventoryCostingMethod
+        }
 
         const company = await Company.findByIdAndUpdate(
           req.org_id,
-          { $set: { "stockSettings.bypassWebsiteQuotationApproval": bypass } },
+          { $set },
           { new: true },
         ).select("stockSettings");
 

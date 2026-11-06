@@ -492,16 +492,20 @@ export class FinanceController {
     if (!org_id) return res.status(401).json({ success: false, message: "Unauthorized" })
     const sales = await StockSale.find({ org_id }).sort({ createdAt: -1 }).limit(500).lean()
     const productIds = [...new Set(sales.map((row) => String(row.productId)))]
-    const products = await StockProduct.find({ _id: { $in: productIds }, org_id }).select("name startingPrice").lean()
-    const costMap = new Map(products.map((row) => [String(row._id), Number(row.startingPrice || 0)]))
+    const products = await StockProduct.find({ _id: { $in: productIds }, org_id }).select("name startingPrice averageCost").lean()
+    const costMap = new Map(products.map((row) => [String(row._id), Number((row as any).averageCost || row.startingPrice || 0)]))
     const rows = sales.map((sale) => {
-      const unitCost = costMap.get(String(sale.productId)) || 0
-      const cogs = roundMoney(unitCost * Number(sale.quantitySold || 0))
+      const recorded = Number((sale as any).unitCost || 0)
+      const unitCost = recorded > 0 ? recorded : costMap.get(String(sale.productId)) || 0
+      const cogs = Number((sale as any).totalCost || 0) > 0
+        ? Number((sale as any).totalCost)
+        : roundMoney(unitCost * Number(sale.quantitySold || 0))
       return {
         ...sale,
         productName: products.find((row) => String(row._id) === String(sale.productId))?.name || sale.productId,
         unitCost,
         cogs,
+        costingMethod: (sale as any).costingMethod || null,
       }
     })
     return res.json({
@@ -521,12 +525,29 @@ export class FinanceController {
     if (!product) return res.status(404).json({ success: false, message: "Product not found" })
     const qty = Number(quantity)
     if (!Number.isFinite(qty) || qty === 0) return res.status(400).json({ success: false, message: "quantity is required" })
-    product.currentQuantity = Math.max(0, Number(product.currentQuantity || 0) + qty)
-    await product.save()
+    const { receiveStock, issueStock, unitCostOf } = await import("../services/inventoryCosting.service")
+    const unit = unitCostOf(product)
+    if (qty > 0) {
+      await receiveStock({
+        orgId: org_id,
+        productId: String(product._id),
+        quantity: qty,
+        unitCost: unit,
+        actorId: userIdOf(req),
+        source: "adjustment",
+      })
+    } else {
+      await issueStock({
+        orgId: org_id,
+        productId: String(product._id),
+        quantity: Math.abs(qty),
+      })
+    }
+    const fresh = await StockProduct.findOne({ _id: product._id, org_id })
     await GeneralLedgerService.initializeDefaultAccounts(org_id)
     const inventory = await Account.findOne({ org_id, code: "1300" })
     const expense = await Account.findOne({ org_id, code: "6000" })
-    const amount = roundMoney(Math.abs(qty) * Number(product.startingPrice || 0))
+    const amount = roundMoney(Math.abs(qty) * unit)
     let entry = null
     if (inventory && expense && amount > 0) {
       const writeOff = qty < 0
@@ -552,15 +573,21 @@ export class FinanceController {
         userIdOf(req),
       )
     }
-    return res.json({ success: true, data: { product, entry } })
+    return res.json({ success: true, data: { product: fresh || product, entry } })
   }
 
   static async inventoryReconciliation(req: AuthenticatedRequest, res: Response) {
     const org_id = orgOf(req)
     if (!org_id) return res.status(401).json({ success: false, message: "Unauthorized" })
-    const products = await StockProduct.find({ org_id, isActive: { $ne: false } }).select("name currentQuantity startingPrice").lean()
+    const products = await StockProduct.find({ org_id, isActive: { $ne: false } }).select("name currentQuantity startingPrice averageCost").lean()
     const stockValue = roundMoney(
-      products.reduce((sum, row) => sum + Number(row.currentQuantity || 0) * Number(row.startingPrice || 0), 0),
+      products.reduce(
+        (sum, row) =>
+          sum +
+          Number(row.currentQuantity || 0) *
+            Number((row as any).averageCost || row.startingPrice || 0),
+        0,
+      ),
     )
     const tb = await GeneralLedgerService.getTrialBalance(org_id)
     const inventory = tb.find((row: any) => String(row.code) === "1300")

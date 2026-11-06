@@ -17,6 +17,9 @@ export interface IStockSale {
   invoiceId?: string
   receiptNumber: string
   remainingQuantity: number
+  unitCost?: number
+  totalCost?: number
+  costingMethod?: string
   createdAt?: Date
   updatedAt?: Date
 }
@@ -38,6 +41,9 @@ const stockSaleSchema = new Schema<IStockSale>(
     invoiceId: { type: String },
     receiptNumber: { type: String, required: true, index: true },
     remainingQuantity: { type: Number, required: true, min: 0 },
+    unitCost: { type: Number, min: 0, default: 0 },
+    totalCost: { type: Number, min: 0, default: 0 },
+    costingMethod: { type: String, enum: ["average", "fifo"], default: "average" },
   },
   { timestamps: true },
 )

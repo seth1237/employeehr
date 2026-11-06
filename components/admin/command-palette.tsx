@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/command"
 import { ADMIN_NAV_ITEMS } from "@/lib/admin-nav"
 import { isInterBranchNavHref, useCompanyBranches } from "@/lib/company-branches"
+import { isOnTheGoNavHref, useOnTheGo } from "@/lib/on-the-go"
 import { stockApi } from "@/lib/api"
 import {
   getFavoriteHrefs,
@@ -41,6 +42,7 @@ type RecordHit = {
 export function AdminCommandPalette() {
   const router = useRouter()
   const { hasBranches } = useCompanyBranches()
+  const { onTheGo } = useOnTheGo()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState("")
   const [records, setRecords] = useState<RecordHit[]>([])
@@ -149,9 +151,11 @@ export function AdminCommandPalette() {
     [router],
   )
 
-  const visibleNavItems = ADMIN_NAV_ITEMS.filter(
-    (item) => hasBranches || !isInterBranchNavHref(item.href),
-  )
+  const visibleNavItems = ADMIN_NAV_ITEMS.filter((item) => {
+    if (!hasBranches && isInterBranchNavHref(item.href)) return false
+    if (onTheGo && !isOnTheGoNavHref(item.href)) return false
+    return true
+  })
   const favoriteItems = visibleNavItems.filter((item) =>
     favoriteHrefs.includes(item.href),
   )
@@ -194,18 +198,29 @@ export function AdminCommandPalette() {
           <CommandEmpty>{searching ? "Searching..." : "No results found."}</CommandEmpty>
 
           <CommandGroup heading="Quick actions">
-            <CommandItem onSelect={() => go("/admin/stock/quotations?action=new")}>
+            <CommandItem onSelect={() => go(onTheGo ? "/admin/stock/quotations/new" : "/admin/stock/quotations?action=new")}>
               <PlusCircle className="h-4 w-4" />
               Create quotation
+            </CommandItem>
+            <CommandItem onSelect={() => go("/admin/stock/sales-orders")}>
+              <FileText className="h-4 w-4" />
+              Open sales orders
             </CommandItem>
             <CommandItem onSelect={() => go("/admin/stock/invoices")}>
               <FileText className="h-4 w-4" />
               Open invoices
             </CommandItem>
-            <CommandItem onSelect={() => go("/admin/alerts")}>
-              <LayoutGrid className="h-4 w-4" />
-              Notifications inbox
-            </CommandItem>
+            {!onTheGo ? (
+              <CommandItem onSelect={() => go("/admin/alerts")}>
+                <LayoutGrid className="h-4 w-4" />
+                Notifications inbox
+              </CommandItem>
+            ) : (
+              <CommandItem onSelect={() => go("/admin/clients/clients-list")}>
+                <Users className="h-4 w-4" />
+                Open clients
+              </CommandItem>
+            )}
           </CommandGroup>
 
           {!qLower && favoriteItems.length > 0 && (

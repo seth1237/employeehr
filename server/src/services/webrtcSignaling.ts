@@ -21,7 +21,8 @@ export class WebRTCSignalingService {
       "https://tarumed.vercel.app",
       "https://www.tarumed.vercel.app",
       "https://tarumed.co.ke",
-      "https://www.tarumed.co.ke"
+      "https://www.tarumed.co.ke",
+      "https://employeehr-zeta.vercel.app",
     ];
 
     this.io = new SocketIOServer(server, {

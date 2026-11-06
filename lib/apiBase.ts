@@ -6,6 +6,7 @@ const DEFAULT_PROD = "https://backend.codewithseth.co.ke"
 const FRONTEND_HOSTS = new Set([
   "elevatehub.co.ke",
   "www.elevatehub.co.ke",
+  "employeehr-zeta.vercel.app",
 ])
 
 function normalizeUrl(value?: string) {

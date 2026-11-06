@@ -116,6 +116,9 @@ interface Product {
   sellingPrice: number;
   minAlertQuantity: number;
   currentQuantity: number;
+  reservedQuantity?: number;
+  availableQuantity?: number;
+  averageCost?: number;
   assignedUsers: string[];
   isOutsourced?: boolean;
   taxable?: boolean;
@@ -520,7 +523,9 @@ export function StockManagerContent({ view }: { view: StockView }) {
   );
   const totalStockValue = products.reduce(
     (sum, product) =>
-      sum + (product.currentQuantity || 0) * (product.sellingPrice || 0),
+      sum +
+      (product.currentQuantity || 0) *
+        Number(product.averageCost || product.startingPrice || 0),
     0,
   );
   const totalSalesValue = sales.reduce(
@@ -4351,7 +4356,10 @@ export function StockManagerContent({ view }: { view: StockView }) {
                             "Product",
                             "Category",
                             "Branch Stock",
-                            "Total Stock",
+                            "On Hand",
+                            "Reserved",
+                            "Available",
+                            "Avg Cost",
                             "Min Alert",
                             "Selling Price",
                           ],
@@ -4362,6 +4370,16 @@ export function StockManagerContent({ view }: { view: StockView }) {
                               "",
                             getDisplayedBranchSummary(product._id),
                             product.currentQuantity,
+                            Number(product.reservedQuantity || 0),
+                            Math.max(
+                              0,
+                              Number(
+                                product.availableQuantity ??
+                                  Number(product.currentQuantity || 0) -
+                                    Number(product.reservedQuantity || 0),
+                              ),
+                            ),
+                            Number(product.averageCost || product.startingPrice || 0),
                             product.minAlertQuantity,
                             product.sellingPrice,
                           ]),
@@ -4448,7 +4466,10 @@ export function StockManagerContent({ view }: { view: StockView }) {
                               </span>
                             </th>
                           ))}
-                          <th className="py-2">Total Stock</th>
+                          <th className="py-2">On hand</th>
+                          <th className="py-2">Reserved</th>
+                          <th className="py-2">Available</th>
+                          <th className="py-2">Avg cost</th>
                           <th className="py-2">Min Alert</th>
                           <th className="py-2">Selling Price</th>
                         </tr>
@@ -4474,6 +4495,20 @@ export function StockManagerContent({ view }: { view: StockView }) {
                               </td>
                             ))}
                             <td className="py-2">{product.currentQuantity}</td>
+                            <td className="py-2">{Number(product.reservedQuantity || 0)}</td>
+                            <td className="py-2">
+                              {Math.max(
+                                0,
+                                Number(
+                                  product.availableQuantity ??
+                                    Number(product.currentQuantity || 0) -
+                                      Number(product.reservedQuantity || 0),
+                                ),
+                              )}
+                            </td>
+                            <td className="py-2">
+                              {Number(product.averageCost || product.startingPrice || 0).toFixed(2)}
+                            </td>
                             <td className="py-2">{product.minAlertQuantity}</td>
                             <td className="py-2">{product.sellingPrice}</td>
                           </tr>
@@ -5090,7 +5125,7 @@ export function StockManagerContent({ view }: { view: StockView }) {
             <Card className="border-slate-200 shadow-sm">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm text-slate-500">
-                  Estimated inventory value
+                  Inventory value (cost)
                 </CardTitle>
               </CardHeader>
               <CardContent>

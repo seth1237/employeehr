@@ -25,6 +25,7 @@ type QuotationTransportDialogProps = {
   onConfirm: (input: QuotationTransportInput) => void | Promise<void>
   loading?: boolean
   clientName?: string
+  confirmLabel?: string
 }
 
 export function QuotationTransportDialog({
@@ -33,6 +34,7 @@ export function QuotationTransportDialog({
   onConfirm,
   loading = false,
   clientName,
+  confirmLabel = "Convert to invoice",
 }: QuotationTransportDialogProps) {
   const [amount, setAmount] = useState("")
   const [note, setNote] = useState("")
@@ -96,7 +98,7 @@ export function QuotationTransportDialog({
             Cancel
           </Button>
           <Button onClick={() => void handleConfirm()} disabled={loading}>
-            {loading ? "Converting…" : "Convert to invoice"}
+            {loading ? "Saving…" : confirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -126,6 +126,7 @@ export function moveDashboardWidget(
 export type SalesTourStep =
   | "inventory"
   | "quotation"
+  | "sales-order"
   | "invoice"
   | "dispatch"
   | "completed"
@@ -242,6 +243,7 @@ export function labelForPath(pathname: string): string {
     "/admin": "Dashboard",
     "/admin/stock/add-inventory": "Add Inventory",
     "/admin/stock/quotations": "Quotations",
+    "/admin/stock/sales-orders": "Sales Orders",
     "/admin/stock/invoices": "Invoices",
     "/admin/stock/dispatch": "Dispatch",
     "/admin/stock/sales": "Sales",

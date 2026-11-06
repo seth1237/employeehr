@@ -219,6 +219,11 @@ const companySchema = new Schema<ICompany>(
     },
     stockSettings: {
       bypassWebsiteQuotationApproval: { type: Boolean, default: false },
+      inventoryCostingMethod: {
+        type: String,
+        enum: ["average", "fifo"],
+        default: "average",
+      },
     },
     attendanceSettings: {
       lateHour: { type: Number, default: 9 },
@@ -290,6 +295,10 @@ const companySchema = new Schema<ICompany>(
         "communications",
         "reports",
       ],
+    },
+    onTheGo: {
+      type: Boolean,
+      default: false,
     },
     isFrozen: {
       type: Boolean,

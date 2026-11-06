@@ -39,12 +39,24 @@ type StockProduct = {
   name: string
   sellingPrice?: number
   currentQuantity?: number
+  reservedQuantity?: number
+  availableQuantity?: number
   productType?: string
   isOutsourced?: boolean
   taxable?: boolean
   taxRate?: number
   description?: string
   categoryDetails?: { name?: string } | null
+}
+
+function availableOf(product: StockProduct) {
+  return Math.max(
+    0,
+    Number(
+      product.availableQuantity ??
+        Number(product.currentQuantity || 0) - Number(product.reservedQuantity || 0),
+    ),
+  )
 }
 
 type InvoiceItem = {
@@ -79,6 +91,9 @@ type Invoice = {
   deliveryNoteNumber?: string
   quotationId?: string
   quotationNumber?: string
+  salesOrderId?: string
+  salesOrderNumber?: string
+  cogsAmount?: number
   revisedFromInvoiceId?: string
   client: { name: string; number?: string; location?: string }
   items: InvoiceItem[]
@@ -223,9 +238,7 @@ export default function InvoiceDetailPage({
           ...row,
           productType: row.productType || product.productType,
           isOutsourced: row.isOutsourced ?? product.isOutsourced,
-          stockAvailable: isStocked
-            ? Number(product.currentQuantity || 0)
-            : undefined,
+          stockAvailable: isStocked ? availableOf(product) : undefined,
         }
       }),
     )
@@ -243,13 +256,13 @@ export default function InvoiceDetailPage({
 
   const outOfStockHiddenCount = matchingProducts.filter((product) => {
     if (product.productType === "service" || product.isOutsourced) return false
-    return Number(product.currentQuantity || 0) <= 0
+    return availableOf(product) <= 0
   }).length
 
   const productSuggestions = matchingProducts
     .filter((product) => {
       if (product.productType === "service" || product.isOutsourced) return true
-      return Number(product.currentQuantity || 0) > 0
+      return availableOf(product) > 0
     })
     .slice(0, 8)
 
@@ -283,22 +296,24 @@ export default function InvoiceDetailPage({
       const product = products.find((p) => p._id === productId)
       if (!product) continue
       if (product.productType === "service" || product.isOutsourced) continue
-      const available = Number(product.currentQuantity || 0)
+      const reservedHere = invoice?.salesOrderId ? qty : 0
+      const available = availableOf(product) + reservedHere
       if (qty > available) {
         warnings.push(
-          `${product.name}: invoice qty ${qty} exceeds stock ${available}`,
+          `${product.name}: invoice qty ${qty} exceeds available stock ${available}`,
         )
       }
     }
     return warnings
-  }, [qtyOnInvoiceByProduct, products])
+  }, [qtyOnInvoiceByProduct, products, invoice?.salesOrderId])
 
   const addProductFromSearch = (product: StockProduct) => {
     const qty = Math.max(1, Number(addQty) || 1)
     const isStocked =
       product.productType !== "service" && !product.isOutsourced
-    const available = Number(product.currentQuantity || 0)
     const alreadyOnInvoice = qtyOnInvoiceByProduct.get(product._id) || 0
+    const reservedHere = invoice?.salesOrderId ? alreadyOnInvoice : 0
+    const available = availableOf(product) + reservedHere
 
     if (isStocked && alreadyOnInvoice + qty > available) {
       window.alert(
@@ -658,6 +673,14 @@ export default function InvoiceDetailPage({
               </Link>
             </Button>
           )}
+          {invoice.salesOrderId && (
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/admin/stock/sales-orders/${invoice.salesOrderId}`}>
+                <Package className="h-4 w-4 mr-1" />
+                {invoice.salesOrderNumber || "Sales order"}
+              </Link>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -668,9 +691,9 @@ export default function InvoiceDetailPage({
               <div>
                 <CardTitle className="text-base">Edit draft invoice</CardTitle>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Search inventory to add products. Stock is checked now and
-                  deducted when you <span className="font-medium">Post</span>{" "}
-                  the invoice.
+                  Search inventory to add products. Available stock excludes
+                  quantities reserved on sales orders. Stock is issued when you{" "}
+                  <span className="font-medium">Post</span> the invoice.
                 </p>
               </div>
               <Badge variant="secondary">
@@ -786,9 +809,7 @@ export default function InvoiceDetailPage({
                           const stocked =
                             product.productType !== "service" &&
                             !product.isOutsourced
-                          const available = Number(
-                            product.currentQuantity || 0,
-                          )
+                          const available = availableOf(product)
                           return (
                             <button
                               key={product._id}

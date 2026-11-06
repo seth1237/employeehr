@@ -37,6 +37,11 @@ router.put("/companies/:companyId/pages", (req, res) => {
   OwnerController.updateCompanyPages(req as any, res)
 })
 
+router.put("/companies/:companyId/on-the-go", (req, res) => {
+  req.body.companyId = req.params.companyId
+  OwnerController.updateCompanyOnTheGo(req as any, res)
+})
+
 // Permanent company deletion (OTP to info@elevatehub.co.ke)
 router.post(
   "/companies/:companyId/delete/request",

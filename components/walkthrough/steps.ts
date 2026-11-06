@@ -156,7 +156,7 @@ export function getWalkthroughSteps(
       title: "You’re all set",
       description: "Use these shortcuts to start real work. Replay the tour anytime from Help → Product tour.",
       actions: [
-        { label: "Create quotation", href: "/admin/stock/quotations?action=new" },
+        { label: "Create quotation", href: "/admin/stock/quotations/new" },
         { label: "Open inventory", href: "/admin/stock/add-inventory" },
         { label: "View reports", href: "/admin/reports" },
       ],

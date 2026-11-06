@@ -46,6 +46,7 @@ import {
   MessageSquare,
   Wrench,
   ArrowLeftRight,
+  ClipboardList,
 } from "lucide-react";
 import { getUser, logout } from "@/lib/auth";
 import { getToken } from "@/lib/auth";
@@ -57,6 +58,7 @@ import { getFavoriteHrefs } from "@/lib/admin-personalization";
 import { resolveAdminAllowedSections } from "@/lib/admin-sections";
 import { isProcurementEnabled } from "@/lib/module-flags";
 import { isInterBranchNavHref, useCompanyBranches } from "@/lib/company-branches";
+import { isOnTheGoNavHref, useOnTheGo } from "@/lib/on-the-go";
 import {
   getAccountsSidebarModules,
   resolveAccountsPageFromPathname,
@@ -265,6 +267,12 @@ const adminMenuItems = [
     label: "Quotations",
     icon: FileText,
     href: "/admin/stock/quotations",
+    section: "INVENTORY MANAGER",
+  },
+  {
+    label: "Sales Orders",
+    icon: ClipboardList,
+    href: "/admin/stock/sales-orders",
     section: "INVENTORY MANAGER",
   },
   {
@@ -543,6 +551,7 @@ export default function AdminSidebar({
 
   const currentUser = useMemo(() => getUser(), []);
   const { hasBranches } = useCompanyBranches();
+  const { onTheGo } = useOnTheGo();
 
   useEffect(() => {
     try {
@@ -767,6 +776,9 @@ export default function AdminSidebar({
     if (isInterBranchNavHref(item.href) && !hasBranches) {
       return;
     }
+    if (onTheGo && !isOnTheGoNavHref(item.href)) {
+      return;
+    }
 
     // If role is dispatch, restrict to specific items
     if (currentUser?.role === "dispatch") {
@@ -810,6 +822,7 @@ export default function AdminSidebar({
       adminMenuItems.filter((item) => {
         if (item.section === "PROCUREMENT (P2P)" && !isProcurementEnabled()) return false;
         if (isInterBranchNavHref(item.href) && !hasBranches) return false;
+        if (onTheGo && !isOnTheGoNavHref(item.href)) return false;
         if (!favoriteHrefs.includes(item.href)) return false;
         
         if (currentUser?.role === "dispatch") {
@@ -828,10 +841,13 @@ export default function AdminSidebar({
         if (!allowedSections) return true;
         return allowedSections.has(item.section);
       }),
-    [favoriteHrefs, allowedSections, currentUser?.role, hasBranches],
+    [favoriteHrefs, allowedSections, currentUser?.role, hasBranches, onTheGo],
   );
 
-  const showAccountsSection = (!allowedSections || allowedSections.has("ACCOUNTS")) && currentUser?.role !== "dispatch";
+  const showAccountsSection =
+    !onTheGo &&
+    (!allowedSections || allowedSections.has("ACCOUNTS")) &&
+    currentUser?.role !== "dispatch";
 
   return (
     <>
@@ -864,7 +880,7 @@ export default function AdminSidebar({
             ></div>
             {!isCollapsed && (
               <span className="" style={{ color: "var(--brand-primary)" }}>
-                Admin Panel
+                {onTheGo ? "On the Go" : "Admin Panel"}
               </span>
             )}
           </Link>

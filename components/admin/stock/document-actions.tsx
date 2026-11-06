@@ -23,6 +23,7 @@ import { Label } from "@/components/ui/label"
 import API_URL from "@/lib/apiBase"
 import { getToken, getUser } from "@/lib/auth"
 import { stockApi } from "@/lib/api"
+import { useOnTheGo } from "@/lib/on-the-go"
 import { useToast } from "@/hooks/use-toast"
 import type {
   InvoiceDocumentSettings,
@@ -32,10 +33,6 @@ import {
   StockDocumentPreview,
   type StockDocumentData,
 } from "@/components/admin/stock/document-preview"
-import {
-  QuotationTransportDialog,
-  type QuotationTransportInput,
-} from "@/components/admin/stock/quotation-transport-dialog"
 
 type DocumentActionsProps = {
   kind: "invoice" | "quotation"
@@ -52,6 +49,7 @@ export function StockDocumentActions({
 }: DocumentActionsProps) {
   const router = useRouter()
   const { toast } = useToast()
+  const { onTheGo } = useOnTheGo()
   const user = getUser()
   const canConvert =
     kind === "quotation" &&
@@ -63,7 +61,6 @@ export function StockDocumentActions({
     useState<InvoiceDocumentSettings>({})
   const [previewOpen, setPreviewOpen] = useState(false)
   const [emailOpen, setEmailOpen] = useState(false)
-  const [transportOpen, setTransportOpen] = useState(false)
   const [emailTo, setEmailTo] = useState("")
   const [busy, setBusy] = useState<string | null>(null)
 
@@ -190,23 +187,45 @@ export function StockDocumentActions({
     }
   }
 
-  const convertToInvoice = async (transport?: QuotationTransportInput) => {
+  const convertToSalesOrder = async () => {
     setBusy("convert")
     try {
-      const res = await stockApi.convertQuotation(documentId, transport)
+      const res = await stockApi.convertQuotation(documentId)
       if (!res?.success) throw new Error(res.message || "Convert failed")
-      const invoiceId = (res.data as { _id?: string })?._id
+      const id = (res.data as { _id?: string })?._id
+      const orderNumber = (res.data as { orderNumber?: string })?.orderNumber
       const invoiceNumber = (res.data as { invoiceNumber?: string })?.invoiceNumber
+      const legacyInvoice = Boolean((res as { legacyInvoice?: boolean }).legacyInvoice) || Boolean(invoiceNumber && !orderNumber)
+      if (onTheGo && !legacyInvoice && id && orderNumber) {
+        const invoiceRes = await stockApi.invoiceSalesOrder(id)
+        if (!invoiceRes?.success || !invoiceRes.data?._id) {
+          throw new Error(invoiceRes?.message || "Could not create invoice")
+        }
+        toast({
+          title: "Invoice created",
+          description: `${invoiceRes.data.invoiceNumber} is ready to review and post.`,
+        })
+        onConverted?.(invoiceRes.data._id)
+        router.push(`/admin/stock/invoices/${invoiceRes.data._id}`)
+        return
+      }
       toast({
-        title: "Draft invoice created",
-        description: invoiceNumber
-          ? `${invoiceNumber} is a draft — review, edit if needed, then post to lock it.`
-          : "Quotation converted to a draft invoice.",
+        title: legacyInvoice ? "Draft invoice created" : "Sales order confirmed",
+        description: legacyInvoice
+          ? invoiceNumber
+            ? `${invoiceNumber} is a draft — review, then post to lock it.`
+            : "Quotation converted to a draft invoice."
+          : orderNumber
+            ? `${orderNumber} reserved stock. Create an invoice when you are ready to bill.`
+            : "Stock is reserved on the sales order.",
       })
-      setTransportOpen(false)
-      if (invoiceId) {
-        onConverted?.(invoiceId)
-        router.push(`/admin/stock/invoices/${invoiceId}`)
+      if (id) {
+        onConverted?.(id)
+        router.push(
+          legacyInvoice
+            ? `/admin/stock/invoices/${id}`
+            : `/admin/stock/sales-orders/${id}`,
+        )
       }
     } catch (e) {
       toast({
@@ -221,7 +240,7 @@ export function StockDocumentActions({
 
   const duplicateDocument = () => {
     if (kind === "quotation") {
-      router.push("/admin/stock/quotations?action=new")
+      router.push("/admin/stock/quotations/new")
       toast({
         title: "Create new quotation",
         description: "Use the quotation form to duplicate items for a new client.",
@@ -290,24 +309,16 @@ export function StockDocumentActions({
         {canConvert && (
           <Button
             size="sm"
-            onClick={() => setTransportOpen(true)}
+            onClick={() => void convertToSalesOrder()}
             disabled={busy === "convert"}
             data-tour="convert-invoice"
-            aria-label="Convert quotation to invoice"
+            aria-label={onTheGo ? "Convert quotation to invoice" : "Create sales order from quotation"}
           >
             <Receipt className="h-4 w-4 mr-1" aria-hidden />
-            Convert to invoice
+            {onTheGo ? "Convert to invoice" : "Create sales order"}
           </Button>
         )}
       </div>
-
-      <QuotationTransportDialog
-        open={transportOpen}
-        onOpenChange={setTransportOpen}
-        onConfirm={convertToInvoice}
-        loading={busy === "convert"}
-        clientName={document.client.name}
-      />
 
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto print:max-w-none print:overflow-visible">

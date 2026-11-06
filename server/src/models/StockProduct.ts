@@ -9,6 +9,8 @@ export interface IStockProduct {
   sellingPrice: number
   minAlertQuantity: number
   currentQuantity: number
+  reservedQuantity?: number
+  averageCost?: number
   assignedUsers: string[]
   isOutsourced?: boolean
   taxable?: boolean
@@ -45,6 +47,8 @@ const stockProductSchema = new Schema<IStockProduct>(
     sellingPrice: { type: Number, required: true, min: 0 },
     minAlertQuantity: { type: Number, required: true, min: 0, default: 0 },
     currentQuantity: { type: Number, required: true, min: 0, default: 0 },
+    reservedQuantity: { type: Number, min: 0, default: 0 },
+    averageCost: { type: Number, min: 0, default: 0 },
     assignedUsers: [{ type: String }],
     isOutsourced: { type: Boolean, default: false },
     taxable: { type: Boolean, default: false, index: true },
@@ -73,8 +77,12 @@ const stockProductSchema = new Schema<IStockProduct>(
     labelsPrintedAt: { type: Date },
     labelsPrintedCount: { type: Number, min: 0, default: 0 },
   },
-  { timestamps: true },
+  { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } },
 )
+
+stockProductSchema.virtual("availableQuantity").get(function () {
+  return Math.max(0, Number(this.currentQuantity || 0) - Number(this.reservedQuantity || 0))
+})
 
 stockProductSchema.index({ org_id: 1, category: 1 })
 stockProductSchema.index({ org_id: 1, name: 1 })

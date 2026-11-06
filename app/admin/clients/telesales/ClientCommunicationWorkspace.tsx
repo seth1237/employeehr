@@ -278,8 +278,14 @@ export default function ClientCommunicationWorkspace({ docText }: { docText: str
   ) => {
     setConvertingQuotation(true)
     try {
-      await stockApi.convertQuotation(quotationId, transport)
-      alert("Quotation converted to invoice")
+      const res = await stockApi.convertQuotation(quotationId, transport)
+      const orderId = res?.data?._id
+      const orderNumber = res?.data?.orderNumber
+      alert(orderNumber ? `Sales order ${orderNumber} confirmed and stock reserved` : "Quotation converted to a sales order")
+      if (orderId && !res?.data?.invoiceNumber) {
+        window.location.href = `/admin/stock/sales-orders/${orderId}`
+        return
+      }
       setQuotations((prev) => prev.filter((q) => q._id !== quotationId))
       if (selectedQuotation?._id === quotationId) setSelectedQuotation(null)
       setTransportTarget(null)
@@ -586,7 +592,7 @@ export default function ClientCommunicationWorkspace({ docText }: { docText: str
                       })
                     }
                   >
-                    Convert to invoice
+                    Create sales order
                   </Button>
                 </div>
               </div>

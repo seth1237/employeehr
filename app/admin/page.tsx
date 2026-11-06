@@ -53,6 +53,8 @@ import { getUser } from '@/lib/auth'
 import type { User } from '@/lib/types'
 import { DashboardWidgetsMenu } from '@/components/admin/personalization-panel'
 import { SalesWorkflowTour } from '@/components/admin/guided-tour'
+import { OnTheGoHub } from '@/components/admin/on-the-go-hub'
+import { useOnTheGo } from '@/lib/on-the-go'
 import {
   getDashboardWidgetOrder,
   type DashboardWidgetId,
@@ -119,6 +121,7 @@ const departmentOrder = ['HR', 'Operations', 'Finance', 'Sales', 'Engineering', 
 export default function AdminDashboard() {
   const router = useRouter()
   const currentUser = getUser()
+  const { onTheGo, ready: onTheGoReady } = useOnTheGo()
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -166,6 +169,7 @@ export default function AdminDashboard() {
       router.push('/auth/login')
       return
     }
+    if (!onTheGoReady || onTheGo) return
 
     loadDashboard()
     // Refresh every 2 minutes instead of 30 seconds for better performance
@@ -174,7 +178,7 @@ export default function AdminDashboard() {
     }, 120000)
     return () => clearInterval(interval)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [onTheGo, onTheGoReady])
 
   useEffect(() => {
     loadBranding()
@@ -663,6 +667,10 @@ export default function AdminDashboard() {
 
   const totalAlerts = stockSeverity.critical.length + stats.pendingLeave
 
+  if (onTheGoReady && onTheGo) {
+    return <OnTheGoHub />
+  }
+
   if (loading && !data.users.length) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -986,6 +994,7 @@ export default function AdminDashboard() {
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <Link href="/admin/stock/quotations"><Button variant="secondary" className="w-full justify-start">Quotations</Button></Link>
+                    <Link href="/admin/stock/sales-orders"><Button variant="secondary" className="w-full justify-start">Sales orders</Button></Link>
                     <Link href="/admin/stock/invoices"><Button variant="secondary" className="w-full justify-start">Invoices</Button></Link>
                     <Link href="/admin/stock/dispatch"><Button variant="secondary" className="w-full justify-start">Dispatch</Button></Link>
                     <Link href="/admin/stock/sales"><Button variant="secondary" className="w-full justify-start">Sales</Button></Link>

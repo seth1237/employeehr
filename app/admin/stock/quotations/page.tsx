@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useOnTheGo } from "@/lib/on-the-go";
 import API_URL from "@/lib/apiBase";
 import { getToken, getUser } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -58,10 +59,6 @@ import {
   type InvoiceDocumentSettings,
   type TenantBranding,
 } from "@/lib/stock-document-pdf";
-import {
-  QuotationTransportDialog,
-  type QuotationTransportInput,
-} from "@/components/admin/stock/quotation-transport-dialog";
 
 interface Product {
   _id: string;
@@ -69,6 +66,8 @@ interface Product {
   sku?: string;
   sellingPrice: number;
   currentQuantity: number;
+  reservedQuantity?: number;
+  availableQuantity?: number;
   isOutsourced?: boolean;
   taxable?: boolean;
   taxRate?: number;
@@ -139,6 +138,7 @@ interface Quotation {
   branchId?: string;
   branchName?: string;
   convertedInvoiceId?: string;
+  convertedSalesOrderId?: string;
   createdAt: string;
 }
 
@@ -252,6 +252,8 @@ function exportQuotationsSummaryXlsx(quotations: Quotation[]) {
 
 export default function QuotationsPage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const { onTheGo } = useOnTheGo();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -283,10 +285,6 @@ export default function QuotationsPage() {
   const [exportType, setExportType] = useState<"pdf" | "excel" | null>(null);
   const [exportStartDate, setExportStartDate] = useState("");
   const [exportEndDate, setExportEndDate] = useState("");
-  const [transportTarget, setTransportTarget] = useState<{
-    id: string;
-    clientName: string;
-  } | null>(null);
   const [convertingQuotation, setConvertingQuotation] = useState(false);
   const [editingQuotationId, setEditingQuotationId] = useState<string | null>(
     null,
@@ -332,10 +330,14 @@ export default function QuotationsPage() {
   useEffect(() => {
     const action = searchParams.get("action");
     if (action === "new") {
+      if (onTheGo) {
+        router.replace("/admin/stock/quotations/new");
+        return;
+      }
       setShowCreate(true);
       setEditingQuotationId(null);
     }
-  }, [searchParams]);
+  }, [searchParams, onTheGo, router]);
 
   useEffect(() => {
     const editId = searchParams.get("edit");
@@ -766,12 +768,21 @@ export default function QuotationsPage() {
     );
   });
 
+  const availableOf = (product: Product) =>
+    Math.max(
+      0,
+      Number(
+        product.availableQuantity ??
+          Number(product.currentQuantity || 0) - Number(product.reservedQuantity || 0),
+      ),
+    );
+
   const outOfStockHiddenCount = matchingProducts.filter(
-    (product) => Number(product.currentQuantity || 0) <= 0,
+    (product) => availableOf(product) <= 0 && !product.isOutsourced,
   ).length;
 
   const productSuggestions = matchingProducts
-    .filter((product) => Number(product.currentQuantity || 0) > 0)
+    .filter((product) => product.isOutsourced || availableOf(product) > 0)
     .slice(0, 8);
 
   useEffect(() => {
@@ -1340,17 +1351,14 @@ export default function QuotationsPage() {
     loadData({ silent: true });
   };
 
-  const convertToInvoice = async (
-    quotationId: string,
-    transport?: QuotationTransportInput,
-  ) => {
+  const convertToSalesOrder = async (quotationId: string) => {
     setConvertingQuotation(true);
     const response = await fetch(
       `${API_URL}/api/stock/quotations/${quotationId}/convert`,
       {
         method: "POST",
         headers: getAuthHeaders(),
-        body: JSON.stringify(transport || {}),
+        body: JSON.stringify({}),
       },
     );
     const result = await response.json();
@@ -1358,23 +1366,45 @@ export default function QuotationsPage() {
     if (!response.ok) {
       toast({
         title: "Error",
-        description: result.message || "Failed to convert quotation",
+        description: result.message || "Failed to create sales order",
         variant: "destructive",
       });
       return;
     }
 
-    const invoice = result.data
-    const pending = invoice?.status === "pending_approval"
+    const doc = result.data
+    const legacyInvoice = Boolean(result.legacyInvoice) || Boolean(doc?.invoiceNumber && !doc?.orderNumber)
+    if (onTheGo && !legacyInvoice && doc?._id && doc.orderNumber) {
+      try {
+        const invoiceRes = await stockApi.invoiceSalesOrder(doc._id)
+        if (invoiceRes?.data?._id) {
+          toast({
+            title: "Invoice created",
+            description: `${invoiceRes.data.invoiceNumber} is ready to review and post.`,
+          })
+          window.location.href = `/admin/stock/invoices/${invoiceRes.data._id}`
+          return
+        }
+      } catch (error: any) {
+        toast({
+          title: "Quote reserved, invoice failed",
+          description: error?.message || "Open the sales order to invoice it.",
+          variant: "destructive",
+        })
+        window.location.href = `/admin/stock/sales-orders/${doc._id}`
+        return
+      }
+    }
     toast({
-      title: pending ? "Invoice approved" : "Invoice created",
-      description: pending
-        ? `Invoice ${invoice.invoiceNumber} is now issued.`
-        : `Invoice ${invoice?.invoiceNumber} created with delivery note ${invoice?.deliveryNoteNumber}. Open it to preview, print, or email.`,
+      title: legacyInvoice ? "Invoice created" : "Sales order confirmed",
+      description: legacyInvoice
+        ? `Invoice ${doc?.invoiceNumber} created. Open it to preview, print, or email.`
+        : `${doc?.orderNumber || "Sales order"} reserved stock. Create an invoice when you are ready to bill.`,
     });
-    setTransportTarget(null);
-    if (result.data?._id) {
-      window.location.href = `/admin/stock/invoices/${result.data._id}`;
+    if (doc?._id) {
+      window.location.href = legacyInvoice
+        ? `/admin/stock/invoices/${doc._id}`
+        : `/admin/stock/sales-orders/${doc._id}`;
       return;
     }
     loadData({ silent: true });
@@ -1598,6 +1628,11 @@ export default function QuotationsPage() {
             >
               Export summary (PDF)
             </Button>
+            {onTheGo ? (
+              <Button asChild style={{ backgroundColor: primaryColor, borderColor: primaryColor }} className="text-white hover:opacity-90">
+                <Link href="/admin/stock/quotations/new">New quote</Link>
+              </Button>
+            ) : (
             <Button
               onClick={() => (showCreate ? resetForm() : setShowCreate(true))}
               style={
@@ -1609,6 +1644,7 @@ export default function QuotationsPage() {
             >
               {showCreate ? "Close" : "Create Quotation"}
             </Button>
+            )}
           </div>
         </div>
 
@@ -1739,7 +1775,7 @@ export default function QuotationsPage() {
 
       {/* Stamp prompt and prepared-by signature management moved to Admin User Settings and Employee Profile */}
 
-      {showCreate && (
+      {showCreate && !onTheGo && (
         <Card className="overflow-hidden border-0 shadow-md ring-1 ring-black/5">
           <div
             className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
@@ -2325,8 +2361,10 @@ export default function QuotationsPage() {
                                   ) : null}
                                 </div>
                                 <div className="truncate text-xs text-muted-foreground">
-                                  {product.categoryDetails?.name || "N/A"} · In
-                                  stock: {product.currentQuantity}
+                                  {product.categoryDetails?.name || "N/A"} · Available: {availableOf(product)}
+                                  {Number(product.reservedQuantity || 0) > 0
+                                    ? ` (${product.reservedQuantity} reserved)`
+                                    : ""}
                                 </div>
                               </div>
                               <span
@@ -2819,7 +2857,9 @@ export default function QuotationsPage() {
               }
               actionHref={
                 quotations.length === 0
-                  ? "/admin/stock/quotations?action=new"
+                  ? onTheGo
+                    ? "/admin/stock/quotations/new"
+                    : "/admin/stock/quotations?action=new"
                   : undefined
               }
             />
@@ -2928,18 +2968,24 @@ export default function QuotationsPage() {
                         ) : quotation.status === "draft" ? (
                           <Button
                             size="sm"
-                            onClick={() =>
-                              setTransportTarget({
-                                id: quotation._id,
-                                clientName: quotation.client?.name || "",
-                              })
+                            onClick={() => void convertToSalesOrder(quotation._id)}
+                            disabled={convertingQuotation}
+                            aria-label={
+                              onTheGo
+                                ? `Convert ${quotation.quotationNumber} to invoice`
+                                : `Create sales order from ${quotation.quotationNumber}`
                             }
-                            aria-label={`Convert ${quotation.quotationNumber} to invoice`}
                           >
-                            Convert
+                            {onTheGo ? "Invoice" : "Create order"}
                           </Button>
                         ) : quotation.status === "converted" ? (
-                          quotation.convertedInvoiceId ? (
+                          quotation.convertedSalesOrderId ? (
+                            <Button size="sm" variant="outline" asChild>
+                              <Link href={`/admin/stock/sales-orders/${quotation.convertedSalesOrderId}`}>
+                                View order
+                              </Link>
+                            </Button>
+                          ) : quotation.convertedInvoiceId ? (
                             <Button size="sm" variant="outline" asChild>
                               <Link href={`/admin/stock/invoices/${quotation.convertedInvoiceId}`}>
                                 View invoice
@@ -3026,24 +3072,28 @@ export default function QuotationsPage() {
                       size="sm"
                       variant="outline"
                       className="flex-1"
-                      onClick={() =>
-                        setTransportTarget({
-                          id: quotation._id,
-                          clientName: quotation.client?.name || "",
-                        })
+                      onClick={() => void convertToSalesOrder(quotation._id)}
+                      disabled={convertingQuotation}
+                      aria-label={
+                        onTheGo
+                          ? `Convert ${quotation.quotationNumber} to invoice`
+                          : `Create sales order from ${quotation.quotationNumber}`
                       }
-                      aria-label={`Convert ${quotation.quotationNumber} to invoice`}
                     >
-                      Convert
+                      {onTheGo ? "Invoice" : "Create order"}
                     </Button>
                   ) : null}
                   {quotation.status === "converted" &&
-                    quotation.convertedInvoiceId && (
+                    (quotation.convertedSalesOrderId || quotation.convertedInvoiceId) && (
                       <Button asChild size="sm" variant="outline" className="flex-1">
                         <Link
-                          href={`/admin/stock/invoices/${quotation.convertedInvoiceId}`}
+                          href={
+                            quotation.convertedSalesOrderId
+                              ? `/admin/stock/sales-orders/${quotation.convertedSalesOrderId}`
+                              : `/admin/stock/invoices/${quotation.convertedInvoiceId}`
+                          }
                         >
-                          Invoice
+                          {quotation.convertedSalesOrderId ? "Order" : "Invoice"}
                         </Link>
                       </Button>
                     )}
@@ -3077,6 +3127,11 @@ export default function QuotationsPage() {
               />
               {refreshing ? "Refreshing..." : "Refresh"}
             </Button>
+            {onTheGo ? (
+              <Button asChild size="sm" className="flex-1">
+                <Link href="/admin/stock/quotations/new">New quote</Link>
+              </Button>
+            ) : (
             <Button
               size="sm"
               className="flex-1"
@@ -3088,6 +3143,7 @@ export default function QuotationsPage() {
             >
               New quote
             </Button>
+            )}
           </StickyActionBar>
 
           {sortedQuotations.length > 0 && (
@@ -3182,18 +3238,6 @@ export default function QuotationsPage() {
         </DialogContent>
       </Dialog>
 
-      <QuotationTransportDialog
-        open={!!transportTarget}
-        onOpenChange={(open) => {
-          if (!open) setTransportTarget(null);
-        }}
-        clientName={transportTarget?.clientName}
-        loading={convertingQuotation}
-        onConfirm={async (transport) => {
-          if (!transportTarget) return;
-          await convertToInvoice(transportTarget.id, transport);
-        }}
-      />
     </div>
   );
 }

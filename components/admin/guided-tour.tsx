@@ -34,9 +34,16 @@ const STEPS: Array<{
     pathMatch: (p) => p.startsWith("/admin/stock/quotations"),
   },
   {
+    id: "sales-order",
+    title: "Confirm a sales order",
+    description: "Reserve stock on a sales order so POS and other quotes cannot oversell it.",
+    href: "/admin/stock/sales-orders",
+    pathMatch: (p) => p.startsWith("/admin/stock/sales-orders"),
+  },
+  {
     id: "invoice",
-    title: "Convert to invoice",
-    description: "Turn an approved quote into an invoice in one click.",
+    title: "Invoice the order",
+    description: "Create a draft invoice from the sales order, then post it to issue stock and post COGS.",
     href: "/admin/stock/invoices",
     pathMatch: (p) => p.startsWith("/admin/stock/invoices"),
   },

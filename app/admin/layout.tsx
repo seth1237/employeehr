@@ -14,6 +14,7 @@ import {
   resolveAdminAllowedSections,
 } from "@/lib/admin-sections";
 import { firstAllowedAdminPath } from "@/lib/enabled-pages";
+import { isOnTheGoAllowedPath } from "@/lib/on-the-go";
 import { WalkthroughProvider } from "@/components/walkthrough";
 
 export default function AdminLayout({
@@ -116,12 +117,19 @@ export default function AdminLayout({
           pageAccess: response.data,
         });
 
+        if (response.data?.onTheGo && !isOnTheGoAllowedPath(pathname)) {
+          router.push("/admin/stock/quotations");
+          return;
+        }
+
         if (!allowed) return;
 
         if (currentSection && allowed.has(currentSection)) return;
         if (!currentSection && allowed.has("CORE")) return;
 
-        router.push(firstAllowedAdminPath(allowed));
+        router.push(
+          response.data?.onTheGo ? "/admin" : firstAllowedAdminPath(allowed),
+        );
       } catch {
         // fail open when settings API is unavailable
       }

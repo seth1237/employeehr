@@ -2,8 +2,17 @@ import type { Response } from "express"
 import type { AuthenticatedRequest } from "../middleware/auth"
 import { CreditNote } from "../models/CreditNote"
 import { StockInvoice } from "../models/StockInvoice"
+import { StockSale } from "../models/StockSale"
+import { StockProduct } from "../models/StockProduct"
+import { Account } from "../models/Account"
 import { Company } from "../models/Company"
 import { User } from "../models/User"
+import { GeneralLedgerService } from "../services/GeneralLedgerService"
+import {
+  isStockManagedLine,
+  restoreIssuedStock,
+  unitCostOf,
+} from "../services/inventoryCosting.service"
 import { generateCreditNotePdf as generateCreditNotePdfLib } from "../utils/pdfGenerator"
 import fs from "fs/promises"
 import path from "path"
@@ -298,9 +307,58 @@ export class CreditNoteController {
       creditNote.status = "issued"
       await creditNote.save()
 
+      let restoredCost = 0
+      for (const item of creditNote.items || []) {
+        const product = await StockProduct.findOne({
+          _id: item.productId,
+          org_id: req.org_id,
+        })
+        if (!isStockManagedLine(item as any, product)) continue
+        const sale = await StockSale.findOne({
+          org_id: req.org_id,
+          invoiceId: String(creditNote.invoiceId),
+          productId: String(item.productId),
+        }).lean()
+        const unitCost = Number((sale as any)?.unitCost || 0) || unitCostOf(product || { averageCost: 0, startingPrice: 0 })
+        await restoreIssuedStock({
+          orgId: String(req.org_id),
+          productId: String(item.productId),
+          quantity: Number(item.quantity),
+          unitCost,
+          actorId: String(req.user?.userId || ""),
+          sourceId: String(creditNote._id),
+        })
+        restoredCost += unitCost * Number(item.quantity)
+      }
+      if (restoredCost > 0) {
+        await GeneralLedgerService.initializeDefaultAccounts(String(req.org_id))
+        const [inventory, cogs] = await Promise.all([
+          Account.findOne({ org_id: req.org_id, code: "1300" }),
+          Account.findOne({ org_id: req.org_id, code: "5000" }),
+        ])
+        if (inventory && cogs) {
+          await GeneralLedgerService.postJournalEntry(
+            String(req.org_id),
+            {
+              date: new Date(),
+              reference: creditNote.creditNoteNumber,
+              description: `Credit note ${creditNote.creditNoteNumber} stock return`,
+              source: "inventory",
+              journalType: "inventory",
+              nature: "automatic",
+              lines: [
+                { accountId: inventory._id as any, debit: Math.round(restoredCost * 100) / 100, credit: 0 },
+                { accountId: cogs._id as any, debit: 0, credit: Math.round(restoredCost * 100) / 100 },
+              ],
+            },
+            String(req.user?.userId || ""),
+          )
+        }
+      }
+
       return res.json({
         success: true,
-        message: "Credit note issued successfully",
+        message: "Credit note issued, stock restored, and COGS reversed",
         data: creditNote,
       })
     } catch (error) {

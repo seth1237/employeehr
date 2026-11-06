@@ -10,9 +10,9 @@ Sage X3 is a global mid-market ERP for purchasing, sales, inventory, manufacturi
 |---|---|---|
 | Common data / org / multi-site | Partial | Companies + branches. Not multi-ledger or multi-legislation. |
 | Purchasing (PR → PO → GRN → invoice) | Partial / flagged | Full P2P UI exists. Production flag is still off. |
-| Sales (quote → order → delivery → invoice) | Partial | Quote, invoice, dispatch, credit notes. No formal sales order or picking. |
+| Sales (quote → order → delivery → invoice) | Live | Quote → sales order with reserved stock → invoice → dispatch. Picking lists stay light. |
 | Manufacturing / MRP / BOM | Missing | Out of scope unless you start making products. |
-| Stock / WMS | Partial | Qty, warehouses, locations, stock checks. No FIFO/LIFO or inter-site transfer. |
+| Stock / WMS | Partial | Qty, warehouses, locations, stock checks, moving-average/FIFO cost layers, COGS on issue. Inter-branch transfer is live. |
 | HR / payroll / people | Stronger than Sage | The Sage deck barely covers this. Elevate is built around it. |
 | Fixed assets + depreciation | Planned | Accounts nav lists it. No live asset register. |
 | Accounting & finance | Live | COA with customer/vendor/bank/cash control types, multi-currency, journals with Sage types/natures, period lock, budgets, AP/AR, account inquiry, bank statement import + auto-match, financial extraction, fixed assets/depreciation, fiscal periods. |
@@ -31,7 +31,8 @@ Sage X3 is a global mid-market ERP for purchasing, sales, inventory, manufacturi
 
 ### Sell, stock, and cash
 - Products, warehouses, locations, barcodes, stock checks, min alerts, expiry
-- Quotations, invoices, credit/debit notes, dispatch, website orders, tenders
+- Moving-average or FIFO valuation, reserved qty on sales orders, COGS journals on issue
+- Quotations, sales orders, invoices, credit/debit notes, dispatch, website orders, tenders
 - POS till: holds, cash / card / M-Pesa STK, 80mm slip
 - CRM, telesales, exhibitions, complaints, delivery feedback
 - Field planner, GPS visits, follow-ups, sales reports
@@ -79,14 +80,13 @@ Keep these. Finance integration should sit under them, not replace them.
 - BOM, work centers, routings, standard cost, demand forecasts, production orders and tracking
 
 ### Stock
-- FIFO / LIFO / average costing
+- LIFO costing (Elevate has moving average and FIFO)
 - Units of measure with conversions
 - Lot / serial / QC stock statuses
-- Inter-site transfer, assembly / disassembly
+- Assembly / disassembly
 - Formal cycle-count calendar
 
 ### Sales
-- Formal sales order with allocation
 - Preparation lists and picking tickets
 - Customer/item price lists
 
@@ -103,9 +103,9 @@ Keep these. Finance integration should sit under them, not replace them.
 
 ### Now — finish what is started
 1. Enable procurement after staging PR → PO → GRN → bill → payment with GL postings.
-2. Add a sales order between quotation and invoice, with stock reservation.
-3. Inter-branch stock transfer (ship + receive, in-transit qty).
-4. Weighted-average stock valuation and COGS journals.
+2. ~~Add a sales order between quotation and invoice, with stock reservation.~~ Done: quote → `SO-` with reserved qty → draft invoice → post issues stock and posts COGS.
+3. Inter-branch stock transfer (ship + receive, in-transit qty). Live.
+4. ~~Weighted-average stock valuation and COGS journals.~~ Done: company setting average|FIFO; issues post Dr 5000 / Cr 1300.
 5. Bank statement CSV import on the existing reconciliation page.
 6. Fiscal periods and period lock.
 

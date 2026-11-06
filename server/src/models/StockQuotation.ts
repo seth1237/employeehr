@@ -43,6 +43,7 @@ export interface IStockQuotation {
   approvedBy?: string
   approvedAt?: Date
   convertedInvoiceId?: string
+  convertedSalesOrderId?: string
   createdAt?: Date
   updatedAt?: Date
   dataLakeSynced?: boolean
@@ -96,6 +97,7 @@ const stockQuotationSchema = new Schema<IStockQuotation>(
     branchId: { type: String, index: true },
     approvedAt: { type: Date },
     convertedInvoiceId: { type: String },
+    convertedSalesOrderId: { type: String, index: true },
     dataLakeSynced: { type: Boolean, default: false },
     isArchived: { type: Boolean, default: false }
   },

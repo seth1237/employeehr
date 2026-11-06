@@ -77,7 +77,19 @@ import {
   isOwnDocumentsRole,
 } from "./stock/stockShared";
 import { QuotationController } from "./stock/quotationController";
+import { SalesOrderController } from "./salesOrderController";
+import { StockSalesOrder } from "../models/StockSalesOrder";
 import { assignBarcodeFields } from "../lib/productBarcode";
+import {
+  availableQuantity,
+  issueStock,
+  isStockManagedLine,
+  receiveStock,
+  restoreIssuedStock,
+  postSaleLedgers,
+  unitCostOf,
+  reserveStock,
+} from "../services/inventoryCosting.service";
 
 function normalizeClientValue(value: string) {
   return String(value || "")
@@ -2514,10 +2526,10 @@ export class StockController {
               message: `Product not found for quotation item: ${item.productName}`,
             });
           }
-          if (product.currentQuantity < item.quantity) {
+          if (availableQuantity(product) < item.quantity) {
             return res.status(400).json({
               success: false,
-              message: `Insufficient stock for ${item.productName}. Available: ${product.currentQuantity}, requested: ${item.quantity}`,
+              message: `Insufficient stock for ${item.productName}. Available: ${availableQuantity(product)}, requested: ${item.quantity}`,
             });
           }
         }
@@ -2547,11 +2559,16 @@ export class StockController {
         });
 
         const receiptNumber = generateDocumentNumber("RCP");
-        const salesToCreate = stockManagedItems.map((item: any) => {
-          const product = stockManagedProductMap.get(String(item.productId))!;
-          product.currentQuantity -= item.quantity;
-
-          return {
+        let websiteCogs = 0;
+        const salesToCreate = [];
+        for (const item of stockManagedItems) {
+          const issuedLine = await issueStock({
+            orgId: org_id,
+            productId: String(item.productId),
+            quantity: Number(item.quantity),
+          });
+          websiteCogs += issuedLine.totalCost;
+          salesToCreate.push({
             org_id,
             productId: item.productId,
             quantitySold: item.quantity,
@@ -2565,14 +2582,28 @@ export class StockController {
             quotationId: String(quotation._id),
             invoiceId: String(invoice._id),
             receiptNumber,
-            remainingQuantity: product.currentQuantity,
-          };
-        });
+            remainingQuantity: issuedLine.remainingQuantity,
+            unitCost: issuedLine.unitCost,
+            totalCost: issuedLine.totalCost,
+            costingMethod: issuedLine.costingMethod,
+          });
+        }
 
         if (stockManagedProducts.length > 0) {
-          await Promise.all(stockManagedProducts.map((product) => product.save()));
           await Promise.all(stockManagedProducts.map((product) => sendLowStockAlert(product, org_id)));
         }
+        await postSaleLedgers({
+          orgId: org_id,
+          userId: String(quotation.createdBy || "website"),
+          reference: invoice.invoiceNumber,
+          description: `Website invoice ${invoice.invoiceNumber}`,
+          revenueAmount: Number(quotation.subTotal || 0),
+          taxAmount: Number((quotation as any).taxTotal || 0),
+          cogsAmount: websiteCogs,
+        });
+        (invoice as any).cogsAmount = websiteCogs;
+        (invoice as any).glPosted = true;
+        await invoice.save();
 
         if (salesToCreate.length > 0) {
           await StockSale.insertMany(salesToCreate);
@@ -6399,175 +6430,9 @@ export class StockController {
     req: AuthenticatedRequest,
     res: Response,
   ) {
-    try {
-      const org_id = req.user?.org_id;
-      const actorId = req.user?.userId;
-      const role = req.user?.role;
-      if (!org_id || !actorId)
-        return res
-          .status(401)
-          .json({ success: false, message: "Unauthorized" });
-
-      const { quotationId } = req.params;
-      const quotation = await StockQuotation.findOne({
-        _id: quotationId,
-        org_id,
-      });
-      if (!quotation) {
-        return res
-          .status(404)
-          .json({ success: false, message: "Quotation not found" });
-      }
-
-      if (quotation.status === "pending_approval") {
-        return res.status(400).json({
-          success: false,
-          message: "Quotation must be approved before it can be converted to an invoice",
-        });
-      }
-
-      if (quotation.status === "cancelled") {
-        return res.status(400).json({
-          success: false,
-          message: "Cannot convert a cancelled quotation",
-        });
-      }
-
-      if (quotation.convertedInvoiceId) {
-        const existingInvoice = await StockInvoice.findById(quotation.convertedInvoiceId);
-        if (existingInvoice) {
-          if (isAdminRole(role) && existingInvoice.status === "pending_approval") {
-            req.params.invoiceId = String(existingInvoice._id);
-            return StockController.approveInvoice(req, res);
-          }
-          return res.status(200).json({ success: true, data: existingInvoice });
-        }
-      }
-
-      const transportCost = Number(req.body?.transportCost || 0);
-      const transportNote = req.body?.transportNote
-        ? String(req.body.transportNote).trim()
-        : undefined;
-      const transportFields =
-        Number.isFinite(transportCost) && transportCost > 0
-          ? {
-              transportCost: Number(transportCost.toFixed(2)),
-              ...(transportNote ? { transportNote } : {}),
-            }
-          : transportNote
-            ? { transportNote }
-            : {};
-
-      if (role === "sales_rep") {
-        if (String(quotation.createdBy || "") !== String(actorId)) {
-          return res.status(403).json({
-            success: false,
-            message: "You can only convert your own quotations",
-          });
-        }
-        if (!quotation.approvedAt) {
-          return res.status(400).json({
-            success: false,
-            message: "Wait for admin approval before converting this quotation",
-          });
-        }
-
-        const invoice = await StockInvoice.create({
-          org_id,
-          invoiceNumber: generateDocumentNumber("INV"),
-          deliveryNoteNumber: generateDocumentNumber("DN"),
-          quotationId: String(quotation._id),
-          quotationNumber: quotation.quotationNumber,
-          client: quotation.client,
-          items: quotation.items,
-          subTotal: quotation.subTotal,
-          taxTotal: Number((quotation as any).taxTotal || 0),
-          grandTotal: Number(
-            (quotation as any).grandTotal ||
-              Number(quotation.subTotal || 0) + Number((quotation as any).taxTotal || 0),
-          ),
-          ...transportFields,
-          status: "pending_approval",
-          dispatch: {
-            status: "not_assigned",
-            packingItems: [],
-            packingCompleted: true,
-            inquiries: [],
-          },
-          createdBy: String(quotation.createdBy || actorId),
-        });
-
-        // Transport expense is recorded only when the invoice is posted (approveInvoice)
-
-        quotation.convertedInvoiceId = String(invoice._id);
-        await quotation.save();
-
-        return res.status(201).json({
-          success: true,
-          message: "Invoice submitted for admin approval",
-          data: invoice,
-        });
-      }
-
-      if (!isAdminRole(role)) {
-        return res.status(403).json({
-          success: false,
-          message: "Only admin/HR can convert quotations to invoices",
-        });
-      }
-
-      // Admin convert creates a DRAFT invoice — stock is deducted only on Post
-      const stockManagedItemsPreview = quotation.items.filter((item: any) => {
-        if (item.isOutsourced) return false;
-        if (item.productType === "service") return false;
-        return true;
-      });
-
-      const invoice = await StockInvoice.create({
-        org_id,
-        invoiceNumber: generateDocumentNumber("INV"),
-        deliveryNoteNumber: generateDocumentNumber("DN"),
-        quotationId: String(quotation._id),
-        quotationNumber: quotation.quotationNumber,
-        client: quotation.client,
-        items: quotation.items,
-        subTotal: quotation.subTotal,
-        taxTotal: Number((quotation as any).taxTotal || 0),
-        grandTotal: Number(
-          (quotation as any).grandTotal ||
-            Number(quotation.subTotal || 0) + Number((quotation as any).taxTotal || 0),
-        ),
-        ...transportFields,
-        status: "draft",
-        dispatch: {
-          status: "not_assigned",
-          packingItems: stockManagedItemsPreview.map((item: any) => ({
-            productId: item.productId,
-            productName: item.productName,
-            requiredQuantity: item.quantity,
-            packedQuantity: 0,
-          })),
-          packingCompleted: stockManagedItemsPreview.length === 0,
-          inquiries: [],
-        },
-        createdBy: String(quotation.createdBy || actorId),
-      });
-
-      quotation.convertedInvoiceId = String(invoice._id);
-      await quotation.save();
-
-      return res.status(201).json({
-        success: true,
-        message: "Draft invoice created — review and post when ready",
-        data: invoice,
-      });
-    } catch (error: any) {
-      return res.status(500).json({
-        success: false,
-        message: error.message || "Failed to convert quotation",
-      });
-    }
+    return SalesOrderController.fromQuotation(req, res);
   }
+
 
   static async approveInvoice(req: AuthenticatedRequest, res: Response) {
     try {
@@ -6646,17 +6511,21 @@ export class StockController {
       const productMap = new Map(
         allProducts.map((product) => [String(product._id), product]),
       );
-      const stockManagedItems = sourceItems.filter((item: any) => {
-        if (item.isOutsourced) return false;
-        if (item.productType === "service") return false;
-        const product = productMap.get(String(item.productId));
-        return product ? product.productType !== "service" : true;
-      });
+      const stockManagedItems = sourceItems.filter((item: any) =>
+        isStockManagedLine(item, productMap.get(String(item.productId))),
+      );
 
-      const decremented: Array<{ productId: string; quantity: number }> = [];
+      const issued: Array<{
+        productId: string;
+        quantity: number;
+        unitCost: number;
+        reservedReleased: number;
+      }> = [];
       const remainingByProduct = new Map<string, number>();
+      const costByProduct = new Map<string, { unitCost: number; totalCost: number; costingMethod: string }>();
       let createdSaleIds: string[] = [];
       let createdMachineIds: string[] = [];
+      const fromReservation = Boolean((invoice as any).salesOrderId);
 
       const rollbackPost = async () => {
         if (createdSaleIds.length > 0) {
@@ -6671,14 +6540,22 @@ export class StockController {
             org_id,
           });
         }
-        await Promise.all(
-          decremented.map((entry) =>
-            StockProduct.updateOne(
+        for (const entry of issued) {
+          await restoreIssuedStock({
+            orgId: org_id,
+            productId: entry.productId,
+            quantity: entry.quantity,
+            unitCost: entry.unitCost,
+            actorId: String(actorId),
+            sourceId: invoiceId,
+          });
+          if (entry.reservedReleased > 0) {
+            await StockProduct.updateOne(
               { _id: entry.productId, org_id },
-              { $inc: { currentQuantity: entry.quantity } },
-            ),
-          ),
-        );
+              { $inc: { reservedQuantity: entry.reservedReleased } },
+            );
+          }
+        }
         await StockInvoice.updateOne(
           { _id: invoiceId, org_id },
           {
@@ -6694,32 +6571,33 @@ export class StockController {
           if (!Number.isFinite(qty) || qty <= 0) {
             throw new Error(`Invalid quantity for ${item.productName}`);
           }
-          const updated = await StockProduct.findOneAndUpdate(
-            {
-              _id: item.productId,
-              org_id,
-              currentQuantity: { $gte: qty },
-            },
-            { $inc: { currentQuantity: -qty } },
-            { new: true },
-          );
-          if (!updated) {
-            throw new Error(
-              `Insufficient stock for ${item.productName} (or product missing)`,
-            );
-          }
-          decremented.push({
+          const issuedLine = await issueStock({
+            orgId: org_id,
             productId: String(item.productId),
             quantity: qty,
+            fromReservation,
+          });
+          issued.push({
+            productId: String(item.productId),
+            quantity: qty,
+            unitCost: issuedLine.unitCost,
+            reservedReleased: issuedLine.reservedReleased || 0,
           });
           remainingByProduct.set(
             String(item.productId),
-            Number(updated.currentQuantity || 0),
+            issuedLine.remainingQuantity,
           );
+          costByProduct.set(String(item.productId), {
+            unitCost: issuedLine.unitCost,
+            totalCost: issuedLine.totalCost,
+            costingMethod: issuedLine.costingMethod,
+          });
         }
 
         const receiptNumber = generateDocumentNumber("RCP");
-        const salesToCreate = stockManagedItems.map((item: any) => ({
+        const salesToCreate = stockManagedItems.map((item: any) => {
+          const cost = costByProduct.get(String(item.productId));
+          return {
           org_id,
           productId: item.productId,
           quantitySold: item.quantity,
@@ -6735,14 +6613,18 @@ export class StockController {
           receiptNumber,
           remainingQuantity:
             remainingByProduct.get(String(item.productId)) ?? 0,
-        }));
+          unitCost: cost?.unitCost || 0,
+          totalCost: cost?.totalCost || 0,
+          costingMethod: cost?.costingMethod || "average",
+        };
+        });
 
         if (salesToCreate.length > 0) {
           const sales = await StockSale.insertMany(salesToCreate);
           createdSaleIds = sales.map((sale) => String(sale._id));
         }
 
-        for (const productId of decremented.map((d) => d.productId)) {
+        for (const productId of issued.map((entry) => entry.productId)) {
           const product = await StockProduct.findOne({ _id: productId, org_id });
           if (product) await sendLowStockAlert(product, org_id);
         }
@@ -6813,9 +6695,40 @@ export class StockController {
           await quotation.save();
         }
 
+        const cogsAmount = [...costByProduct.values()].reduce(
+          (sum, row) => sum + Number(row.totalCost || 0),
+          0,
+        );
+        await postSaleLedgers({
+          orgId: org_id,
+          userId: String(actorId),
+          date: new Date(),
+          reference: invoice.invoiceNumber,
+          description: `Invoice ${invoice.invoiceNumber} · ${invoice.client?.name || "Client"}`,
+          revenueAmount: Number(invoice.subTotal || 0),
+          taxAmount: Number((invoice as any).taxTotal || 0),
+          cogsAmount,
+        });
+        (invoice as any).cogsAmount = cogsAmount;
+        (invoice as any).glPosted = true;
+        await invoice.save();
+
+        if ((invoice as any).salesOrderId) {
+          await StockSalesOrder.updateOne(
+            { _id: (invoice as any).salesOrderId, org_id },
+            {
+              $set: {
+                status: "invoiced",
+                convertedInvoiceId: String(invoice._id),
+                invoicedAt: new Date(),
+              },
+            },
+          );
+        }
+
         return res.status(200).json({
           success: true,
-          message: "Invoice posted",
+          message: "Invoice posted, stock issued, and COGS journal recorded",
           data: invoice,
         });
       } catch (postError: any) {
@@ -6974,14 +6887,14 @@ export class StockController {
 
         const sales = await StockSale.find({ org_id, invoiceId });
         for (const sale of sales) {
-          const product = await StockProduct.findOne({
-            _id: sale.productId,
-            org_id,
+          await restoreIssuedStock({
+            orgId: org_id,
+            productId: String(sale.productId),
+            quantity: Number(sale.quantitySold || 0),
+            unitCost: Number((sale as any).unitCost || 0),
+            actorId: String(actorId),
+            sourceId: invoiceId,
           });
-          if (product) {
-            product.currentQuantity += Number(sale.quantitySold || 0);
-            await product.save();
-          }
         }
         if (sales.length > 0) {
           await StockSale.deleteMany({ org_id, invoiceId });
@@ -6990,10 +6903,36 @@ export class StockController {
           { org_id, invoiceId },
           { $set: { isActive: false, status: "ended" } },
         );
+        if ((invoice as any).salesOrderId) {
+          for (const sale of sales) {
+            await reserveStock({
+              orgId: org_id,
+              productId: String(sale.productId),
+              quantity: Number(sale.quantitySold || 0),
+            });
+          }
+        }
       }
 
       invoice.status = "cancelled";
       await invoice.save();
+
+      if ((invoice as any).salesOrderId) {
+        const order = await StockSalesOrder.findOne({
+          _id: (invoice as any).salesOrderId,
+          org_id,
+        });
+        if (order) {
+          order.status = "confirmed";
+          order.convertedInvoiceId = undefined;
+          order.invoicedAt = undefined;
+          order.items = order.items.map((item) => ({
+            ...item,
+            invoicedQuantity: 0,
+          }));
+          await order.save();
+        }
+      }
 
       if (
         invoice.quotationId &&
@@ -7200,10 +7139,10 @@ export class StockController {
             message: `Product not found: ${item.productName}`,
           });
         }
-        if (product.currentQuantity < item.quantity) {
+        if (availableQuantity(product) < item.quantity) {
           return res.status(400).json({
             success: false,
-            message: `Insufficient stock for ${item.productName}. Available: ${product.currentQuantity}, requested: ${item.quantity}`,
+            message: `Insufficient stock for ${item.productName}. Available: ${availableQuantity(product)}, requested: ${item.quantity}`,
           });
         }
       }
@@ -7237,12 +7176,16 @@ export class StockController {
       });
 
       const receiptNumber = generateDocumentNumber("RCP");
-
-      const salesToCreate = stockManagedItems.map((item: any) => {
-        const product = productMap.get(String(item.productId))!;
-        product.currentQuantity -= item.quantity;
-
-        return {
+      let cogsAmount = 0;
+      const salesToCreate = [];
+      for (const item of stockManagedItems) {
+        const issuedLine = await issueStock({
+          orgId: org_id,
+          productId: String(item.productId),
+          quantity: Number(item.quantity),
+        });
+        cogsAmount += issuedLine.totalCost;
+        salesToCreate.push({
           org_id,
           productId: item.productId,
           quantitySold: item.quantity,
@@ -7258,14 +7201,29 @@ export class StockController {
           quotationId: undefined,
           invoiceId: String(invoice._id),
           receiptNumber,
-          remainingQuantity: product.currentQuantity,
-        };
-      });
+          remainingQuantity: issuedLine.remainingQuantity,
+          unitCost: issuedLine.unitCost,
+          totalCost: issuedLine.totalCost,
+          costingMethod: issuedLine.costingMethod,
+        });
+      }
 
       if (products.length > 0) {
-        await Promise.all(products.map((p) => p.save()));
         await Promise.all(products.map((p) => sendLowStockAlert(p, org_id)));
       }
+
+      await postSaleLedgers({
+        orgId: org_id,
+        userId: String(actorId),
+        reference: invoice.invoiceNumber,
+        description: `Invoice ${invoice.invoiceNumber} · ${invoice.client.name}`,
+        revenueAmount: subTotal,
+        taxAmount: taxTotal,
+        cogsAmount,
+      });
+      (invoice as any).cogsAmount = cogsAmount;
+      (invoice as any).glPosted = true;
+      await invoice.save();
 
       if (salesToCreate.length > 0) {
         await StockSale.insertMany(salesToCreate);
@@ -7473,6 +7431,17 @@ export class StockController {
           reference:
             quotation?.quotationNumber || invoice.quotationNumber || null,
           completedAt: quotation?.createdAt || null,
+        },
+        {
+          key: "sales_order",
+          label: "Sales order",
+          status: (invoice as any).salesOrderId
+            ? "completed"
+            : quotation && (quotation as any).convertedSalesOrderId
+              ? "completed"
+              : "not_started",
+          reference: (invoice as any).salesOrderNumber || null,
+          completedAt: null,
         },
         {
           key: "draft",
@@ -8649,9 +8618,11 @@ export class StockController {
         name: String(name).trim(),
         category,
         startingPrice: Number(resolvedBuyingPrice),
+        averageCost: Number(resolvedBuyingPrice),
         sellingPrice: Number(sellingPrice),
         minAlertQuantity: Number(minAlertQuantity),
         currentQuantity: Number(currentQuantity),
+        reservedQuantity: 0,
         assignedUsers: Array.isArray(assignedUsers) ? assignedUsers : [],
         isOutsourced: isOutsourced === "true" || isOutsourced === true,
         taxable: taxable === "true" || taxable === true,
@@ -8693,6 +8664,19 @@ export class StockController {
       }
 
       const product = await StockProduct.create(productPayload);
+
+      if (Number(currentQuantity) > 0) {
+        await receiveStock({
+          orgId: org_id,
+          productId: String(product._id),
+          quantity: Number(currentQuantity),
+          unitCost: Number(resolvedBuyingPrice),
+          actorId: String(createdBy),
+          source: "opening",
+          branchId: trimmedBranchId || undefined,
+          applyQuantity: false,
+        });
+      }
 
       if (Number(currentQuantity) > 0 && trimmedBranchId) {
         await StockEntry.create({
@@ -9446,7 +9430,25 @@ export class StockController {
         });
       }
 
-      product.currentQuantity += Number(quantityAdded);
+      const receiptCost = Number(
+        req.body.unitCost ?? req.body.buyingPrice ?? product.averageCost ?? product.startingPrice ?? 0,
+      );
+      await receiveStock({
+        orgId: org_id,
+        productId: String(product._id),
+        quantity: Number(quantityAdded),
+        unitCost: receiptCost,
+        actorId: String(actorId),
+        source: "receipt",
+        branchId: resolvedBranchId ? String(resolvedBranchId).trim() : undefined,
+        applyQuantity: true,
+      });
+      const freshProduct = await StockProduct.findOne({ _id: product._id, org_id });
+      if (freshProduct) {
+        product.currentQuantity = freshProduct.currentQuantity;
+        (product as any).averageCost = (freshProduct as any).averageCost;
+        (product as any).reservedQuantity = (freshProduct as any).reservedQuantity;
+      }
 
       if (expiryEnabled !== undefined) {
         product.expiryEnabled = Boolean(expiryEnabled);
@@ -9915,15 +9917,18 @@ export class StockController {
         });
       }
 
-      if (product.currentQuantity < Number(quantitySold)) {
+      if (availableQuantity(product) < Number(quantitySold)) {
         return res.status(400).json({
           success: false,
           message: "Cannot sell more than available stock",
         });
       }
 
-      product.currentQuantity -= Number(quantitySold);
-      await product.save();
+      const issuedLine = await issueStock({
+        orgId: org_id,
+        productId: String(product._id),
+        quantity: Number(quantitySold),
+      });
 
       const sale = await StockSale.create({
         org_id,
@@ -9946,7 +9951,10 @@ export class StockController {
         quotationId: quotationId ? String(quotationId) : undefined,
         invoiceId: invoiceId ? String(invoiceId) : undefined,
         receiptNumber: generateDocumentNumber("RCP"),
-        remainingQuantity: product.currentQuantity,
+        remainingQuantity: issuedLine.remainingQuantity,
+        unitCost: issuedLine.unitCost,
+        totalCost: issuedLine.totalCost,
+        costingMethod: issuedLine.costingMethod,
       });
 
       await sendLowStockAlert(product, org_id);
@@ -10506,18 +10514,24 @@ export class StockController {
             : counted - expected;
         if (!Number.isFinite(variance) || variance === 0) continue;
 
-        const updated = await StockProduct.findOneAndUpdate(
-          { _id: productId, org_id },
-          { $inc: { currentQuantity: variance } },
-          { new: true },
-        );
-        if (!updated) continue;
-
-        if (Number(updated.currentQuantity || 0) < 0) {
-          await StockProduct.updateOne(
-            { _id: productId, org_id },
-            { $set: { currentQuantity: 0 } },
-          );
+        const product = await StockProduct.findOne({ _id: productId, org_id });
+        if (!product) continue;
+        if (variance > 0) {
+          await receiveStock({
+            orgId: org_id,
+            productId,
+            quantity: variance,
+            unitCost: unitCostOf(product),
+            actorId: String(userId),
+            source: "adjustment",
+            sourceId: String(stockCheckId),
+          });
+        } else {
+          await issueStock({
+            orgId: org_id,
+            productId,
+            quantity: Math.abs(variance),
+          });
         }
 
         // Align warehouse branch quantities when this check is warehouse-scoped

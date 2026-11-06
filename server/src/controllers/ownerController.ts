@@ -17,6 +17,7 @@ import { emailService } from "../services/emailService"
 import { companyDeleteOtpEmail } from "../lib/email-templates"
 import { permanentlyDeleteCompany } from "../services/companyDeletionService"
 import { sanitizeEnabledPages } from "../lib/enabledPages"
+import { ON_THE_GO_PAGES, isOnTheGoPageSet } from "../lib/onTheGo"
 
 const COMPANY_DELETE_OTP_EMAIL = String(
   process.env.COMPANY_DELETE_OTP_EMAIL || "info@elevatehub.co.ke",
@@ -106,6 +107,7 @@ export class OwnerController {
         frozenReason: company.frozenReason,
         frozenAt: company.frozenAt,
         enabledPages: company.enabledPages || [],
+        onTheGo: Boolean(company.onTheGo),
         pageAccessSettings: company.pageAccessSettings,
         maxEmployees: company.maxEmployees || 100,
         employeeCount: company.employeeCount || 0,
@@ -234,10 +236,19 @@ export class OwnerController {
       }
 
       const enabledPages = sanitizeEnabledPages(req.body.enabledPages)
+      const existing = await Company.findById(companyId).select("onTheGo")
+      if (!existing) {
+        return res.status(404).json({ success: false, message: "Company not found" })
+      }
+
+      const update: Record<string, unknown> = { enabledPages }
+      if (existing.onTheGo && !isOnTheGoPageSet(enabledPages)) {
+        update.onTheGo = false
+      }
 
       const company = await Company.findByIdAndUpdate(
         companyId,
-        { enabledPages },
+        update,
         { new: true },
       )
 
@@ -253,6 +264,46 @@ export class OwnerController {
     } catch (error) {
       console.error("Error updating company pages:", error)
       return res.status(500).json({ success: false, message: "Failed to update company pages" })
+    }
+  }
+
+  /**
+   * Enable or disable On the Go mode for a company.
+   * On the Go companies get a slim workspace: dashboard, clients, quotes, invoices, products, settings.
+   */
+  static async updateCompanyOnTheGo(req: AuthenticatedRequest, res: Response) {
+    try {
+      if (!isPlatformOwner(req.user?.email, req.user?.role)) {
+        return res.status(403).json({ success: false, message: "Unauthorized: Owner access required" })
+      }
+
+      const { companyId } = req.body
+      const onTheGo = Boolean(req.body.onTheGo)
+
+      if (!companyId) {
+        return res.status(400).json({ success: false, message: "companyId is required" })
+      }
+
+      const update: Record<string, unknown> = { onTheGo }
+      if (onTheGo) {
+        update.enabledPages = [...ON_THE_GO_PAGES]
+      }
+
+      const company = await Company.findByIdAndUpdate(companyId, update, { new: true })
+      if (!company) {
+        return res.status(404).json({ success: false, message: "Company not found" })
+      }
+
+      return res.json({
+        success: true,
+        message: onTheGo
+          ? "On the Go mode enabled. This company now has the basics plus quotes and invoices."
+          : "On the Go mode turned off. Restore extra modules from Global Module Rights if needed.",
+        data: company,
+      })
+    } catch (error) {
+      console.error("Error updating On the Go mode:", error)
+      return res.status(500).json({ success: false, message: "Failed to update On the Go mode" })
     }
   }
 

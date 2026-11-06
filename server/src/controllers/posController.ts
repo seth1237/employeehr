@@ -24,6 +24,11 @@ import {
   resolveLineTax,
   summarizeDocumentTotals,
 } from "./stock/stockShared"
+import {
+  availableQuantity,
+  issueStock,
+  postSaleLedgers,
+} from "../services/inventoryCosting.service"
 
 const POS_ROLES = new Set(["pos_cashier", "company_admin", "admin", "hr", "super_admin"])
 const CASHIER_DISCOUNT_LIMIT = 10
@@ -84,7 +89,7 @@ async function nextHoldNo(orgId: string) {
 }
 
 function mapProduct(product: any, categoryName = "") {
-  const qty = Number(product.currentQuantity || 0)
+  const qty = availableQuantity(product)
   const min = Number(product.minAlertQuantity || 0)
   return {
     id: String(product._id),
@@ -117,10 +122,10 @@ function buildLines(products: Map<string, any>, items: any[]) {
       throw new Error(`Invalid quantity for ${product.name}`)
     }
     const isService = product.productType === "service" || product.isOutsourced
-    const available = Number(product.currentQuantity || 0)
+    const available = availableQuantity(product)
     if (!isService && available < quantity) {
       throw new Error(
-        `${product.name} has only ${available} left in this branch. Remove the item or lower the quantity.`,
+        `${product.name} has only ${available} available (reserved stock is held for sales orders). Remove the item or lower the quantity.`,
       )
     }
     const unitPrice = Number(product.sellingPrice || 0)
@@ -498,10 +503,16 @@ export class PosController {
       }))
 
       const stockManaged = priced.lines.filter((line) => !line.isService)
+      const issuedByProduct = new Map<string, { remainingQuantity: number; unitCost: number; totalCost: number; costingMethod: string }>()
+      let posCogs = 0
       for (const line of stockManaged) {
-        const product = productMap.get(line.productId)
-        if (!product) continue
-        product.currentQuantity = Math.max(0, Number(product.currentQuantity || 0) - line.quantity)
+        const issuedLine = await issueStock({
+          orgId,
+          productId: line.productId,
+          quantity: line.quantity,
+        })
+        posCogs += issuedLine.totalCost
+        issuedByProduct.set(line.productId, issuedLine)
       }
 
       const invoice = await StockInvoice.create({
@@ -537,11 +548,11 @@ export class PosController {
         createdBy: cashierId,
       })
 
-      if (products.length) await Promise.all(products.map((product) => product.save()))
-
       if (stockManaged.length) {
         await StockSale.insertMany(
-          stockManaged.map((line) => ({
+          stockManaged.map((line) => {
+            const issued = issuedByProduct.get(line.productId)
+            return {
             org_id: orgId,
             productId: line.productId,
             quantitySold: line.quantity,
@@ -554,10 +565,26 @@ export class PosController {
             isSalesCompany: false,
             invoiceId: String(invoice._id),
             receiptNumber: receiptNo,
-            remainingQuantity: Number(productMap.get(line.productId)?.currentQuantity || 0),
-          })),
+            remainingQuantity: issued?.remainingQuantity || 0,
+            unitCost: issued?.unitCost || 0,
+            totalCost: issued?.totalCost || 0,
+            costingMethod: issued?.costingMethod || "average",
+          }
+          }),
         )
       }
+      await postSaleLedgers({
+        orgId,
+        userId: cashierId,
+        reference: String(invoice.invoiceNumber),
+        description: `POS sale ${invoice.invoiceNumber}`,
+        revenueAmount: priced.subtotal,
+        taxAmount: priced.taxTotal,
+        cogsAmount: posCogs,
+      })
+      ;(invoice as any).cogsAmount = posCogs
+      ;(invoice as any).glPosted = true
+      await invoice.save()
 
       for (const payment of payments) {
         const record = await StockInvoicePayment.create({

@@ -30,6 +30,8 @@ export interface IStockInvoice {
   deliveryNoteNumber: string
   quotationId?: string
   quotationNumber?: string
+  salesOrderId?: string
+  salesOrderNumber?: string
   client: IInvoiceClient
   clientProfileId?: string
   items: IInvoiceItem[]
@@ -49,6 +51,8 @@ export interface IStockInvoice {
   revisedFromInvoiceId?: string
   postedAt?: Date
   postedBy?: string
+  cogsAmount?: number
+  glPosted?: boolean
   dispatch?: {
     status: "not_assigned" | "assigned" | "packing" | "packed" | "dispatched" | "delivered"
     assignedToUserId?: string
@@ -125,6 +129,8 @@ const stockInvoiceSchema = new Schema<IStockInvoice>(
     deliveryNoteNumber: { type: String, required: true, index: true },
     quotationId: { type: String },
     quotationNumber: { type: String },
+    salesOrderId: { type: String, index: true },
+    salesOrderNumber: { type: String },
     client: {
       name: { type: String, required: true },
       number: { type: String, required: true },
@@ -156,6 +162,8 @@ const stockInvoiceSchema = new Schema<IStockInvoice>(
     revisedFromInvoiceId: { type: String, index: true },
     postedAt: { type: Date },
     postedBy: { type: String },
+    cogsAmount: { type: Number, min: 0, default: 0 },
+    glPosted: { type: Boolean, default: false },
     dispatch: {
       status: {
         type: String,

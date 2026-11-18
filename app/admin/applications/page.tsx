@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { useToast } from '@/hooks/use-toast';
 import { getToken } from '@/lib/auth';
 import API_URL from '@/lib/apiBase';
+import { useRouter } from 'next/navigation';
 import { finishDataLoad, startDataLoad } from '@/lib/silent-load';
 import { PageLoadingSkeleton } from '@/components/admin/ui/page-states';
 
@@ -40,6 +41,7 @@ export default function ApplicationsPage() {
   const [noteText, setNoteText] = useState('');
   const [hiringId, setHiringId] = useState<string | null>(null);
   const { toast } = useToast();
+  const router = useRouter();
 
   useEffect(() => {
     fetchApplications();
@@ -94,8 +96,15 @@ export default function ApplicationsPage() {
       });
 
       if (response.ok) {
-        toast({ title: 'Success', description: 'Status updated successfully' });
+        toast({
+          title: status === 'hired' ? 'Moved to onboarding' : 'Status updated',
+          description:
+            status === 'hired'
+              ? 'Candidate is in the onboarding pool. They become an employee after onboarding is completed.'
+              : 'Status updated successfully',
+        });
         fetchApplications(true);
+        if (status === 'hired') router.push('/admin/onboarding');
       }
     } catch (error) {
       toast({
@@ -137,7 +146,7 @@ export default function ApplicationsPage() {
     ['shortlisted', 'reviewing', 'pending'].includes(status) && status !== 'hired';
 
   const hireApplicant = async (appId: string) => {
-    if (!confirm('Hire this candidate? This will create an employee record and can start onboarding.')) {
+    if (!confirm('Mark this candidate as hired and move them to onboarding? They will not be an employee until onboarding is completed.')) {
       return;
     }
     setHiringId(appId);
@@ -155,10 +164,11 @@ export default function ApplicationsPage() {
         throw new Error(data.message || 'Hire failed');
       }
       toast({
-        title: 'Candidate hired',
-        description: 'Next: open /admin/employees and /admin/onboarding to finish setup.',
+        title: 'Moved to onboarding',
+        description: 'Complete the onboarding form to create the employee record. They can still be dropped.',
       });
       fetchApplications(true);
+      router.push('/admin/onboarding');
     } catch (error: any) {
       toast({
         title: 'Error',

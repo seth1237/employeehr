@@ -16,9 +16,14 @@ import { format } from "date-fns"
 import { finishDataLoad, startDataLoad } from "@/lib/silent-load"
 import { TableSkeleton } from "@/components/admin/ui/page-states"
 import {
+    ALLOWANCE_PRESETS,
     calculatePayroll,
+    DEDUCTION_PRESETS,
     DEFAULT_DEDUCTION_RULES,
     getRuleAmount,
+    isStatutoryDeduction,
+    PAYE_BANDS,
+    PERSONAL_RELIEF,
     roundCurrency,
     statutoryDisplayName,
     statutoryKey,
@@ -28,6 +33,7 @@ import {
 } from "@/lib/payroll-calculator"
 import { FinanceDocumentShell } from "@/components/accounts/finance-document-shell"
 import { downloadEmployeePayslip } from "@/lib/payslip-download"
+import { downloadMonthPayrollWorkbook } from "@/lib/payroll-month-export"
 
 type SalaryMode = "gross" | "net"
 type PayrollEmployeeDetails = {
@@ -134,6 +140,7 @@ export default function AdminPayrollPage() {
         nssf: "",
     })
     const [savingDetails, setSavingDetails] = useState(false)
+    const [exporting, setExporting] = useState(false)
 
     const selectedEmployee = useMemo(
         () => employees.find((e) => e._id === genEmployeeId) || null,
@@ -291,21 +298,30 @@ export default function AdminPayrollPage() {
     }
 
     const addOtherDeduction = () => {
-        if (!newOtherDeductionName.trim() || !newOtherDeductionAmount) return
-        setOtherDeductionItems((prev) => [
-            ...prev,
-            { name: newOtherDeductionName.trim(), amount: Number(newOtherDeductionAmount) },
-        ])
+        addNamedLine(otherDeductionItems, setOtherDeductionItems, newOtherDeductionName, newOtherDeductionAmount)
         setNewOtherDeductionName("")
         setNewOtherDeductionAmount("")
     }
 
+    const addNamedLine = (
+        list: DeductionItem[],
+        setter: (next: DeductionItem[]) => void,
+        name: string,
+        amount: string,
+    ) => {
+        const label = name.trim()
+        const value = Number(amount)
+        if (!label || !Number.isFinite(value) || value === 0) return
+        const existing = list.findIndex((item) => statutoryKey(item.name) === statutoryKey(label))
+        if (existing >= 0) {
+            setter(list.map((item, index) => (index === existing ? { ...item, amount: roundCurrency(item.amount + value) } : item)))
+        } else {
+            setter([...list, { name: label, amount: roundCurrency(value) }])
+        }
+    }
+
     const addOtherBonus = () => {
-        if (!newOtherBonusName.trim() || !newOtherBonusAmount) return
-        setOtherBonusItems((prev) => [
-            ...prev,
-            { name: newOtherBonusName.trim(), amount: Number(newOtherBonusAmount) },
-        ])
+        addNamedLine(otherBonusItems, setOtherBonusItems, newOtherBonusName, newOtherBonusAmount)
         setNewOtherBonusName("")
         setNewOtherBonusAmount("")
     }
@@ -329,8 +345,16 @@ export default function AdminPayrollPage() {
         setSalaryInput(payroll.base_salary.toString())
         setSalaryMode("gross")
         setGenBonus(payroll.bonus.toString())
-        setOtherDeductionItems(payroll.deduction_items || [])
+        setOtherDeductionItems(
+            (payroll.deduction_items || []).filter((item: any) => !isStatutoryDeduction(item.name) && statutoryKey(item.name) !== "helb"),
+        )
+        const helbLine = (payroll.deduction_items || []).find((item: any) => statutoryKey(item.name) === "helb")
+        if (helbLine) {
+            setDeductHelb(true)
+            setHelbAmount(String(helbLine.amount || ""))
+        }
         setOtherBonusItems(payroll.other_bonus_items || [])
+        setStandardDeductionOverrides(payroll.standard_deduction_overrides || {})
         setDeductionsDisabled(Boolean(payroll.deductions_disabled))
         setSidebarOpen(true)
     }
@@ -407,10 +431,10 @@ export default function AdminPayrollPage() {
             const payload = {
                 user_id: genEmployeeId,
                 month: selectedMonth,
-                base_salary: Number(calculatorResult.gross || genSalary || 0),
-                bonus: otherBonusItems.reduce((sum, item) => sum + Number(item.amount || 0), 0),
+                base_salary: Number(calculatorResult.basic || genSalary || 0),
+                bonus: Number(genBonus || 0),
                 other_bonus_items: otherBonusItems,
-                deduction_items: calculatorResult.items,
+                deduction_items: calculatorResult.items.filter((item) => !isStatutoryDeduction(item.name)),
                 standard_deduction_overrides: standardDeductionOverrides,
                 deductions_disabled: deductionsDisabled,
             }
@@ -474,6 +498,33 @@ export default function AdminPayrollPage() {
                 variant: "destructive",
                 description: error.message || "Failed to download payslip",
             })
+        }
+    }
+
+    const exportMonthWorkbook = async () => {
+        if (!payrolls.length) {
+            toast({
+                variant: "destructive",
+                description: "Generate payslips for this month before exporting.",
+            })
+            return
+        }
+        try {
+            setExporting(true)
+            const brandingRes = await api.company.getBranding().catch(() => null)
+            await downloadMonthPayrollWorkbook({
+                companyName: brandingRes?.data?.name || "Company",
+                month: selectedMonth,
+                payrolls,
+                employees,
+            })
+        } catch (error: any) {
+            toast({
+                variant: "destructive",
+                description: error.message || "Failed to export payroll workbook",
+            })
+        } finally {
+            setExporting(false)
         }
     }
 
@@ -642,7 +693,7 @@ export default function AdminPayrollPage() {
         <FinanceDocumentShell
             eyebrow="Accounts · Payroll"
             title="Payroll Management"
-            description="Generate monthly payroll, manage statutory deductions, or create entries without tax deductions."
+            description="Run the month, apply KRA PAYE bands, and add allowances, advances, and savings on the payslip."
             backHref="/admin/accounts"
             kpis={[
                 {
@@ -673,6 +724,15 @@ export default function AdminPayrollPage() {
                         onChange={(e) => setSelectedMonth(e.target.value)}
                         className="w-40 h-9"
                     />
+                    <Button
+                        variant="outline"
+                        className="gap-2 h-9"
+                        onClick={() => void exportMonthWorkbook()}
+                        disabled={exporting || loading || payrolls.length === 0}
+                    >
+                        {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                        Export payroll
+                    </Button>
                     <Button variant="outline" className="gap-2 h-9" onClick={launchEmployeeDetails}>
                         <Calculator className="w-4 h-4" /> Employee Details
                     </Button>
@@ -826,7 +886,10 @@ export default function AdminPayrollPage() {
                                 </div>
 
                                 <div className="border-t pt-6">
-                                    <h3 className="text-sm font-semibold mb-4 text-muted-foreground uppercase tracking-wider">Standard Deductions</h3>
+                                    <h3 className="text-sm font-semibold mb-1">Statutory</h3>
+                                    <p className="text-xs text-muted-foreground mb-4">
+                                        PAYE uses the KRA monthly bands on taxable pay (gross less NSSF and housing levy). SHIF stays 2.75% of gross.
+                                    </p>
                                     <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
                                         {DEFAULT_DEDUCTION_RULES.map((rule) => {
                                             const calculatedAmount = getRuleAmount(rule, Number(calculatorResult.gross || 0))
@@ -862,26 +925,79 @@ export default function AdminPayrollPage() {
                                                             </Button>
                                                         )}
                                                     </div>
-                                                    {currentOverride !== undefined && (
-                                                        <p className="text-[10px] text-amber-600">Default: KES {roundCurrency(calculatedAmount).toLocaleString()}</p>
-                                                    )}
+                                                    <p className="text-[10px] text-muted-foreground">{rule.note}</p>
                                                 </div>
                                             )
                                         })}
                                     </div>
+                                    {calculatorResult.paye.bands.length > 0 && !deductionsDisabled && (
+                                        <table className="mt-4 w-full text-xs">
+                                            <thead>
+                                                <tr className="text-left text-muted-foreground border-b">
+                                                    <th className="py-1 font-medium">PAYE band</th>
+                                                    <th className="py-1 font-medium">Rate</th>
+                                                    <th className="py-1 font-medium text-right">Taxable</th>
+                                                    <th className="py-1 font-medium text-right">Tax</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {calculatorResult.paye.bands.map((band) => (
+                                                    <tr key={`${band.from}-${band.rate}`} className="border-b last:border-0">
+                                                        <td className="py-1">
+                                                            {band.from.toLocaleString()}
+                                                            {band.to ? ` – ${band.to.toLocaleString()}` : "+"}
+                                                        </td>
+                                                        <td className="py-1">{band.rate}%</td>
+                                                        <td className="py-1 text-right">{band.taxable.toLocaleString()}</td>
+                                                        <td className="py-1 text-right">{band.tax.toLocaleString()}</td>
+                                                    </tr>
+                                                ))}
+                                                <tr>
+                                                    <td className="py-1" colSpan={3}>Personal relief</td>
+                                                    <td className="py-1 text-right">-{PERSONAL_RELIEF.toLocaleString()}</td>
+                                                </tr>
+                                                <tr className="font-medium">
+                                                    <td className="py-1" colSpan={3}>PAYE payable</td>
+                                                    <td className="py-1 text-right">{calculatorResult.paye.paye.toLocaleString()}</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    )}
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 border-t pt-6">
-                                    {/* Bonuses */}
                                     <div className="space-y-4">
-                                        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Other Bonuses</h3>
+                                        <h3 className="text-sm font-semibold">Allowances</h3>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {ALLOWANCE_PRESETS.map((name) => (
+                                                <Button
+                                                    key={name}
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="h-7 text-xs"
+                                                    onClick={() => setNewOtherBonusName(name)}
+                                                >
+                                                    {name}
+                                                </Button>
+                                            ))}
+                                        </div>
                                         <div className="space-y-2">
+                                            <div className="flex items-center justify-between text-sm py-2 border-b">
+                                                <span>Bonus</span>
+                                                <Input
+                                                    type="number"
+                                                    value={genBonus}
+                                                    onChange={(e) => setGenBonus(e.target.value)}
+                                                    className="h-8 w-28 text-sm"
+                                                />
+                                            </div>
                                             {otherBonusItems.map((item, idx) => (
-                                                <div key={idx} className="flex items-center justify-between text-sm py-2 border-b">
+                                                <div key={`${item.name}-${idx}`} className="flex items-center justify-between text-sm py-2 border-b">
                                                     <span>{item.name}</span>
                                                     <div className="flex items-center gap-3">
-                                                        <span className="text-green-600">+KES {item.amount.toLocaleString()}</span>
-                                                        <Button size="sm" variant="ghost" onClick={() => removeOtherBonus(idx)} className="h-6 w-6 p-0 text-muted-foreground hover:text-red-500">
+                                                        <span>+{item.amount.toLocaleString()}</span>
+                                                        <Button size="sm" variant="ghost" onClick={() => removeOtherBonus(idx)} className="h-6 w-6 p-0 text-muted-foreground">
                                                             <Trash2 className="w-3 h-3" />
                                                         </Button>
                                                     </div>
@@ -891,7 +1007,7 @@ export default function AdminPayrollPage() {
                                                 <Input
                                                     value={newOtherBonusName}
                                                     onChange={(e) => setNewOtherBonusName(e.target.value)}
-                                                    placeholder="Bonus name"
+                                                    placeholder="Allowance name"
                                                     className="h-9 text-sm flex-1"
                                                 />
                                                 <Input
@@ -906,19 +1022,31 @@ export default function AdminPayrollPage() {
                                         </div>
                                     </div>
 
-                                    {/* Deductions */}
                                     <div className="space-y-4">
-                                        <div className="rounded-lg border bg-amber-50/80 p-3 flex items-start justify-between gap-3">
-                                            <div>
-                                                <p className="text-sm font-semibold">Disable tax & statutory deductions</p>
-                                                <p className="text-xs text-muted-foreground">Create payroll without PAYE, SHA, NSSF, Housing Levy or HELB.</p>
-                                            </div>
-                                            <Checkbox checked={deductionsDisabled} onCheckedChange={(v) => setDeductionsDisabled(Boolean(v))} />
+                                        <div className="flex items-center justify-between gap-3">
+                                            <h3 className="text-sm font-semibold">Other deductions</h3>
+                                            <label className="flex items-center gap-2 text-xs">
+                                                <Checkbox checked={deductionsDisabled} onCheckedChange={(v) => setDeductionsDisabled(Boolean(v))} />
+                                                Skip statutory
+                                            </label>
                                         </div>
-                                        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Other Deductions</h3>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {DEDUCTION_PRESETS.map((name) => (
+                                                <Button
+                                                    key={name}
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="h-7 text-xs"
+                                                    onClick={() => setNewOtherDeductionName(name)}
+                                                >
+                                                    {name}
+                                                </Button>
+                                            ))}
+                                        </div>
                                         <div className="space-y-2">
                                             <div className="flex items-center justify-between text-sm py-2 border-b">
-                                                <span>HELB Deduction</span>
+                                                <span>HELB</span>
                                                 <div className="flex items-center gap-2">
                                                     {deductHelb && (
                                                         <Input
@@ -930,17 +1058,17 @@ export default function AdminPayrollPage() {
                                                         />
                                                     )}
                                                     <Button type="button" size="sm" variant={deductHelb ? "default" : "outline"} onClick={toggleHelb} className="h-8 text-xs px-2">
-                                                        {deductHelb ? "Added" : "Add"}
+                                                        {deductHelb ? "On" : "Off"}
                                                     </Button>
                                                 </div>
                                             </div>
 
                                             {otherDeductionItems.map((item, idx) => (
-                                                <div key={idx} className="flex items-center justify-between text-sm py-2 border-b">
+                                                <div key={`${item.name}-${idx}`} className="flex items-center justify-between text-sm py-2 border-b">
                                                     <span>{item.name}</span>
                                                     <div className="flex items-center gap-3">
-                                                        <span className="text-red-600">-KES {item.amount.toLocaleString()}</span>
-                                                        <Button size="sm" variant="ghost" onClick={() => removeOtherDeduction(idx)} className="h-6 w-6 p-0 text-muted-foreground hover:text-red-500">
+                                                        <span>-{item.amount.toLocaleString()}</span>
+                                                        <Button size="sm" variant="ghost" onClick={() => removeOtherDeduction(idx)} className="h-6 w-6 p-0 text-muted-foreground">
                                                             <Trash2 className="w-3 h-3" />
                                                         </Button>
                                                     </div>
@@ -950,7 +1078,7 @@ export default function AdminPayrollPage() {
                                                 <Input
                                                     value={newOtherDeductionName}
                                                     onChange={(e) => setNewOtherDeductionName(e.target.value)}
-                                                    placeholder="Deduction name"
+                                                    placeholder="Advance, savings, other…"
                                                     className="h-9 text-sm flex-1"
                                                 />
                                                 <Input
@@ -1057,303 +1185,48 @@ export default function AdminPayrollPage() {
                     </DialogContent>
                 </Dialog>
 
-            <Card className="overflow-hidden border-slate-200 shadow-sm min-w-0">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <Calculator className="w-5 h-5" /> Payroll Generator
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                        <div className="rounded-lg border bg-slate-50 p-4 space-y-4">
-                            <div className="flex flex-wrap items-center justify-between gap-3">
-                                <div>
-                                    <p className="text-sm font-semibold">Payroll calculation</p>
-                                    <p className="text-xs text-muted-foreground">Keep the inputs spaced and use the company buttons for actions.</p>
-                                </div>
-                                <div className="flex flex-wrap gap-2">
-                                    <Button
-                                        type="button"
-                                        variant={salaryMode === "gross" ? "default" : "outline"}
-                                        onClick={() => setSalaryMode("gross")}
-                                    >
-                                        Gross → Net
-                                    </Button>
-                                    <Button
-                                        type="button"
-                                        variant={salaryMode === "net" ? "default" : "outline"}
-                                        onClick={() => setSalaryMode("net")}
-                                    >
-                                        Net → Gross
-                                    </Button>
-                                    <Button type="button" variant="outline" onClick={() => setSalaryInput("")}>Clear</Button>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="grid gap-6 xl:grid-cols-[1.35fr_0.65fr]">
-                            <div className="space-y-6">
-                                <div className="grid gap-4 md:grid-cols-2">
-                                    <div className="space-y-2">
-                                        <Label>{salaryMode === "gross" ? "Gross Salary" : "Net Salary"}</Label>
-                                        <Input
-                                            type="number"
-                                            value={salaryInput}
-                                            onChange={(e) => setSalaryInput(e.target.value)}
-                                            placeholder={salaryMode === "gross" ? "Enter gross salary" : "Enter net salary"}
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label>Bonus</Label>
-                                        <Input
-                                            type="number"
-                                            value={genBonus}
-                                            onChange={(e) => setGenBonus(e.target.value)}
-                                            placeholder="Optional bonus"
-                                        />
-                                    </div>
-                                </div>
-
-                                <div className="rounded-lg border bg-amber-50/80 p-4 flex items-start justify-between gap-4">
-                                    <div className="space-y-1">
-                                        <p className="text-sm font-semibold">Disable tax & statutory deductions</p>
-                                        <p className="text-xs text-muted-foreground">
-                                            Skip PAYE, SHA, NSSF, Housing Levy and HELB when calculating net pay. Manual other deductions can still apply.
-                                        </p>
-                                    </div>
-                                    <Checkbox
-                                        checked={deductionsDisabled}
-                                        onCheckedChange={(value) => setDeductionsDisabled(Boolean(value))}
-                                    />
-                                </div>
-
-                                <div className="rounded-lg border bg-white p-5 space-y-4">
-                                    <div className="flex flex-wrap items-center justify-between gap-3">
-                                        <div>
-                                            <p className="text-sm font-semibold">Standard deductions</p>
-                                            <p className="text-xs text-muted-foreground">
-                                                {deductionsDisabled
-                                                    ? "Statutory deductions are disabled for this entry."
-                                                    : "PAYE, SHA, NSSF and Housing Levy are applied automatically."}
-                                            </p>
-                                        </div>
-                                        <Button type="button" variant="outline" onClick={saveCurrentRuleSet}>Save deduction set</Button>
-                                    </div>
-
-                                    <div className="grid gap-3 md:grid-cols-2">
-                                        {DEFAULT_DEDUCTION_RULES.map((rule) => (
-                                            <div key={rule.id} className="rounded-lg border bg-slate-50 p-4 text-sm">
-                                                <div className="flex items-start justify-between gap-3">
-                                                    <div className="space-y-1">
-                                                        <p className="font-medium">{rule.name}</p>
-                                                        <p className="text-xs text-muted-foreground">{rule.note}</p>
-                                                    </div>
-                                                    <span className="rounded-full border bg-white px-2 py-1 text-xs font-medium text-muted-foreground">
-                                                        {rule.type === "progressive" ? "Progressive" : `${rule.value}%`}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-
-                                    <div className="space-y-4 border-t pt-4">
-                                        <div className="grid gap-3 md:grid-cols-[1.3fr_0.8fr_0.8fr_auto]">
-                                            <div className="space-y-1">
-                                                <Label className="text-xs">Custom deduction name</Label>
-                                                <Input value={customRuleName} onChange={(e) => setCustomRuleName(e.target.value)} placeholder="e.g. HELB" />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <Label className="text-xs">Type</Label>
-                                                <Select value={customRuleType} onValueChange={(value) => setCustomRuleType(value as DeductionType)}>
-                                                    <SelectTrigger>
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="percentage">Percentage</SelectItem>
-                                                        <SelectItem value="fixed">Fixed amount</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                            <div className="space-y-1">
-                                                <Label className="text-xs">Value</Label>
-                                                <Input
-                                                    type="number"
-                                                    value={customRuleValue}
-                                                    onChange={(e) => setCustomRuleValue(e.target.value)}
-                                                    placeholder={customRuleType === "percentage" ? "%" : "Amount"}
-                                                />
-                                            </div>
-                                            <div className="flex items-end">
-                                                <Button type="button" onClick={addCustomRule} disabled={!customRuleName.trim() || !customRuleValue} className="w-full">Add</Button>
-                                            </div>
-                                        </div>
-
-                                        {customRules.length > 0 && (
-                                            <div className="space-y-2">
-                                                <p className="text-xs font-semibold uppercase text-muted-foreground">Custom deductions</p>
-                                                <div className="grid gap-2 md:grid-cols-2">
-                                                    {customRules.map((rule) => (
-                                                        <div key={rule.id} className="flex items-center justify-between rounded-lg border bg-white px-3 py-2 text-sm">
-                                                            <div>
-                                                                <p className="font-medium">{rule.name}</p>
-                                                                <p className="text-xs text-muted-foreground">{rule.type === "fixed" ? `KES ${rule.value.toLocaleString()}` : `${rule.value}%`}</p>
-                                                            </div>
-                                                            <span className="font-medium text-muted-foreground">KES {getRuleAmount(rule, Number(salaryInput || 0)).toLocaleString()}</span>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {savedRules.length > 0 && (
-                                            <div className="space-y-2">
-                                                <p className="text-xs font-semibold uppercase text-muted-foreground">Saved templates</p>
-                                                <div className="flex flex-wrap gap-2">
-                                                    {savedRules.map((rule) => (
-                                                        <Button key={rule.id} type="button" variant="outline" size="sm" onClick={() => addSavedRule(rule)}>
-                                                            + {rule.name}
-                                                        </Button>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-
-                                <div className="rounded-lg border bg-white p-5 space-y-4">
-                                    <div className="flex items-center justify-between gap-2">
-                                        <div>
-                                            <p className="font-semibold">Deduction breakdown</p>
-                                            <p className="text-xs text-muted-foreground">Amounts update live as the salary changes.</p>
-                                        </div>
-                                        <Button type="button" onClick={applyCalculatorToPayrollForm}>Use in payroll form</Button>
-                                    </div>
-                                    <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
-                                        {calculatorResult.items.length === 0 ? (
-                                            <p className="text-sm text-muted-foreground">Enter a salary amount to calculate deductions.</p>
-                                        ) : (
-                                            calculatorResult.items.map((item, index) => (
-                                                <div key={`${statutoryKey(item.name) || item.name}-${index}`} className="flex items-center justify-between rounded-lg border bg-slate-50 px-3 py-2 text-sm">
-                                                    <span>{statutoryDisplayName(item.name)}</span>
-                                                    <span className="font-semibold text-muted-foreground">KES {item.amount.toLocaleString()}</span>
-                                                </div>
-                                            ))
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="space-y-4 rounded-lg border bg-slate-50 p-5">
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div className="rounded-lg border bg-white p-4">
-                                        <p className="text-xs text-muted-foreground">Estimated Gross</p>
-                                        <p className="mt-2 text-2xl font-bold">KES {calculatorResult.gross.toLocaleString()}</p>
-                                    </div>
-                                    <div className="rounded-lg border bg-white p-4">
-                                        <p className="text-xs text-muted-foreground">Estimated Net</p>
-                                        <p className="mt-2 text-2xl font-bold">KES {calculatorResult.net.toLocaleString()}</p>
-                                    </div>
-                                    <div className="rounded-lg border bg-white p-4">
-                                        <p className="text-xs text-muted-foreground">Total Deductions</p>
-                                        <p className="mt-2 text-2xl font-bold">KES {calculatorResult.totalDeductions.toLocaleString()}</p>
-                                    </div>
-                                    <div className="rounded-lg border bg-white p-4">
-                                        <p className="text-xs text-muted-foreground">Calculated Bonus</p>
-                                        <p className="mt-2 text-2xl font-bold">KES {Number(genBonus || 0).toLocaleString()}</p>
-                                    </div>
-                                </div>
-
-                                <div className="rounded-lg border bg-white p-5 space-y-4">
-                                    <div>
-                                        <p className="text-sm font-semibold">Generation actions</p>
-                                        <p className="text-xs text-muted-foreground">Use the company buttons to generate the payslip or open the editor.</p>
-                                    </div>
-
-                                    <div className="space-y-3">
-                                        <div className="rounded-lg border bg-slate-50 p-4">
-                                            <div className="flex items-center justify-between gap-4">
-                                                <div>
-                                                    <Label className="text-sm font-medium">HELB Deduction</Label>
-                                                    <p className="text-xs text-muted-foreground mt-1">Higher Education Loans Board</p>
-                                                </div>
-                                                <Button type="button" variant={deductHelb ? "default" : "outline"} onClick={toggleHelb} className="px-5">
-                                                    {deductHelb ? "Enabled" : "Disabled"}
-                                                </Button>
-                                            </div>
-                                            {deductHelb && (
-                                                <div className="mt-3">
-                                                    <Input
-                                                        type="number"
-                                                        value={helbAmount}
-                                                        onChange={(e) => setHelbAmount(e.target.value)}
-                                                        placeholder="Enter HELB amount"
-                                                    />
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {otherDeductionItems.length > 0 && (
-                                            <div className="space-y-2">
-                                                <p className="text-sm font-semibold">Other Deductions</p>
-                                                {otherDeductionItems.map((item, idx) => (
-                                                    <div key={idx} className="flex items-center justify-between rounded-lg border bg-white px-3 py-2 text-sm">
-                                                        <span className="font-medium">{item.name}</span>
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="text-muted-foreground">KES {item.amount.toLocaleString()}</span>
-                                                            <Button size="sm" variant="ghost" onClick={() => removeOtherDeduction(idx)} className="h-8 w-8 p-0">
-                                                                <Trash2 className="w-4 h-4" />
-                                                            </Button>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-
-                                        <div className="grid gap-2 md:grid-cols-[1fr_160px_auto]">
-                                            <Input
-                                                value={newOtherDeductionName}
-                                                onChange={(e) => setNewOtherDeductionName(e.target.value)}
-                                                placeholder="Deduction name"
-                                            />
-                                            <Input
-                                                type="number"
-                                                value={newOtherDeductionAmount}
-                                                onChange={(e) => setNewOtherDeductionAmount(e.target.value)}
-                                                placeholder="Amount"
-                                            />
-                                            <Button type="button" onClick={addOtherDeduction} disabled={!newOtherDeductionName || !newOtherDeductionAmount}>
-                                                Add
-                                            </Button>
-                                        </div>
-
-                                        <Button className="w-full h-12 text-base font-semibold" onClick={handleGenerate} disabled={generating || !genSalary}>
-                                            {generating && <Loader2 className="mr-2 w-5 h-5 animate-spin" />}
-                                            {editId ? "Update Payroll" : "Generate Payroll"}
-                                        </Button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-
-            <div className="grid gap-4 md:grid-cols-2">
-                <Card className="overflow-hidden border-slate-200 shadow-sm">
-                    <div className="h-1 bg-blue-500" />
-                    <CardContent className="p-6 space-y-1">
-                        <p className="text-sm text-muted-foreground">Total Processed</p>
-                        <p className="text-2xl font-bold tracking-tight">{payrolls.length}</p>
-                    </CardContent>
-                </Card>
-                <Card className="overflow-hidden border-slate-200 shadow-sm">
-                    <div className="h-1 bg-emerald-500" />
-                    <CardContent className="p-6 space-y-1">
-                        <p className="text-sm text-muted-foreground">Total Payout</p>
-                        <p className="text-2xl font-bold tracking-tight">
-                            {payrolls.reduce((sum, p) => sum + p.net_pay, 0).toLocaleString()}
-                        </p>
-                    </CardContent>
-                </Card>
-            </div>
+            <Card>
+                <CardHeader className="pb-3">
+                    <CardTitle className="text-base">PAYE monthly bands</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                    <p className="text-sm text-muted-foreground">
+                        Tax is calculated on taxable pay (basic + allowances − NSSF − housing levy). Only the slice of salary that falls in a band is taxed at that rate. Personal relief of KES {PERSONAL_RELIEF.toLocaleString()} is then subtracted.
+                    </p>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="border-b text-left text-muted-foreground">
+                                    <th className="py-2 font-medium">Monthly taxable pay</th>
+                                    <th className="py-2 font-medium">Rate</th>
+                                    <th className="py-2 font-medium text-right">This payslip</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {PAYE_BANDS.map((band, index) => {
+                                    const from = index === 0 ? 0 : PAYE_BANDS[index - 1].upTo
+                                    const slice = calculatorResult.paye.bands.find((item) => item.rate === band.rate)
+                                    return (
+                                        <tr key={band.rate} className="border-b last:border-0">
+                                            <td className="py-2">
+                                                {from.toLocaleString()}
+                                                {Number.isFinite(band.upTo) ? ` – ${band.upTo.toLocaleString()}` : "+"}
+                                            </td>
+                                            <td className="py-2">{band.rate}%</td>
+                                            <td className="py-2 text-right">
+                                                {slice ? `${slice.taxable.toLocaleString()} → ${slice.tax.toLocaleString()}` : "—"}
+                                            </td>
+                                        </tr>
+                                    )
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                        SHIF 2.75% of gross · NSSF 6% of pensionable pay up to 72,000 · Housing levy 1.5% of gross.
+                    </p>
+                </CardContent>
+            </Card>
 
             <Card>
                 <CardHeader className="flex flex-row items-center justify-between gap-3">
@@ -1372,24 +1245,22 @@ export default function AdminPayrollPage() {
                     {loading ? (
                         <TableSkeleton rows={8} />
                     ) : payrolls.length === 0 ? (
-                        <div className="text-center py-12 text-muted-foreground">
-                            <Calculator className="w-12 h-12 mx-auto mb-4 opacity-20" />
-                            <p>No payroll records found for this month.</p>
-                            <Button variant="link" onClick={() => setSidebarOpen(true)}>Generate your first payslip</Button>
+                        <div className="py-10 text-sm text-muted-foreground">
+                            No payslips for {selectedMonth}. Use Generate Payslip to add one.
                         </div>
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm text-left">
-                                <thead className="bg-gray-50 text-gray-700 uppercase">
+                                <thead className="bg-gray-50 text-gray-700">
                                     <tr>
-                                        <th className="px-4 py-3">Employee</th>
-                                        <th className="px-4 py-3">Base Salary</th>
-                                        <th className="px-4 py-3">Bonus</th>
-                                        <th className="px-4 py-3">Deductions</th>
-                                        <th className="px-4 py-3">Net Pay</th>
-                                        <th className="px-4 py-3">Generated At</th>
-                                        <th className="px-4 py-3">Status</th>
-                                        <th className="px-4 py-3">Actions</th>
+                                        <th className="px-4 py-3 font-medium">Employee</th>
+                                        <th className="px-4 py-3 font-medium">Basic</th>
+                                        <th className="px-4 py-3 font-medium">Allowances</th>
+                                        <th className="px-4 py-3 font-medium">Deductions</th>
+                                        <th className="px-4 py-3 font-medium">Net</th>
+                                        <th className="px-4 py-3 font-medium">Generated</th>
+                                        <th className="px-4 py-3 font-medium">Status</th>
+                                        <th className="px-4 py-3 font-medium">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100">
@@ -1397,13 +1268,16 @@ export default function AdminPayrollPage() {
                                         // Find employee name from cached list or use ID if not found
                                         const emp = employees.find(e => e._id === p.user_id)
                                         const name = emp ? `${emp.firstName} ${emp.lastName}` : p.user_id
+                                        const allowanceTotal =
+                                            Number(p.bonus || 0) +
+                                            (p.other_bonus_items || []).reduce((sum: number, item: any) => sum + Number(item.amount || 0), 0)
 
                                         return (
                                             <tr key={p._id} className="border-b hover:bg-gray-50 cursor-pointer" onClick={() => openEdit(p)}>
                                                 <td className="px-4 py-3 font-medium">{name}</td>
-                                                <td className="px-4 py-3">{p.base_salary.toLocaleString()}</td>
-                                                <td className="px-4 py-3 text-green-600">{p.bonus > 0 ? `+${p.bonus}` : '-'}</td>
-                                                <td className="px-4 py-3 text-red-600">{p.total_deductions > 0 ? `-${p.total_deductions}` : '-'}</td>
+                                                <td className="px-4 py-3">{Number(p.base_salary || 0).toLocaleString()}</td>
+                                                <td className="px-4 py-3">{allowanceTotal ? allowanceTotal.toLocaleString() : "—"}</td>
+                                                <td className="px-4 py-3">{p.total_deductions > 0 ? p.total_deductions.toLocaleString() : "—"}</td>
                                                 <td className="px-4 py-3 font-bold">{p.net_pay.toLocaleString()}</td>
                                                 <td className="px-4 py-3 text-muted-foreground">{format(new Date(p.generated_at), 'MMM d, HH:mm')}</td>
                                                 <td className="px-4 py-3">

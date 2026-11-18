@@ -13,6 +13,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { getToken } from '@/lib/auth';
 import API_URL from '@/lib/apiBase';
+import { JOB_APPLICATION_MAX_FILE_LABEL } from '@/lib/publicSite';
 
 interface FormField {
   field_id: string;
@@ -29,6 +30,7 @@ export default function FormBuilderPage() {
   const jobId = String(params.jobId || "")
 
   const router = useRouter();
+  const [justCreated, setJustCreated] = useState(false);
   const [jobTitle, setJobTitle] = useState('');
   const [formTitle, setFormTitle] = useState('');
   const [formDescription, setFormDescription] = useState('');
@@ -37,6 +39,7 @@ export default function FormBuilderPage() {
   const { toast } = useToast();
 
   useEffect(() => {
+    setJustCreated(new URLSearchParams(window.location.search).get('new') === '1');
     // Fetch job details and existing form if any
     fetchJobAndForm();
   }, [jobId]);
@@ -165,6 +168,11 @@ export default function FormBuilderPage() {
         <div>
           <h1 className="text-3xl font-bold">Application Form Builder</h1>
           <p className="text-gray-600 mt-2">Job: {jobTitle}</p>
+          {justCreated && (
+            <p className="text-sm text-green-700 mt-2">
+              Job created. Add the questions and file uploads applicants will fill in, then save the form.
+            </p>
+          )}
         </div>
         <Button onClick={saveForm} disabled={saving}>
           <Save size={16} className="mr-2" />
@@ -319,6 +327,9 @@ export default function FormBuilderPage() {
                                 value={field.options?.join(',') || ''}
                                 onChange={(e) => updateField(index, { options: e.target.value.split(',').map(t => t.trim()).filter(Boolean) })}
                               />
+                              <p className="text-xs text-gray-500 mt-1">
+                                Maximum upload size: {JOB_APPLICATION_MAX_FILE_LABEL}. Larger files show “Document too large”.
+                              </p>
                             </div>
                           )}
 
@@ -423,9 +434,10 @@ export default function FormBuilderPage() {
                   ) : field.type === 'file' ? (
                     <div className="mt-2">
                       <Input type="file" disabled accept={field.options?.join(',')} />
-                      {field.options && field.options.length > 0 && (
-                        <p className="text-xs text-gray-500 mt-1">Accepted: {field.options.join(', ')}</p>
-                      )}
+                      <p className="text-xs text-gray-500 mt-1">
+                        Maximum file size: {JOB_APPLICATION_MAX_FILE_LABEL}
+                        {field.options && field.options.length > 0 ? ` · Accepted: ${field.options.join(', ')}` : ''}
+                      </p>
                     </div>
                   ) : field.type === 'address' ? (
                     <div className="space-y-2 mt-2">

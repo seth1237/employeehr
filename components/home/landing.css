@@ -585,6 +585,229 @@ html:has(.elevate-landing) {
   }
 }
 
+.elevate-landing.elevate-careers {
+  display: flex;
+  flex-direction: column;
+  min-height: 100svh;
+}
+
+.elevate-careers .careers-header {
+  z-index: 3;
+  height: 70px;
+  padding: 0 24px;
+  border-bottom: 1px solid #e1e0e5;
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.elevate-careers .careers-header .brand img {
+  height: 32px;
+  width: auto;
+  object-fit: contain;
+}
+
+.elevate-careers .careers-header nav {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.elevate-careers .careers-header nav a {
+  color: #66656b;
+  font-size: 14px;
+}
+
+.elevate-careers .careers-header nav a:hover {
+  color: #1d5dde;
+}
+
+.elevate-careers .careers-wrap {
+  width: min(760px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 3.25rem 0 4rem;
+  flex: 1;
+}
+
+.elevate-careers .job-kicker {
+  color: #66656b;
+  font-size: 0.84rem;
+  letter-spacing: 0.01em;
+}
+
+.elevate-careers .job-title {
+  letter-spacing: -0.045em;
+  margin: 0.4rem 0 0.85rem;
+  font-family: var(--font-serif), "Times New Roman", Times, serif;
+  font-size: clamp(2rem, 4.2vw, 2.85rem);
+  font-weight: 400;
+  line-height: 1.08;
+}
+
+.elevate-careers .job-meta {
+  color: #606065;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.35rem;
+  font-size: 0.92rem;
+}
+
+.elevate-careers .job-meta span {
+  display: inline-flex;
+  align-items: center;
+}
+
+.elevate-careers .job-body {
+  margin-top: 2.6rem;
+  display: grid;
+  gap: 2.1rem;
+}
+
+.elevate-careers .job-body h2 {
+  letter-spacing: -0.03em;
+  margin: 0 0 0.7rem;
+  font-family: var(--font-serif), "Times New Roman", Times, serif;
+  font-size: 1.28rem;
+  font-weight: 400;
+}
+
+.elevate-careers .job-body p,
+.elevate-careers .job-body li {
+  color: #30343c;
+  margin: 0;
+  font-size: 0.98rem;
+  line-height: 1.6;
+}
+
+.elevate-careers .job-body p + p {
+  margin-top: 0.85rem;
+}
+
+.elevate-careers .job-body ul {
+  margin: 0;
+  padding-left: 1.15rem;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.elevate-careers .apply-panel {
+  margin-top: 2.75rem;
+  background: #fff;
+  border: 1px solid #e8e7eb;
+  border-radius: 14px;
+  padding: 1.4rem 1.35rem 1.5rem;
+}
+
+.elevate-careers .apply-panel h2 {
+  letter-spacing: -0.03em;
+  margin: 0;
+  font-family: var(--font-serif), "Times New Roman", Times, serif;
+  font-size: 1.28rem;
+  font-weight: 400;
+}
+
+.elevate-careers .apply-panel .apply-lead {
+  color: #606065;
+  margin: 0.4rem 0 0;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.elevate-careers .apply-fields {
+  margin-top: 0.35rem;
+}
+
+.elevate-careers .apply-fields label {
+  display: block;
+  margin: 1rem 0 0.35rem;
+  font-size: 0.82rem;
+  color: #3a3d44;
+}
+
+.elevate-careers .apply-fields input,
+.elevate-careers .apply-fields textarea,
+.elevate-careers .apply-fields select {
+  width: 100%;
+  background: #fff;
+  border: 1px solid #e1e0e5;
+  border-radius: 8px;
+  padding: 0.55rem 0.7rem;
+  color: inherit;
+  font: inherit;
+  font-size: 0.95rem;
+}
+
+.elevate-careers .apply-fields textarea {
+  min-height: 6.5rem;
+  resize: vertical;
+}
+
+.elevate-careers .apply-fields .hint {
+  color: #7a7b80;
+  margin: 0.3rem 0 0;
+  font-size: 0.78rem;
+}
+
+.elevate-careers .apply-fields .choice {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.4rem;
+  font-size: 0.9rem;
+}
+
+.elevate-careers .req {
+  color: #b42318;
+}
+
+.elevate-careers .apply-actions {
+  margin-top: 1.35rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.elevate-careers .apply-actions button {
+  border-radius: 8px;
+  padding: 0.62rem 1rem;
+  font-size: 0.92rem;
+}
+
+.elevate-careers .apply-actions .primary {
+  background: #3d74f5;
+  border: 0;
+  color: #fff;
+}
+
+.elevate-careers .apply-actions .primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.elevate-careers .state-note {
+  color: #606065;
+  margin: 4rem auto;
+  max-width: 28rem;
+  text-align: center;
+  font-size: 0.98rem;
+  line-height: 1.5;
+}
+
+.elevate-careers .state-note a {
+  color: #1d5dde;
+}
+
+.elevate-careers .elevate-careers-footer {
+  margin-top: auto;
+}
+
+@media (max-width: 720px) {
+  .elevate-careers .careers-header nav .nav-hide {
+    display: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html:has(.elevate-landing) {
     scroll-behavior: auto;

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Plus, Search, Edit2, Trash2, ExternalLink, Eye, Copy, 
   Briefcase, MapPin, Calendar, DollarSign, CheckCircle, XCircle, FileText
@@ -18,6 +19,7 @@ import { useToast } from '@/hooks/use-toast';
 import { getToken } from '@/lib/auth';
 import API_URL from '@/lib/apiBase';
 import { finishDataLoad, startDataLoad } from '@/lib/silent-load';
+import { publicCareersUrl } from '@/lib/publicSite';
 
 interface Job {
   _id: string;
@@ -47,7 +49,6 @@ export default function JobsPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [shareUrl, setShareUrl] = useState('');
   const [formData, setFormData] = useState({
     title: '',
     department: '',
@@ -63,6 +64,7 @@ export default function JobsPage() {
     status: 'draft',
   });
   const { toast } = useToast();
+  const router = useRouter();
 
   useEffect(() => {
     fetchJobs();
@@ -131,11 +133,12 @@ export default function JobsPage() {
       const data = await response.json();
 
       if (data?.success) {
+        const jobId = data.data?._id;
         toast({
-          title: 'Success',
-          description: 'Job created successfully',
+          title: 'Job created',
+          description: 'Next, build the application form applicants will fill in.',
         });
-        setShareUrl(data.shareUrl);
+        setIsAddDialogOpen(false);
         setFormData({
           title: '',
           department: '',
@@ -151,6 +154,9 @@ export default function JobsPage() {
           status: 'draft',
         });
         fetchJobs(true);
+        if (jobId) {
+          router.push(`/admin/jobs/${jobId}/form-builder?new=1`);
+        }
       } else {
         throw new Error(data.message);
       }
@@ -191,7 +197,7 @@ export default function JobsPage() {
   };
 
   const copyShareLink = (shareLink: string) => {
-    const url = `https://hr.codewithseth.co.ke/careers/${shareLink}`;
+    const url = publicCareersUrl(shareLink);
     navigator.clipboard.writeText(url);
     toast({
       title: 'Copied!',
@@ -373,21 +379,6 @@ export default function JobsPage() {
                 </Button>
                 <Button onClick={handleAddJob}>Create Job</Button>
               </div>
-
-              {shareUrl && (
-                <div className="mt-4 p-4 bg-green-50 rounded-lg">
-                  <p className="text-sm font-semibold text-green-800 mb-2">Job created! Share this link:</p>
-                  <div className="flex gap-2">
-                    <Input value={shareUrl} readOnly className="bg-white" />
-                    <Button size="sm" onClick={() => {
-                      navigator.clipboard.writeText(shareUrl);
-                      toast({ title: 'Copied!', description: 'Link copied to clipboard' });
-                    }}>
-                      <Copy size={16} />
-                    </Button>
-                  </div>
-                </div>
-              )}
             </div>
           </DialogContent>
         </Dialog>
@@ -491,7 +482,7 @@ export default function JobsPage() {
                         Copy Link
                       </Button>
                       <a
-                        href={`https://hr.codewithseth.co.ke/careers/${job.share_link}`}
+                        href={publicCareersUrl(job.share_link)}
                         target="_blank"
                         rel="noopener noreferrer"
                       >

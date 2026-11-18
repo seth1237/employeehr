@@ -3,6 +3,7 @@ export type EmployeePayslipDownload = {
     month: string
     base_salary: number
     bonus: number
+    other_bonus_items?: { name: string; amount: number }[]
     deduction_items?: { name: string; amount: number }[]
     total_deductions: number
     net_pay: number
@@ -117,7 +118,7 @@ export function downloadEmployeePayslip(
           </thead>
           <tbody>
             <tr>
-              <td>Base Salary</td>
+              <td>Basic salary</td>
               <td style="text-align: right;">KES ${money(payslip.base_salary)}</td>
             </tr>
             ${payslip.bonus > 0 ? `
@@ -126,9 +127,19 @@ export function downloadEmployeePayslip(
               <td style="text-align: right;">KES ${money(payslip.bonus)}</td>
             </tr>
             ` : ""}
+            ${(payslip.other_bonus_items || []).map((item) => `
+            <tr>
+              <td>${item.name}</td>
+              <td style="text-align: right;">KES ${money(item.amount)}</td>
+            </tr>
+            `).join("")}
             <tr class="total-row">
-              <td>Gross Pay</td>
-              <td style="text-align: right;">KES ${money(Number(payslip.base_salary || 0) + Number(payslip.bonus || 0))}</td>
+              <td>Gross pay</td>
+              <td style="text-align: right;">KES ${money(
+                Number(payslip.base_salary || 0) +
+                  Number(payslip.bonus || 0) +
+                  (payslip.other_bonus_items || []).reduce((sum, item) => sum + Number(item.amount || 0), 0),
+              )}</td>
             </tr>
             ${(payslip.deduction_items || []).map((item) => `
             <tr>

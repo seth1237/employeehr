@@ -720,11 +720,20 @@ export const onboardingApi = {
   list: () => client.get<any[]>("/api/onboarding"),
   getByUser: (userId: string) =>
     client.get<any>(`/api/onboarding/user/${userId}`),
+  getTemplate: () => client.get<any>("/api/onboarding/template"),
+  saveTemplate: (data: { name?: string; sections: any[]; tasks?: any[] }) =>
+    client.put<any>("/api/onboarding/template", data),
   create: (data: {
     userId: string;
     templateName?: string;
     startDate?: string;
   }) => client.post<any>("/api/onboarding", data),
+  saveAnswers: (checklistId: string, answers: Record<string, any>) =>
+    client.patch<any>(`/api/onboarding/${checklistId}/answers`, { answers }),
+  drop: (checklistId: string, reason?: string) =>
+    client.post<any>(`/api/onboarding/${checklistId}/drop`, { reason }),
+  complete: (checklistId: string) =>
+    client.post<any>(`/api/onboarding/${checklistId}/complete`, {}),
   toggleTask: (
     checklistId: string,
     taskId: string,

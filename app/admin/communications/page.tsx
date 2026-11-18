@@ -68,6 +68,8 @@ export default function CommunicationsPage() {
   });
   const [includeNotes, setIncludeNotes] = useState(true);
   const [sentResult, setSentResult] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState('compose');
+  const [viewedEmail, setViewedEmail] = useState<SentEmail | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -195,9 +197,13 @@ export default function CommunicationsPage() {
           title: 'Success',
           description: `Emails sent: ${data.data.sentCount}, Failed: ${data.data.failedCount}`,
         });
-        // Reset form
         setTemplate({ subject: '', body: '' });
         setSelectedApplicants(new Set());
+        await fetchSentEmails();
+        setActiveTab('history');
+        if (data.data?.email) {
+          setViewedEmail(data.data.email);
+        }
       } else {
         throw new Error(data.message);
       }
@@ -225,7 +231,7 @@ export default function CommunicationsPage() {
         <p className="text-gray-600 mt-2">Send bulk emails to applicants and track history</p>
       </div>
 
-      <Tabs defaultValue="compose" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="compose">Compose & Send</TabsTrigger>
           <TabsTrigger value="history">Sent History</TabsTrigger>
@@ -376,7 +382,7 @@ export default function CommunicationsPage() {
             <div>
               <label className="text-sm font-medium mb-2 block">Subject</label>
               <Input
-                placeholder="e.g., You are invited for an interview!"
+                placeholder="e.g., Update on your {{job_title}} application"
                 value={template.subject}
                 onChange={(e) => setTemplate({ ...template, subject: e.target.value })}
               />
@@ -387,14 +393,7 @@ export default function CommunicationsPage() {
             <div>
               <label className="text-sm font-medium mb-2 block">Message</label>
               <Textarea
-                placeholder="Dear {{applicant_name}},
-
-We are pleased to inform you that your application for the {{job_title}} position at {{company_name}} has been selected for the next stage.
-
-We would like to invite you for an interview...
-
-Best regards,
-Hiring Team"
+                placeholder="Write the full message here. Use {{applicant_name}}, {{job_title}}, and {{company_name}} if needed."
                 value={template.body}
                 onChange={(e) => setTemplate({ ...template, body: e.target.value })}
                 rows={10}
@@ -472,7 +471,12 @@ Hiring Team"
               ) : (
                 <div className="space-y-3">
                   {sentEmails.map((email) => (
-                    <div key={email._id} className="border rounded-lg p-4 hover:bg-gray-50">
+                    <button
+                      type="button"
+                      key={email._id}
+                      className="w-full text-left border rounded-lg p-4 hover:bg-gray-50"
+                      onClick={() => setViewedEmail(email)}
+                    >
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <h3 className="font-semibold">{email.subject}</h3>
@@ -504,7 +508,7 @@ Hiring Team"
                           )}
                         </div>
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
@@ -512,6 +516,43 @@ Hiring Team"
           </Card>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={!!viewedEmail} onOpenChange={(open) => { if (!open) setViewedEmail(null); }}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{viewedEmail?.subject || 'Sent email'}</DialogTitle>
+            <DialogDescription>
+              {viewedEmail ? new Date(viewedEmail.created_at).toLocaleString() : ''}
+            </DialogDescription>
+          </DialogHeader>
+          {viewedEmail && (
+            <div className="space-y-4">
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                  Sent: {viewedEmail.sent_count}
+                </Badge>
+                {viewedEmail.failed_count > 0 && (
+                  <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
+                    Failed: {viewedEmail.failed_count}
+                  </Badge>
+                )}
+              </div>
+              <div>
+                <p className="text-sm font-medium mb-1">Recipients</p>
+                <p className="text-sm text-gray-600 whitespace-pre-wrap">
+                  {viewedEmail.recipient_emails.join(', ')}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm font-medium mb-1">Message</p>
+                <div className="bg-gray-50 border rounded-md p-4 text-sm whitespace-pre-wrap">
+                  {viewedEmail.body || '(empty message)'}
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

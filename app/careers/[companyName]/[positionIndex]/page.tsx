@@ -1,23 +1,25 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import {
-  Briefcase, MapPin, Calendar, DollarSign, Clock, Building2,
-  CheckCircle, ArrowLeft, Send
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import Link from 'next/link';
+import { Tinos } from 'next/font/google';
 import { useToast } from '@/hooks/use-toast';
 import API_URL from '@/lib/apiBase';
+import {
+  JOB_APPLICATION_MAX_FILE_BYTES,
+  JOB_APPLICATION_MAX_FILE_LABEL,
+  PUBLIC_SITE_URL,
+} from '@/lib/publicSite';
+import { LOGIN_HREF, NAV, SIGNUP_HREF } from '@/lib/landing/site';
+import '@/components/home/landing.css';
+
+const tinos = Tinos({
+  subsets: ['latin'],
+  weight: '400',
+  variable: '--font-serif',
+  display: 'swap',
+});
 
 interface Job {
   _id: string;
@@ -46,6 +48,8 @@ interface FormField {
   required: boolean;
   placeholder?: string;
   options?: string[];
+  min_value?: number;
+  max_value?: number;
 }
 
 interface ApplicationForm {
@@ -55,14 +59,34 @@ interface ApplicationForm {
   fields: FormField[];
 }
 
+function lines(value?: string[] | string) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean);
+  return String(value)
+    .split(/\n+/)
+    .map((item) => item.replace(/^[-•\s]+/, '').trim())
+    .filter(Boolean);
+}
+
+function formatSalary(range?: Job['salary_range']) {
+  if (!range || range.min == null || range.max == null) return null;
+  const currency = range.currency || 'KES';
+  return `${currency} ${Number(range.min).toLocaleString()} – ${Number(range.max).toLocaleString()}`;
+}
+
+function formatDate(value?: string) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
 export default function PublicJobPage() {
-  const router = useRouter();
   const params = useParams();
   const [job, setJob] = useState<Job | null>(null);
   const [applicationForm, setApplicationForm] = useState<ApplicationForm | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [isApplyDialogOpen, setIsApplyDialogOpen] = useState(false);
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -74,7 +98,7 @@ export default function PublicJobPage() {
     const storageKey = 'elevate_job_device_id';
     let deviceId = localStorage.getItem(storageKey);
     if (!deviceId) {
-      deviceId = (window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+      deviceId = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
       localStorage.setItem(storageKey, deviceId);
     }
     return deviceId;
@@ -87,12 +111,9 @@ export default function PublicJobPage() {
   useEffect(() => {
     if (!job?._id || typeof window === 'undefined') return;
     const deviceId = getDeviceFingerprint();
-    const appliedKey = `job_applied_${job._id}_${deviceId}`;
-    const applied = localStorage.getItem(appliedKey) === 'true';
+    const applied = localStorage.getItem(`job_applied_${job._id}_${deviceId}`) === 'true';
     setAlreadyApplied(applied);
-    if (applied) {
-      setSubmitted(true);
-    }
+    if (applied) setSubmitted(true);
   }, [job?._id]);
 
   const fetchJob = async () => {
@@ -102,7 +123,7 @@ export default function PublicJobPage() {
       const positionIndexParam = Array.isArray(params.positionIndex) ? params.positionIndex[0] : params.positionIndex;
 
       if (!companyNameParam || !positionIndexParam) {
-        throw new Error('Invalid job link')
+        throw new Error('Invalid job link');
       }
       const response = await fetch(
         `${API_URL}/api/jobs/public/${encodeURIComponent(String(companyNameParam))}/${encodeURIComponent(String(positionIndexParam))}`
@@ -111,14 +132,13 @@ export default function PublicJobPage() {
 
       if (data?.success) {
         setJob(data.data);
-        // Fetch application form
         fetchApplicationForm(data.data._id);
       } else {
         setError(data.message);
       }
     } catch (err) {
       console.error('Error fetching job:', err);
-      setError('Failed to load job posting');
+      setError('This job posting is not available.');
     } finally {
       setLoading(false);
     }
@@ -128,27 +148,43 @@ export default function PublicJobPage() {
     try {
       const response = await fetch(`${API_URL}/api/application-forms/job/${jobId}`);
       const data = await response.json();
-      if (data?.success) {
-        setApplicationForm(data.data);
-      }
+      if (data?.success) setApplicationForm(data.data);
     } catch (err) {
       console.error('Error fetching form:', err);
     }
   };
 
-  const handleSubmitApplication = async () => {
+  const setFieldValue = (fieldId: string, value: any) => {
+    setFormData((prev) => ({ ...prev, [fieldId]: value }));
+  };
+
+  const handleFileChange = (fieldId: string, file?: File) => {
+    if (!file) return;
+    if (file.size > JOB_APPLICATION_MAX_FILE_BYTES) {
+      toast({
+        title: 'Document too large',
+        description: `Upload a file of ${JOB_APPLICATION_MAX_FILE_LABEL} or less.`,
+        variant: 'destructive',
+      });
+      setFieldValue(fieldId, undefined);
+      return;
+    }
+    setFieldValue(fieldId, file);
+  };
+
+  const handleSubmitApplication = async (event: React.FormEvent) => {
+    event.preventDefault();
     if (!job || !applicationForm) return;
 
     if (!formData.email) {
       toast({
-        title: 'Email Required',
-        description: 'Please enter your email address before submitting.',
+        title: 'Email required',
+        description: 'Enter your email address before submitting.',
         variant: 'destructive',
       });
       return;
     }
 
-    // Validate required fields
     const missingFields = applicationForm.fields
       .filter((field) => {
         if (!field.required) return false;
@@ -156,12 +192,26 @@ export default function PublicJobPage() {
         if (field.type === 'checkbox') return value === undefined || value === null;
         return value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0);
       })
-      .map(field => field.label);
+      .map((field) => field.label);
 
     if (missingFields.length > 0) {
       toast({
-        title: 'Missing Required Fields',
-        description: `Please fill in: ${missingFields.join(', ')}`,
+        title: 'Missing required fields',
+        description: `Fill in: ${missingFields.join(', ')}`,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const oversizedField = applicationForm.fields.find((field) => {
+      if (field.type !== 'file') return false;
+      const file = formData[field.field_id];
+      return file instanceof File && file.size > JOB_APPLICATION_MAX_FILE_BYTES;
+    });
+    if (oversizedField) {
+      toast({
+        title: 'Document too large',
+        description: `Upload a file of ${JOB_APPLICATION_MAX_FILE_LABEL} or less.`,
         variant: 'destructive',
       });
       return;
@@ -169,30 +219,24 @@ export default function PublicJobPage() {
 
     setSubmitting(true);
     try {
-      // Create FormData for file uploads
       const submitData = new FormData();
-      
-      // Add basic fields
       submitData.append('job_id', job._id);
       submitData.append('form_id', applicationForm._id);
       submitData.append('applicant_name', formData.full_name || formData.name || 'Unknown');
       submitData.append('applicant_email', formData.email);
       submitData.append('applicant_phone', formData.phone || '');
       submitData.append('device_fingerprint', getDeviceFingerprint());
-      
-      // Prepare answers (excluding files)
+
       const answers = (applicationForm.fields || []).map((field) => ({
         field_id: field.field_id,
         label: field.label,
         value: field.type === 'file' ? 'File uploaded' : (formData[field.field_id] ?? null),
       }));
       submitData.append('answers', JSON.stringify(answers));
-      
       if (formData.resume_url) submitData.append('resume_url', formData.resume_url);
       if (formData.cover_letter) submitData.append('cover_letter', formData.cover_letter);
       submitData.append('source', new URLSearchParams(window.location.search).get('source') || 'direct');
 
-      // Add file uploads
       applicationForm.fields.forEach((field) => {
         if (field.type === 'file' && formData[field.field_id] instanceof File) {
           submitData.append(field.field_id, formData[field.field_id] as File);
@@ -201,9 +245,8 @@ export default function PublicJobPage() {
 
       const response = await fetch(`${API_URL}/api/job-applications/submit`, {
         method: 'POST',
-        body: submitData, // No Content-Type header - browser sets it with boundary
+        body: submitData,
       });
-
       const data = await response.json();
 
       if (data?.success) {
@@ -213,29 +256,27 @@ export default function PublicJobPage() {
         setSubmitted(true);
         setAlreadyApplied(true);
         toast({
-          title: 'Application Submitted!',
-          description: 'Thank you for applying. Your application was received successfully.',
+          title: 'Application received',
+          description: `Submitted for ${job.title}.`,
         });
-
-        window.alert(`You have successfully applied for ${job.title}.\n\nThank you for your application.`);
-        setIsApplyDialogOpen(false);
         setTimeout(() => {
-          router.push('/');
+          window.location.assign(`${PUBLIC_SITE_URL}/`);
         }, 900);
       } else {
-        throw new Error(data.message);
+        throw new Error(data.message || (response.status === 413 ? 'Document too large' : 'Submission failed'));
       }
     } catch (err: any) {
       if (err?.message?.toLowerCase().includes('already applied')) {
         setAlreadyApplied(true);
         setSubmitted(true);
-        setIsApplyDialogOpen(false);
-        window.alert('You have already applied for this job from this device or email.');
-        router.push('/');
+        toast({
+          title: 'Already applied',
+          description: 'An application from this email or device is already on file.',
+        });
         return;
       }
       toast({
-        title: 'Submission Failed',
+        title: 'Submission failed',
         description: err instanceof Error ? err.message : 'Please try again later',
         variant: 'destructive',
       });
@@ -244,339 +285,214 @@ export default function PublicJobPage() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading job details...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error || !job) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <Card className="max-w-md">
-          <CardContent className="p-12 text-center">
-            <Briefcase className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-            <h2 className="text-xl font-semibold mb-2">Job Not Found</h2>
-            <p className="text-gray-600 mb-4">
-              {error || 'This job posting is no longer available'}
-            </p>
-            <Button onClick={() => window.location.href = '/'}>
-              <ArrowLeft size={16} className="mr-2" />
-              Go Home
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  const formatSalary = (range: typeof job.salary_range) => {
-    if (!range) return null;
-    return `${range.currency} ${range.min.toLocaleString()} - ${range.max.toLocaleString()}`;
-  };
+  const responsibilities = lines(job?.responsibilities);
+  const requirements = lines(job?.requirements);
+  const benefits = lines(job?.benefits);
+  const salary = formatSalary(job?.salary_range);
+  const closed = submitted || alreadyApplied;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-gray-100">
-      {/* Header */}
-      <div className="bg-white border-b">
-        <div className="container mx-auto px-4 py-6">
-          <div className="flex items-center gap-2 text-sm text-gray-600 mb-4">
-            <Building2 size={16} />
-            <span className="font-semibold">{job.company_name}</span>
+    <div className={`elevate-landing elevate-careers ${tinos.variable}`}>
+      <header className="careers-header">
+        <Link href="/" className="brand" aria-label="Elevate home">
+          <img src="/elevate-logo.png" alt="Elevate" />
+        </Link>
+        <nav aria-label="Main">
+          {NAV.map((item) => (
+            <Link key={item.href} href={item.href} className="nav-hide">
+              {item.label}
+            </Link>
+          ))}
+          <Link href={LOGIN_HREF}>Login</Link>
+          <Link href={SIGNUP_HREF}>Signup</Link>
+        </nav>
+      </header>
+
+      {loading ? (
+        <p className="state-note">Loading posting…</p>
+      ) : error || !job ? (
+        <p className="state-note">
+          {error || 'This job posting is no longer available.'}{' '}
+          <a href={PUBLIC_SITE_URL}>Back to Elevate</a>
+        </p>
+      ) : (
+        <main className="careers-wrap">
+          <p className="job-kicker">{job.company_name}</p>
+          <h1 className="job-title">{job.title}</h1>
+          <div className="job-meta">
+            {job.location && <span>{job.location}</span>}
+            {job.employment_type && <span className="capitalize">{job.employment_type.replace(/-/g, ' ')}</span>}
+            {job.department && <span>{job.department}</span>}
+            {salary && <span>{salary}</span>}
+            {job.application_deadline && <span>Apply by {formatDate(job.application_deadline)}</span>}
+            {job.created_at && <span>Posted {formatDate(job.created_at)}</span>}
           </div>
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">{job.title}</h1>
-          <div className="flex flex-wrap items-center gap-4 text-gray-600">
-            <span className="flex items-center gap-1">
-              <MapPin size={18} />
-              {job.location}
-            </span>
-            <span className="flex items-center gap-1">
-              <Briefcase size={18} />
-              {job.employment_type}
-            </span>
-            {job.salary_range && (
-              <span className="flex items-center gap-1">
-                <DollarSign size={18} />
-                {formatSalary(job.salary_range)}
-              </span>
-            )}
-            {job.application_deadline && (
-              <span className="flex items-center gap-1">
-                <Clock size={18} />
-                Apply by {new Date(job.application_deadline).toLocaleDateString()}
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
 
-      {/* Content */}
-      <div className="container mx-auto px-4 py-8">
-        <div className="grid lg:grid-cols-3 gap-6">
-          {/* Main Content */}
-          <div className="lg:col-span-2 space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Job Description</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-gray-700 whitespace-pre-line">{job.description}</p>
-              </CardContent>
-            </Card>
-
-            {job.responsibilities && job.responsibilities.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Responsibilities</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-2">
-                    {job.responsibilities.map((resp, idx) => (
-                      <li key={idx} className="flex items-start gap-2">
-                        <CheckCircle size={18} className="text-green-600 mt-0.5 flex-shrink-0" />
-                        <span className="text-gray-700">{resp}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
+          <div className="job-body">
+            {job.description && (
+              <section>
+                <h2>Role</h2>
+                {String(job.description)
+                  .split(/\n{2,}/)
+                  .map((paragraph, index) => (
+                    <p key={index}>{paragraph}</p>
+                  ))}
+              </section>
             )}
 
-            {job.requirements && job.requirements.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Requirements</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-2">
-                    {job.requirements.map((req, idx) => (
-                      <li key={idx} className="flex items-start gap-2">
-                        <CheckCircle size={18} className="text-blue-600 mt-0.5 flex-shrink-0" />
-                        <span className="text-gray-700">{req}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
+            {responsibilities.length > 0 && (
+              <section>
+                <h2>Responsibilities</h2>
+                <ul>
+                  {responsibilities.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </section>
             )}
 
-            {job.benefits && job.benefits.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Benefits</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-wrap gap-2">
-                    {job.benefits.map((benefit, idx) => (
-                      <Badge key={idx} variant="secondary" className="px-3 py-1">
-                        {benefit}
-                      </Badge>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
+            {requirements.length > 0 && (
+              <section>
+                <h2>Requirements</h2>
+                <ul>
+                  {requirements.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            {benefits.length > 0 && (
+              <section>
+                <h2>Benefits</h2>
+                <ul>
+                  {benefits.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </section>
             )}
           </div>
 
-          {/* Sidebar */}
-          <div className="space-y-6">
-            <Card className="sticky top-6">
-              <CardHeader>
-                <CardTitle>Apply for this position</CardTitle>
-                <CardDescription>Join our team at {job.company_name}</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Dialog open={isApplyDialogOpen} onOpenChange={setIsApplyDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button className="w-full" size="lg" disabled={submitted || alreadyApplied}>
-                      {submitted || alreadyApplied ? 'Already Applied' : 'Apply Now'}
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto backdrop-blur-sm">
-                    <DialogHeader>
-                      <DialogTitle>
-                        {submitted ? 'Application Submitted!' : applicationForm?.title || 'Application Form'}
-                      </DialogTitle>
-                      <DialogDescription>
-                        {submitted 
-                          ? 'Thank you for your application. We will review it and get back to you soon.'
-                          : applicationForm?.description || `Apply for ${job.title}`
-                        }
-                      </DialogDescription>
-                    </DialogHeader>
+          <section className="apply-panel" id="apply">
+            <h2>{closed ? 'Application on file' : applicationForm?.title || 'Apply'}</h2>
+            <p className="apply-lead">
+              {closed
+                ? 'This device already submitted an application for this posting.'
+                : applicationForm?.description ||
+                  (applicationForm
+                    ? `Complete the form for ${job.title}. Files must be ${JOB_APPLICATION_MAX_FILE_LABEL} or smaller.`
+                    : 'An application form has not been published for this posting yet.')}
+            </p>
 
-                    {!submitted ? (
-                      <div className="space-y-4 py-4">
-                        {applicationForm?.fields.map((field) => (
-                          <div key={field.field_id}>
-                            <Label>
-                              {field.label}
-                              {field.required && <span className="text-red-500 ml-1">*</span>}
-                            </Label>
-                            
-                            {field.type === 'textarea' ? (
-                              <Textarea
-                                placeholder={field.placeholder}
-                                value={formData[field.field_id] || ''}
-                                onChange={(e) => setFormData({ ...formData, [field.field_id]: e.target.value })}
-                                rows={4}
-                              />
-                            ) : field.type === 'select' ? (
-                              <Select
-                                value={formData[field.field_id] || ''}
-                                onValueChange={(value) => setFormData({ ...formData, [field.field_id]: value })}
-                              >
-                                <SelectTrigger>
-                                  <SelectValue placeholder={field.placeholder || 'Select...'} />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {field.options?.map((option) => (
-                                    <SelectItem key={option} value={option}>
-                                      {option}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            ) : field.type === 'checkbox' ? (
-                              <div className="flex items-center gap-2 mt-2">
-                                <Checkbox
-                                  checked={formData[field.field_id] || false}
-                                  onCheckedChange={(checked) => setFormData({ ...formData, [field.field_id]: checked })}
-                                />
-                                <span className="text-sm">{field.placeholder}</span>
-                              </div>
-                            ) : field.type === 'file' ? (
-                              <Input
-                                type="file"
-                                accept={field.placeholder || '.pdf,.doc,.docx,.txt,image/*'}
-                                onChange={(e) => {
-                                  const file = e.target.files?.[0];
-                                  if (file) {
-                                    setFormData({ ...formData, [field.field_id]: file });
-                                  }
-                                }}
-                              />
-                            ) : field.type === 'radio' ? (
-                              <div className="space-y-2 mt-2">
-                                {field.options?.map((option) => (
-                                  <div key={option} className="flex items-center gap-2">
-                                    <input
-                                      type="radio"
-                                      id={`${field.field_id}-${option}`}
-                                      name={field.field_id}
-                                      value={option}
-                                      checked={formData[field.field_id] === option}
-                                      onChange={(e) => setFormData({ ...formData, [field.field_id]: e.target.value })}
-                                      className="w-4 h-4"
-                                    />
-                                    <label htmlFor={`${field.field_id}-${option}`} className="text-sm">
-                                      {option}
-                                    </label>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : field.type === 'rating' ? (
-                              <div className="flex items-center gap-2 mt-2">
-                                {[1, 2, 3, 4, 5].map((star) => (
-                                  <button
-                                    key={star}
-                                    type="button"
-                                    onClick={() => setFormData({ ...formData, [field.field_id]: star })}
-                                    className={`text-2xl ${
-                                      (formData[field.field_id] || 0) >= star
-                                        ? 'text-yellow-400'
-                                        : 'text-gray-300'
-                                    }`}
-                                  >
-                                    ★
-                                  </button>
-                                ))}
-                              </div>
-                            ) : field.type === 'slider' || field.type === 'range' ? (
-                              <div className="space-y-2">
-                                <Input
-                                  type="range"
-                                  min={field.min_value || 0}
-                                  max={field.max_value || 100}
-                                  value={formData[field.field_id] || field.min_value || 0}
-                                  onChange={(e) => setFormData({ ...formData, [field.field_id]: parseInt(e.target.value) })}
-                                />
-                                <span className="text-sm text-gray-600">
-                                  Value: {formData[field.field_id] || field.min_value || 0}
-                                </span>
-                              </div>
-                            ) : (
-                              <Input
-                                type={field.type}
-                                placeholder={field.placeholder}
-                                value={formData[field.field_id] || ''}
-                                onChange={(e) => setFormData({ ...formData, [field.field_id]: e.target.value })}
-                              />
-                            )}
-                          </div>
+            {!closed && applicationForm && (
+              <form className="apply-fields" onSubmit={handleSubmitApplication}>
+                {applicationForm.fields.map((field) => (
+                  <div key={field.field_id}>
+                    <label htmlFor={field.field_id}>
+                      {field.label}
+                      {field.required && <span className="req"> *</span>}
+                    </label>
+
+                    {field.type === 'textarea' ? (
+                      <textarea
+                        id={field.field_id}
+                        placeholder={field.placeholder}
+                        value={formData[field.field_id] || ''}
+                        onChange={(e) => setFieldValue(field.field_id, e.target.value)}
+                        rows={4}
+                      />
+                    ) : field.type === 'select' ? (
+                      <select
+                        id={field.field_id}
+                        value={formData[field.field_id] || ''}
+                        onChange={(e) => setFieldValue(field.field_id, e.target.value)}
+                      >
+                        <option value="">{field.placeholder || 'Select'}</option>
+                        {field.options?.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
                         ))}
-
-                        <div className="flex gap-2 justify-end pt-4">
-                          <Button variant="outline" onClick={() => setIsApplyDialogOpen(false)}>
-                            Cancel
-                          </Button>
-                          <Button type="button" onClick={handleSubmitApplication} disabled={submitting || alreadyApplied}>
-                            <Send size={16} className="mr-2" />
-                            {submitting ? 'Submitting...' : 'Submit Application'}
-                          </Button>
-                        </div>
+                      </select>
+                    ) : field.type === 'checkbox' ? (
+                      <label className="choice">
+                        <input
+                          id={field.field_id}
+                          type="checkbox"
+                          checked={!!formData[field.field_id]}
+                          onChange={(e) => setFieldValue(field.field_id, e.target.checked)}
+                        />
+                        {field.placeholder && field.placeholder !== field.label ? field.placeholder : 'Yes'}
+                      </label>
+                    ) : field.type === 'file' ? (
+                      <>
+                        <input
+                          id={field.field_id}
+                          type="file"
+                          accept={field.placeholder || '.pdf,.doc,.docx,.txt,image/*'}
+                          onChange={(e) => {
+                            handleFileChange(field.field_id, e.target.files?.[0]);
+                            if (e.target.files?.[0] && e.target.files[0].size > JOB_APPLICATION_MAX_FILE_BYTES) {
+                              e.target.value = '';
+                            }
+                          }}
+                        />
+                        <p className="hint">Maximum {JOB_APPLICATION_MAX_FILE_LABEL}</p>
+                      </>
+                    ) : field.type === 'radio' ? (
+                      <div>
+                        {field.options?.map((option) => (
+                          <label key={option} className="choice">
+                            <input
+                              type="radio"
+                              name={field.field_id}
+                              value={option}
+                              checked={formData[field.field_id] === option}
+                              onChange={(e) => setFieldValue(field.field_id, e.target.value)}
+                            />
+                            {option}
+                          </label>
+                        ))}
                       </div>
                     ) : (
-                      <div className="text-center py-8">
-                        <CheckCircle className="h-16 w-16 text-green-600 mx-auto mb-4" />
-                        <p className="text-gray-600 mb-2">Your application has been received.</p>
-                        <p className="text-gray-600 mb-6">Thank you for applying to {job.title}.</p>
-                        <Button onClick={() => setIsApplyDialogOpen(false)}>
-                          Close
-                        </Button>
-                      </div>
+                      <input
+                        id={field.field_id}
+                        type={field.type === 'phone' ? 'tel' : field.type || 'text'}
+                        placeholder={field.placeholder}
+                        value={formData[field.field_id] || ''}
+                        onChange={(e) => setFieldValue(field.field_id, e.target.value)}
+                      />
                     )}
-                  </DialogContent>
-                </Dialog>
-                <p className="text-sm text-gray-600 text-center">
-                  {submitted || alreadyApplied ? 'Application already submitted from this device.' : 'By applying, you agree to our terms and conditions'}
-                </p>
-              </CardContent>
-            </Card>
+                  </div>
+                ))}
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Job Details</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm">
-                <div>
-                  <p className="text-gray-600">Department</p>
-                  <p className="font-semibold">{job.department}</p>
+                <div className="apply-actions">
+                  <button type="submit" className="primary" disabled={submitting}>
+                    {submitting ? 'Submitting…' : 'Submit application'}
+                  </button>
                 </div>
-                <div>
-                  <p className="text-gray-600">Employment Type</p>
-                  <p className="font-semibold capitalize">{job.employment_type}</p>
-                </div>
-                <div>
-                  <p className="text-gray-600">Location</p>
-                  <p className="font-semibold">{job.location}</p>
-                </div>
-                <div>
-                  <p className="text-gray-600">Posted</p>
-                  <p className="font-semibold">
-                    {new Date(job.created_at).toLocaleDateString()}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </div>
+              </form>
+            )}
+          </section>
+        </main>
+      )}
+
+      <footer className="site-footer elevate-careers-footer">
+        <Link href="/" className="brand" aria-label="Elevate home">
+          <img src="/elevate-logo.png" alt="Elevate" />
+        </Link>
+        <nav aria-label="Footer">
+          {NAV.map((item) => (
+            <Link key={item.href} href={item.href}>
+              {item.label}
+            </Link>
+          ))}
+          <Link href={LOGIN_HREF}>Login</Link>
+          <Link href={SIGNUP_HREF}>Signup</Link>
+        </nav>
+        <p>Elevate — inventory, payroll, procurement, and manufacturing in one hub.</p>
+      </footer>
     </div>
   );
 }

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { api } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 import { Loader2, Download } from "lucide-react"
-import { generateRemunerationReport, exportToExcel, calculateReportSummaries, getReportColumns } from "@/lib/remuneration-reports"
+import { generateRemunerationReport, downloadRemunerationWorkbook, calculateReportSummaries, getReportColumns } from "@/lib/remuneration-reports"
 import { TableSkeleton } from "@/components/admin/ui/page-states"
 import { AccountsModuleNav } from "@/components/accounts/accounts-module-nav"
 
@@ -17,7 +17,8 @@ export default function RemunerationReportsPage() {
     const [loading, setLoading] = useState(true)
     const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7))
     const [activeTab, setActiveTab] = useState<'net' | 'sha' | 'tax' | 'nssf' | 'helb'>('net')
-    const [branding, setBranding] = useState<{ primaryColor?: string; textColor?: string; accentColor?: string }>({})
+    const [exporting, setExporting] = useState(false)
+    const [branding, setBranding] = useState<{ name?: string; primaryColor?: string; textColor?: string; accentColor?: string }>({})
 
     // Helper: determine if a hex color is dark so we can pick readable text
     function hexToRgb(hex?: string) {
@@ -97,26 +98,41 @@ export default function RemunerationReportsPage() {
             case 'net':
                 return 'Net Salaries'
             case 'sha':
-                return 'SHA Payments'
+                return 'SHA / SHIF'
             case 'tax':
-                return 'Tax (PAYE) Deductions'
+                return 'PAYE'
             case 'nssf':
-                return 'NSSF Deductions'
+                return 'NSSF'
             case 'helb':
-                return 'HELB Deductions'
+                return 'HELB'
             default:
                 return 'Report'
         }
     }
 
-    const handleExport = () => {
-        const data = reportData
-        if (data.length === 0) {
+    const handleExport = async () => {
+        if (payrolls.length === 0) {
             toast({ description: "No data to export", variant: "destructive" })
             return
         }
-        exportToExcel(data, `${activeTab}-report-${selectedMonth}`, getReportTitle())
-        toast({ description: "Report exported successfully" })
+        try {
+            setExporting(true)
+            await downloadRemunerationWorkbook({
+                companyName: branding.name || "Company",
+                month: selectedMonth,
+                reportType: activeTab,
+                payrolls,
+                employees,
+            })
+            toast({ description: "Report exported successfully" })
+        } catch (error: any) {
+            toast({
+                variant: "destructive",
+                description: error.message || "Failed to export report",
+            })
+        } finally {
+            setExporting(false)
+        }
     }
 
     return (
@@ -191,17 +207,18 @@ export default function RemunerationReportsPage() {
                             <div className="flex items-center justify-between gap-4">
                                 <CardTitle>{getReportTitle()} Report - {selectedMonth}</CardTitle>
                                 <Button
-                                    onClick={handleExport}
+                                    onClick={() => void handleExport()}
                                     size="sm"
                                     variant="outline"
                                     className="gap-2"
+                                    disabled={exporting}
                                     style={{
                                         backgroundColor: branding.primaryColor || undefined,
                                         color: '#ffffff',
                                         borderColor: (branding.primaryColor || 'var(--brand-primary)') + 'dd',
                                     }}
                                 >
-                                    <Download className="w-4 h-4" />
+                                    {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                                     Export Excel
                                 </Button>
                             </div>

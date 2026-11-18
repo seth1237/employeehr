@@ -109,18 +109,7 @@ export class CommunicationController {
         }
       }
 
-      res.status(200).json({
-        success: true,
-        message: `Emails sent successfully`,
-        data: {
-          sentCount,
-          failedCount: failedEmails.length,
-          failedEmails,
-        },
-      })
-
-      // Save sent email record
-      await SentEmail.create({
+      const sentEmail = await SentEmail.create({
         org_id: req.org_id,
         job_id,
         sender_id: req.user.userId,
@@ -132,6 +121,17 @@ export class CommunicationController {
         failed_emails: failedEmails,
         recipient_emails: applicants.map((a) => a.applicant_email),
         include_notes,
+      })
+
+      res.status(200).json({
+        success: true,
+        message: `Emails sent successfully`,
+        data: {
+          sentCount,
+          failedCount: failedEmails.length,
+          failedEmails,
+          email: sentEmail,
+        },
       })
     } catch (error) {
       console.error("Send bulk email error:", error)

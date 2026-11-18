@@ -110,7 +110,13 @@ const applicationFileFilter = (req: any, file: Express.Multer.File, cb: multer.F
 export const uploadApplicationFiles = multer({
   storage: applicationStorage,
   fileFilter: applicationFileFilter,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB for stock / general docs
+})
+
+export const uploadJobApplicationFiles = multer({
+  storage: applicationStorage,
+  fileFilter: applicationFileFilter,
+  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB limit for job applications
 })
 
 // Create signatures directory

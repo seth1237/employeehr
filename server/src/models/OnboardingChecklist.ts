@@ -14,12 +14,24 @@ export interface IOnboardingTask {
 export interface IOnboardingChecklist {
   _id?: string
   org_id: string
-  user_id: string
+  user_id?: string
+  application_id?: string
+  candidate_name?: string
+  candidate_email?: string
+  candidate_phone?: string
+  job_title?: string
+  template_id?: string
   templateName?: string
-  status: "not_started" | "in_progress" | "completed"
+  status: "not_started" | "in_progress" | "completed" | "dropped"
   startDate?: Date
   dueDate?: Date
   tasks: IOnboardingTask[]
+  sections?: any[]
+  form_answers?: Record<string, any>
+  dropped_reason?: string
+  dropped_at?: Date
+  dropped_by?: string
+  converted_at?: Date
   createdBy?: string
   createdAt?: Date
   updatedAt?: Date
@@ -45,27 +57,52 @@ const onboardingTaskSchema = new Schema<IOnboardingTask>(
 const onboardingChecklistSchema = new Schema<IOnboardingChecklist>(
   {
     org_id: { type: String, required: true, index: true },
-    user_id: { type: String, required: true, index: true },
+    user_id: { type: String, index: true },
+    application_id: { type: String, index: true },
+    candidate_name: { type: String },
+    candidate_email: { type: String },
+    candidate_phone: { type: String },
+    job_title: { type: String },
+    template_id: { type: String },
     templateName: { type: String, default: "Standard onboarding" },
     status: {
       type: String,
-      enum: ["not_started", "in_progress", "completed"],
+      enum: ["not_started", "in_progress", "completed", "dropped"],
       default: "not_started",
     },
     startDate: { type: Date },
     dueDate: { type: Date },
     tasks: { type: [onboardingTaskSchema], default: [] },
+    sections: { type: Schema.Types.Mixed, default: [] },
+    form_answers: { type: Schema.Types.Mixed, default: {} },
+    dropped_reason: { type: String },
+    dropped_at: { type: Date },
+    dropped_by: { type: String },
+    converted_at: { type: Date },
     createdBy: { type: String },
   },
   { timestamps: true },
 )
 
-onboardingChecklistSchema.index({ org_id: 1, user_id: 1 }, { unique: true })
+onboardingChecklistSchema.index({ org_id: 1, user_id: 1 }, { unique: true, sparse: true })
+onboardingChecklistSchema.index({ org_id: 1, application_id: 1 }, { unique: true, sparse: true })
 
 export const OnboardingChecklist = mongoose.model<IOnboardingChecklist>(
   "OnboardingChecklist",
   onboardingChecklistSchema,
 )
+
+function syncOnboardingIndexes() {
+  void OnboardingChecklist.syncIndexes().catch((error) => {
+    console.warn("OnboardingChecklist index sync:", error?.message || error)
+  })
+}
+
+if (mongoose.connection.readyState === 1) {
+  syncOnboardingIndexes()
+} else {
+  mongoose.connection.once("connected", syncOnboardingIndexes)
+}
 
 export const DEFAULT_ONBOARDING_TASKS: Array<
   Pick<IOnboardingTask, "title" | "assigneeRole" | "dueOffsetDays">

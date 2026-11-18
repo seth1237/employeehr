@@ -260,7 +260,7 @@ class EmailService {
 
   async sendBulkInterviewInviteEmail(
     applicantEmail: string,
-    applicantName: string,
+    _applicantName: string,
     subject: string,
     body: string,
     companyId?: string,
@@ -276,13 +276,9 @@ class EmailService {
     const html = renderCompanyBrandedEmail({
       title: subject,
       headline: subject,
-      subtitle: "Interview invitation",
       logoUrl,
       accentColor: primaryColor,
-      bodyHtml: `
-        <p style="margin:0 0 12px;">Hi <strong>${applicantName}</strong>,</p>
-        ${renderCalloutBox(`<div style="line-height:1.65;">${bodyFormatted}</div>`)}
-        <p class="eh-muted" style="margin:0;color:${ELEVATE_EMAIL.muted};font-size:14px;">We look forward to speaking with you.</p>`,
+      bodyHtml: `<div style="line-height:1.65;">${bodyFormatted}</div>`,
     });
 
     return this.sendEmail({

@@ -5,9 +5,10 @@ import Job from "../models/Job"
 import JobAnalytics from "../models/JobAnalytics"
 import { User } from "../models/User"
 import EmailService from "../services/email.service"
-import { AuthService } from "../services/authService"
+import { enrollHiredApplication } from "./onboardingController"
 import path from "path"
 import fs from "fs"
+import { JOB_APPLICATION_MAX_FILE_BYTES } from "../lib/publicSite"
 
 export class JobApplicationController {
   // PUBLIC: Submit application
@@ -46,6 +47,17 @@ export class JobApplicationController {
       // Handle uploaded files
       const uploadedFiles: Record<string, string> = {}
       if (req.files && Array.isArray(req.files)) {
+        const oversized = req.files.find((file) => file.size > JOB_APPLICATION_MAX_FILE_BYTES)
+        if (oversized) {
+          req.files.forEach((file) => {
+            try {
+              fs.unlinkSync(file.path)
+            } catch {
+              // ignore cleanup errors
+            }
+          })
+          return res.status(413).json({ success: false, message: "Document too large" })
+        }
         req.files.forEach((file: Express.Multer.File) => {
           // The fieldname contains the field_id from the form
           uploadedFiles[file.fieldname] = file.path
@@ -119,7 +131,7 @@ export class JobApplicationController {
       // Send notification to HR
       const hrUsers = await User.find({ org_id: job.org_id, role: { $in: ["company_admin", "hr"] } })
       if (hrUsers.length > 0) {
-        const applicationLink = `https://hr.codewithseth.co.ke/admin/applications/${application._id}`
+        const applicationLink = `${process.env.FRONTEND_URL || "https://www.elevatehub.co.ke"}/admin/applications/${application._id}`
         hrUsers.forEach((hr) => {
           EmailService.sendApplicationNotificationToHR(
             hr.email,
@@ -236,23 +248,25 @@ export class JobApplicationController {
 
       await application.save()
 
-      // Send status update email to applicant
-      const job = await Job.findById(application.job_id)
-      if (job && status !== "pending") {
-        EmailService.sendStatusUpdateEmail(
-          application.applicant_email,
-          application.applicant_name,
-          job.title,
-          status,
-          comment,
-          req.org_id
-        ).catch(console.error)
+      let onboarding = null
+      if (status === "hired") {
+        const job = await Job.findById(application.job_id)
+        onboarding = await enrollHiredApplication({
+          org_id: req.org_id,
+          actorId: req.user.userId,
+          application,
+          job,
+        })
       }
 
       res.status(200).json({
         success: true,
-        message: "Application status updated successfully",
+        message:
+          status === "hired"
+            ? "Marked hired and added to onboarding"
+            : "Application status updated successfully",
         data: application,
+        onboarding,
       })
     } catch (error) {
       console.error("Update application status error:", error)
@@ -264,7 +278,7 @@ export class JobApplicationController {
     }
   }
 
-  /** Hire applicant → create employee user + optional onboarding checklist */
+  /** Hire applicant → onboarding pool. Employee is created only after onboarding is completed. */
   static async hireApplicant(req: AuthenticatedRequest, res: Response) {
     try {
       if (!req.org_id || !req.user) {
@@ -274,18 +288,6 @@ export class JobApplicationController {
       }
 
       const { applicationId } = req.params
-      const {
-        department,
-        position,
-        role,
-        manager_id,
-        salary,
-        dateOfJoining,
-        employmentType,
-        createOnboarding,
-        probationDays,
-      } = req.body || {}
-
       const application = await JobApplication.findOne({
         _id: applicationId,
         org_id: req.org_id,
@@ -296,132 +298,28 @@ export class JobApplicationController {
           .json({ success: false, message: "Application not found" })
       }
 
-      const email = String(application.applicant_email || "")
-        .trim()
-        .toLowerCase()
-      if (!email) {
-        return res.status(400).json({
-          success: false,
-          message: "Application has no applicant email",
-        })
-      }
-
-      const nameParts = String(application.applicant_name || "New Hire")
-        .trim()
-        .split(/\s+/)
-      const firstName = nameParts[0] || "New"
-      const lastName = nameParts.slice(1).join(" ") || "Hire"
-
       const job = await Job.findById(application.job_id)
-      const inviterUser = await User.findById(req.user.userId)
-      const inviterName = inviterUser
-        ? `${inviterUser.firstName} ${inviterUser.lastName}`
-        : "HR"
-
-      const startDate = dateOfJoining ? new Date(dateOfJoining) : new Date()
-      const probationEnd =
-        Number(probationDays) > 0
-          ? new Date(
-              startDate.getTime() +
-                Number(probationDays) * 24 * 60 * 60 * 1000,
-            )
-          : new Date(startDate.getTime() + 90 * 24 * 60 * 60 * 1000)
-
-      const createResult = await AuthService.createEmployee(req.org_id, {
-        email,
-        firstName,
-        lastName,
-        role: role || "employee",
-        department: department || undefined,
-        position: position || job?.title || undefined,
-        manager_id: manager_id || undefined,
-        salary: salary != null ? Number(salary) : undefined,
-        dateOfJoining: startDate,
-        employmentType: employmentType || "permanent",
-        probationEndDate: probationEnd,
-        status: "preboarding",
-        phone: (application as any).applicant_phone || undefined,
-        inviter_name: inviterName,
-      } as any)
-
-      if (!createResult.success || !createResult.data) {
-        // If user already exists, still mark hired and link
-        if (
-          String(createResult.message || "")
-            .toLowerCase()
-            .includes("already exists")
-        ) {
-          const existing = await User.findOne({
-            org_id: req.org_id,
-            email,
-          }).select("-password")
-          application.status = "hired"
-          application.timeline.push({
-            status: "hired",
-            changed_by: req.user.userId,
-            changed_at: new Date(),
-            comment: `Linked to existing employee ${email}`,
-          })
-          await application.save()
-          return res.status(200).json({
-            success: true,
-            message: "Applicant already has an account; marked hired",
-            data: { application, user: existing },
-          })
-        }
-        return res.status(400).json(createResult)
-      }
-
       application.status = "hired"
       application.timeline.push({
         status: "hired",
         changed_by: req.user.userId,
         changed_at: new Date(),
-        comment: `Hired as employee ${createResult.data._id}`,
+        comment: "Moved to onboarding pool",
       })
       await application.save()
 
-      let onboarding = null
-      if (createOnboarding !== false) {
-        const { OnboardingChecklist, DEFAULT_ONBOARDING_TASKS } = await import(
-          "../models/OnboardingChecklist"
-        )
-        onboarding = await OnboardingChecklist.findOneAndUpdate(
-          { org_id: req.org_id, user_id: String(createResult.data._id) },
-          {
-            $setOnInsert: {
-              org_id: req.org_id,
-              user_id: String(createResult.data._id),
-              templateName: "Hire from application",
-              status: "in_progress",
-              startDate,
-              dueDate: new Date(startDate.getTime() + 14 * 24 * 60 * 60 * 1000),
-              tasks: DEFAULT_ONBOARDING_TASKS.map((t) => ({
-                ...t,
-                completed: false,
-              })),
-              createdBy: req.user.userId,
-            },
-          },
-          { upsert: true, new: true },
-        )
-      }
-
-      EmailService.sendStatusUpdateEmail(
-        application.applicant_email,
-        application.applicant_name,
-        job?.title || "Position",
-        "hired",
-        "Congratulations — you have been hired. Check your email for login details.",
-        req.org_id,
-      ).catch(console.error)
+      const onboarding = await enrollHiredApplication({
+        org_id: req.org_id,
+        actorId: req.user.userId,
+        application,
+        job,
+      })
 
       return res.status(201).json({
         success: true,
-        message: "Applicant hired and employee account created",
+        message: "Candidate moved to onboarding. Employee record is created after onboarding is completed.",
         data: {
           application,
-          user: createResult.data,
           onboarding,
         },
       })

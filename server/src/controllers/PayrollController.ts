@@ -7,7 +7,7 @@ import { postMonthPayrollToCashbook, postPayrollToCashbook } from "../services/c
 import { CashTransaction } from "../models/CashTransaction"
 import { computeKenyaStatutory, roundKes } from "../services/kenyaStatutory.service"
 
-const STATUTORY_NAMES = new Set(["PAYE", "SHIF", "SHA", "NHIF", "NSSF", "Housing Levy"])
+const STATUTORY_NAMES = new Set(["PAYE", "SHIF", "SHA", "NHIF", "NSSF", "Housing Levy", "Housing levy"])
 
 function buildPayrollFigures(input: {
     baseSalary: number

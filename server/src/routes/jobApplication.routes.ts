@@ -2,12 +2,25 @@ import { Router } from "express"
 import { JobApplicationController } from "../controllers/jobApplicationController"
 import { authMiddleware, roleMiddleware, orgMiddleware } from "../middleware/auth"
 import { tenantIsolation } from "../middleware/tenantIsolation.middleware"
-import { uploadApplicationFiles } from "../middleware/upload.middleware"
+import { uploadJobApplicationFiles } from "../middleware/upload.middleware"
+import type { Request, Response, NextFunction } from "express"
 
 const router = Router()
 
+function handleApplicationUploads(req: Request, res: Response, next: NextFunction) {
+  uploadJobApplicationFiles.any()(req, res, (err: any) => {
+    if (err?.code === "LIMIT_FILE_SIZE") {
+      return res.status(413).json({ success: false, message: "Document too large" })
+    }
+    if (err) {
+      return res.status(400).json({ success: false, message: err.message || "Upload failed" })
+    }
+    next()
+  })
+}
+
 // Public routes (no auth required)
-router.post("/submit", uploadApplicationFiles.any(), JobApplicationController.submitApplication)
+router.post("/submit", handleApplicationUploads, JobApplicationController.submitApplication)
 
 // Protected routes (require authentication)
 router.use(authMiddleware, orgMiddleware, tenantIsolation)

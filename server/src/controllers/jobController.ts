@@ -4,6 +4,7 @@ import Job from "../models/Job"
 import { Company } from "../models/Company"
 import JobAnalytics from "../models/JobAnalytics"
 import { Request } from "express"
+import { publicCareersUrl } from "../lib/publicSite"
 
 export class JobController {
   // Helper to generate company slug from name
@@ -75,7 +76,7 @@ export class JobController {
         success: true,
         message: "Job created successfully",
         data: job,
-        shareUrl: `https://hr.codewithseth.co.ke/careers/${shareLink}`,
+        shareUrl: publicCareersUrl(shareLink),
       })
     } catch (error) {
       console.error("Create job error:", error)

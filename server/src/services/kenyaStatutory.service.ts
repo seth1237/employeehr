@@ -68,7 +68,8 @@ export function computeKenyaStatutory(
     roundKes(gross * HOUSING_LEVY_RATE),
   )
 
-  const taxablePay = Math.max(0, gross - nssf)
+  // PAYE is banded. NSSF and housing levy reduce taxable pay; SHIF does not.
+  const taxablePay = Math.max(0, gross - nssf - housingLevy)
   const rawPaye = computePayeGrossTax(taxablePay)
   const paye = overrideOr(overrides, ["paye", "PAYE"], Math.max(0, roundKes(rawPaye - PERSONAL_RELIEF)))
 

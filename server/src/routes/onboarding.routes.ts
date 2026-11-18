@@ -17,10 +17,35 @@ router.get(
   roleMiddleware("company_admin", "admin", "hr", "manager"),
   OnboardingController.getByUser,
 )
+router.get(
+  "/template",
+  roleMiddleware("company_admin", "admin", "hr"),
+  OnboardingController.getTemplate,
+)
+router.put(
+  "/template",
+  roleMiddleware("company_admin", "admin", "hr"),
+  OnboardingController.saveTemplate,
+)
 router.post(
   "/",
   roleMiddleware("company_admin", "admin", "hr"),
   OnboardingController.createForUser,
+)
+router.patch(
+  "/:checklistId/answers",
+  roleMiddleware("company_admin", "admin", "hr", "manager"),
+  OnboardingController.saveAnswers,
+)
+router.post(
+  "/:checklistId/drop",
+  roleMiddleware("company_admin", "admin", "hr"),
+  OnboardingController.drop,
+)
+router.post(
+  "/:checklistId/complete",
+  roleMiddleware("company_admin", "admin", "hr"),
+  OnboardingController.complete,
 )
 router.patch(
   "/:checklistId/tasks/:taskId",

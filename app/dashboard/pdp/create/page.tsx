@@ -238,7 +238,7 @@ export default function CreatePDPPage() {
                     <div className="flex gap-3">
                         <Button
                             type="submit"
-                            className="flex-1 bg-primary hover:bg-primary/90"
+                            className="flex-1"
                             disabled={submitting}
                         >
                             {submitting ? "Creating PDP..." : "Create PDP"}

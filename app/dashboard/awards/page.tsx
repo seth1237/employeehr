@@ -111,7 +111,7 @@ export default function AwardsManagement() {
           <h1 className="text-3xl font-bold">Awards Management</h1>
           <p className="text-muted-foreground">Manage and announce employee recognition awards</p>
         </div>
-        <Button onClick={() => setShowForm(!showForm)} className="bg-primary hover:bg-primary/90">
+        <Button onClick={() => setShowForm(!showForm)}>
           <Plus size={18} className="mr-2" />
           Create Award
         </Button>

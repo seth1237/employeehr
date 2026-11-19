@@ -167,7 +167,7 @@ export default function EvaluationsPage() {
                 <Button variant="outline" onClick={() => setSelectedEmployee(null)}>
                   Cancel
                 </Button>
-                <Button onClick={handleSubmitEvaluation} className="bg-primary hover:bg-primary/90">
+                <Button onClick={handleSubmitEvaluation}>
                   <Send size={18} className="mr-2" />
                   Submit Evaluation
                 </Button>

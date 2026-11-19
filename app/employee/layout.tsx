@@ -109,17 +109,17 @@ export default function EmployeeLayout({
   }
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-screen min-w-0 overflow-hidden">
       {/* Sidebar */}
       <EmployeeSidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
       
       {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {/* Top Navigation */}
         <EmployeeTopNav onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
         
         {/* Page Content */}
-        <main className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900">
+        <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-gray-50 dark:bg-gray-900">
           {children}
         </main>
       </div>

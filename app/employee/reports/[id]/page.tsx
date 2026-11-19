@@ -82,7 +82,7 @@ export default function ReportDetailPage() {
           <p className="text-muted-foreground mt-1">{report.type} report</p>
         </div>
         {report.status === "draft" && (
-          <Button onClick={() => router.push("/employee/reports/write")} className="bg-primary">
+          <Button onClick={() => router.push("/employee/reports/write")} >
             <Edit2 className="w-4 h-4 mr-2" />
             Edit
           </Button>

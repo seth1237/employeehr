@@ -242,7 +242,7 @@ export default function SignupForm({ onBack }: SignupFormProps) {
 
           {error && <div className="p-4 bg-destructive/10 text-destructive rounded-lg text-sm">{error}</div>}
 
-          <Button type="submit" size="lg" className="w-full bg-primary hover:bg-primary/90" disabled={isLoading}>
+          <Button type="submit" size="lg" className="w-full" disabled={isLoading}>
             {isLoading ? "Setting up your organization..." : "Create Account & Setup Organization"}
           </Button>
         </form>

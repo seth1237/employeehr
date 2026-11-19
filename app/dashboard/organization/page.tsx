@@ -140,7 +140,7 @@ export default function OrganizationSettings() {
           </div>
 
           <div className="flex justify-end">
-            <Button onClick={handleSave} className="bg-primary hover:bg-primary/90" disabled={isSaving}>
+            <Button onClick={handleSave} disabled={isSaving}>
               <Save size={18} className="mr-2" />
               {isSaving ? "Saving..." : "Save Changes"}
             </Button>

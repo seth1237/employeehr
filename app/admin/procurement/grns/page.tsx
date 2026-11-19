@@ -191,7 +191,7 @@ function GRNContent() {
             />
           </div>
           <div className="flex items-center gap-2 w-full sm:w-auto">
-            <Button size="sm" className="h-9 w-full sm:w-auto bg-primary text-primary-foreground shadow hover:bg-primary/90" onClick={() => setModalOpen(true)}>
+            <Button size="sm" className="h-9 w-full sm:w-auto" onClick={() => setModalOpen(true)}>
               <Plus className="mr-2 h-4 w-4" />
               Receive Goods
             </Button>

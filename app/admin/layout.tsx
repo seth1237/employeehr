@@ -154,7 +154,7 @@ export default function AdminLayout({
 
   return (
     <WalkthroughProvider portal="admin">
-    <div className="flex h-screen bg-background">
+    <div className="flex h-screen min-w-0 overflow-x-hidden bg-background">
       <a
         href="#admin-main"
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-primary-foreground focus:shadow-lg"
@@ -168,7 +168,7 @@ export default function AdminLayout({
         onToggle={() => setSidebarOpen(!sidebarOpen)}
         onCollapseToggle={toggleSidebarCollapsed}
       />
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <TopNav
           onMenuClick={() => setSidebarOpen(!sidebarOpen)}
           onSidebarCollapseToggle={toggleSidebarCollapsed}
@@ -177,7 +177,7 @@ export default function AdminLayout({
         <main
           id="admin-main"
           tabIndex={-1}
-          className="flex-1 overflow-auto outline-none"
+          className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto outline-none"
         >
           {children}
         </main>

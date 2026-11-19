@@ -542,7 +542,7 @@ export default function MeetingPage() {
 
             <Button
               type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-700 h-11 sm:h-10 text-base"
+              className="w-full h-11 sm:h-10 text-base"
               disabled={!canJoinMeeting && meeting?.status !== 'in-progress'}
             >
               {canJoinMeeting || meeting?.status === 'in-progress' ? 'Join Meeting' : 'Waiting for Meeting'}

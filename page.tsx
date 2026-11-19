@@ -174,11 +174,7 @@ function CreateWarehouseModal({
           <button
             onClick={handleCreate}
             disabled={loading}
-            className="
-              w-full py-2.5 rounded-xl bg-blue-500 hover:bg-blue-600
-              text-white font-medium text-sm transition-colors
-              disabled:opacity-50 disabled:cursor-not-allowed
-            "
+            className="eh-btn-solid w-full py-2.5 text-sm disabled:cursor-not-allowed"
           >
             {loading ? "Creating…" : "Create warehouse"}
           </button>

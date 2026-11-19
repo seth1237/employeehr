@@ -176,7 +176,7 @@ export default function StampsPage() {
           {!isCreating && (
             <button
               onClick={() => setIsCreating(true)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              className="eh-btn-solid inline-flex items-center px-5 py-2.5 text-sm"
             >
               + Create Stamp
             </button>
@@ -263,7 +263,7 @@ export default function StampsPage() {
               </button>
               <button
                 onClick={handleSaveStamp}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                className="eh-btn-solid inline-flex items-center px-6 py-2.5 text-sm"
               >
                 {editingStamp ? "Update Stamp" : "Create Stamp"}
               </button>

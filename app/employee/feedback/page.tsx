@@ -88,7 +88,7 @@ export default function FeedbackPage() {
             <h1 className="text-3xl font-bold">360 Degree Feedback</h1>
             <p className="text-muted-foreground">Feedback from managers and peers</p>
           </div>
-          <Button className="bg-primary hover:bg-primary/90">
+          <Button>
             <MessageSquare size={18} className="mr-2" />
             Request Feedback
           </Button>

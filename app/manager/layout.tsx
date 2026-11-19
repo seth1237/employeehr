@@ -98,20 +98,20 @@ export default function ManagerLayout({
   }
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex h-screen min-w-0 overflow-x-hidden bg-background">
       <ManagerSidebar
         isOpen={sidebarOpen}
         isCollapsed={sidebarCollapsed}
         onToggle={() => setSidebarOpen(!sidebarOpen)}
         onCollapseToggle={toggleSidebarCollapsed}
       />
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <TopNav
           onMenuClick={() => setSidebarOpen(!sidebarOpen)}
           onSidebarCollapseToggle={toggleSidebarCollapsed}
           isSidebarCollapsed={sidebarCollapsed}
         />
-        <main className="flex-1 overflow-auto">{children}</main>
+        <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto">{children}</main>
       </div>
       <AiAssistantChat />
     </div>

@@ -100,7 +100,7 @@ export default function FeedbackPage() {
                 <Button variant="outline" onClick={() => setSelectedEmployee(null)}>
                   Cancel
                 </Button>
-                <Button onClick={handleSubmitFeedback} className="bg-primary hover:bg-primary/90">
+                <Button onClick={handleSubmitFeedback}>
                   <Send size={18} className="mr-2" />
                   Submit Feedback
                 </Button>

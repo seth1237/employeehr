@@ -682,14 +682,14 @@ export default function EmployeeInvoicesPage() {
               <table className="min-w-[1100px] w-full table-fixed text-[13px]">
                 <thead className="sticky top-0 z-10 bg-muted/80 text-left text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
                   <tr className="border-b">
-                    <th className="px-3 py-3 font-medium w-[14%]">Invoice #</th>
-                    <th className="px-3 py-3 font-medium w-[22%]">Client</th>
-                    <th className="px-3 py-3 font-medium w-[14%]">Seller</th>
-                    <th className="px-3 py-3 font-medium w-[8%]">Items</th>
+                    <th className="px-3 py-3 font-medium w-[13%]">Invoice #</th>
+                    <th className="px-3 py-3 font-medium w-[20%]">Client</th>
+                    <th className="px-3 py-3 font-medium w-[13%]">Seller</th>
+                    <th className="px-3 py-3 font-medium w-[7%]">Items</th>
                     <th className="px-3 py-3 font-medium w-[12%]">Amount</th>
                     <th className="px-3 py-3 font-medium w-[10%]">Status</th>
-                    <th className="px-3 py-3 font-medium w-[12%]">Date</th>
-                    <th className="px-3 py-3 font-medium w-[8%]">Actions</th>
+                    <th className="px-3 py-3 font-medium w-[11%]">Date</th>
+                    <th className="px-3 py-3 font-medium w-[14%] min-w-[148px]">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -803,7 +803,7 @@ export default function EmployeeInvoicesPage() {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  className="h-8 w-full whitespace-nowrap"
+                                  className="w-full"
                                 >
                                   Actions
                                 </Button>

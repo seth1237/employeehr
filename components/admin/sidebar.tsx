@@ -879,7 +879,7 @@ export default function AdminSidebar({
               style={{ backgroundImage: "var(--company-logo-url)" }}
             ></div>
             {!isCollapsed && (
-              <span className="" style={{ color: "var(--brand-primary)" }}>
+              <span style={{ color: "var(--brand-primary)" }}>
                 {onTheGo ? "On the Go" : "Admin Panel"}
               </span>
             )}

@@ -597,7 +597,7 @@ export default function StockChecksPage() {
                         <td className="px-3 py-2 align-top">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button size="sm" variant="outline" className="h-8 w-full whitespace-nowrap">
+                              <Button size="sm" variant="outline" className="w-full">
                                 Actions
                               </Button>
                             </DropdownMenuTrigger>

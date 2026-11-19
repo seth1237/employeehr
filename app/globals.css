@@ -5,7 +5,9 @@
 
 :root {
     /* Dynamic branding variables (overridden by ThemeProvider) */
-    --brand-primary: #2563eb;
+    --brand-primary: #296ff0;
+    --eh-btn-fill: var(--brand-primary);
+    --eh-btn-label: #ffffff;
     --brand-secondary: #059669;
     --brand-accent: #f59e0b;
     --brand-background: #ffffff;
@@ -21,8 +23,8 @@
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
 
-  /* Blue primary (#2563eb) */
-  --primary: oklch(0.52 0.19 260);
+  /* Blue primary (#296FF0) */
+  --primary: #296ff0;
   --primary-foreground: oklch(1 0 0);
 
   /* Light slate secondary */
@@ -193,6 +195,11 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html,
+  body {
+    overflow-x: hidden;
+    max-width: 100%;
+  }
   body {
     @apply bg-background text-foreground;
   }
@@ -311,6 +318,76 @@
     rgba(255, 255, 255, 0) 100%
   );
   background-size: 1000px 100%;
+}
+
+/* Glossy filled CTA — inner highlight, white inner stroke, colored ring, drop shadow */
+.eh-btn-solid {
+  --eh-btn-fill: var(--brand-primary, #296ff0);
+  color: var(--eh-btn-label, #ffffff);
+  background-color: var(--eh-btn-fill);
+  background-image: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.22) 0%,
+    rgba(255, 255, 255, 0) 46%
+  );
+  border: 0;
+  border-radius: 999px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  box-shadow:
+    0 3px 6px rgba(0, 0, 0, 0.2),
+    0 0 0 1px var(--eh-btn-fill),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.4),
+    inset 0 1px 6px 2px rgba(255, 255, 255, 0.24);
+}
+
+.eh-btn-solid:hover {
+  filter: brightness(1.05);
+}
+
+.eh-btn-solid:active {
+  transform: translateY(1px);
+  filter: brightness(0.98);
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.18),
+    0 0 0 1px var(--eh-btn-fill),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.35),
+    inset 0 1px 4px 1px rgba(255, 255, 255, 0.18);
+}
+
+.eh-btn-solid:disabled,
+.eh-btn-solid[aria-disabled="true"] {
+  filter: none;
+  transform: none;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.eh-btn-solid.eh-btn-compact {
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.16),
+    0 0 0 1px var(--eh-btn-fill),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.42),
+    inset 0 1px 3px 0 rgba(255, 255, 255, 0.2);
+  background-image: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.2) 0%,
+    rgba(255, 255, 255, 0) 62%
+  );
+}
+
+.eh-btn-solid.eh-btn-compact:active {
+  box-shadow:
+    0 1px 1px rgba(0, 0, 0, 0.14),
+    0 0 0 1px var(--eh-btn-fill),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.35),
+    inset 0 1px 2px 0 rgba(255, 255, 255, 0.16);
+}
+
+.eh-btn-destructive {
+  --eh-btn-fill: #dc2626;
 }
 
 @media print {

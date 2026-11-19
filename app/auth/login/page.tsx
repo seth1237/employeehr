@@ -256,11 +256,9 @@ function LoginContent() {
             </>
           )}
 
-          <div className="rounded-lg bg-blue-50 p-2">
-            <Button type="submit" size="lg" className="w-full bg-blue-600 hover:bg-blue-700 text-white" disabled={isLoading}>
-              {isLoading ? (otpStep ? "Verifying..." : "Signing in...") : (otpStep ? "Verify OTP" : "Sign In")}
-            </Button>
-          </div>
+          <Button type="submit" size="lg" className="w-full" disabled={isLoading}>
+            {isLoading ? (otpStep ? "Verifying..." : "Signing in...") : (otpStep ? "Verify OTP" : "Sign In")}
+          </Button>
 
           {error && (
             <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">

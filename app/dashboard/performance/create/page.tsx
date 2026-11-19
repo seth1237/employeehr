@@ -269,7 +269,7 @@ export default function StartPerformanceReviewPage() {
                     <div className="flex gap-3">
                         <Button
                             type="submit"
-                            className="flex-1 bg-primary hover:bg-primary/90"
+                            className="flex-1"
                             disabled={submitting}
                         >
                             {submitting ? "Creating Review..." : "Create Performance Review"}

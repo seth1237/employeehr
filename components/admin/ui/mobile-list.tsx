@@ -1,21 +1,25 @@
 "use client"
 
+import { forwardRef, type ReactNode } from "react"
 import { cn } from "@/lib/utils"
 
 /** Desktop table shell — hidden on small screens */
-export function DesktopTableShell({
-  children,
-  className,
-}: {
-  children: React.ReactNode
-  className?: string
-}) {
+export const DesktopTableShell = forwardRef<
+  HTMLDivElement,
+  {
+    children: ReactNode
+    className?: string
+  }
+>(function DesktopTableShell({ children, className }, ref) {
   return (
-    <div className={cn("hidden md:block overflow-x-auto", className)}>
+    <div
+      ref={ref}
+      className={cn("hidden min-w-0 max-w-full md:block overflow-x-auto", className)}
+    >
       {children}
     </div>
   )
-}
+})
 
 /** Mobile card list — hidden from md up */
 export function MobileCardList({

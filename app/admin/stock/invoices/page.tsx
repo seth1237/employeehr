@@ -750,6 +750,10 @@ export default function InvoicesPage() {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
 
+  const goToPage = (next: number) => {
+    setPage(Math.min(totalPages, Math.max(1, next)));
+  };
+
   const pagedInvoices = useMemo(() => {
     const start = (page - 1) * pageSize;
     return sortedInvoices.slice(start, start + pageSize);
@@ -865,7 +869,7 @@ export default function InvoicesPage() {
   );
 
   return (
-    <div className="space-y-5">
+    <div className="min-w-0 max-w-full space-y-5">
       <div
         className="rounded-2xl border px-4 py-3 shadow-sm"
         style={{
@@ -1095,7 +1099,7 @@ export default function InvoicesPage() {
         </div>
       </div>
 
-      <Card className="overflow-hidden shadow-sm">
+      <Card className="min-w-0 overflow-hidden shadow-sm">
         <CardHeader className="border-b bg-muted/30 pb-3">
           <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
             <div>
@@ -1109,7 +1113,7 @@ export default function InvoicesPage() {
             </p>
           </div>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className="min-w-0 p-0">
           {sortedInvoices.length === 0 ? (
             <EmptyState
               title={
@@ -1134,18 +1138,18 @@ export default function InvoicesPage() {
           ) : (
             <>
             <DesktopTableShell>
-              <table className="min-w-[1200px] w-full table-fixed text-[13px]">
+              <table className="w-full table-fixed text-[13px]">
                 <thead className="sticky top-0 z-10 bg-muted/80 text-left text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
                   <tr className="border-b">
-                    <th className="px-3 py-3 font-medium w-[13%]">Invoice #</th>
-                    <th className="px-3 py-3 font-medium w-[21%]">Client</th>
-                    <th className="px-3 py-3 font-medium w-[14%]">Seller</th>
-                    <th className="px-3 py-3 font-medium w-[8%]">Items</th>
+                    <th className="px-3 py-3 font-medium w-[12%]">Invoice #</th>
+                    <th className="px-3 py-3 font-medium w-[18%]">Client</th>
+                    <th className="px-3 py-3 font-medium w-[13%]">Seller</th>
+                    <th className="px-3 py-3 font-medium w-[7%]">Items</th>
                     <th className="px-3 py-3 font-medium w-[11%]">Amount</th>
                     <th className="px-3 py-3 font-medium w-[9%]">Status</th>
-                    <th className="px-3 py-3 font-medium w-[17%]">Dispatch</th>
-                    <th className="px-3 py-3 font-medium w-[11%]">Date</th>
-                    <th className="px-3 py-3 font-medium w-[8%]">Actions</th>
+                    <th className="px-3 py-3 font-medium w-[16%]">Dispatch</th>
+                    <th className="px-3 py-3 font-medium w-[10%]">Date</th>
+                    <th className="px-3 py-3 font-medium w-[14%] min-w-[148px]">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1320,7 +1324,7 @@ export default function InvoicesPage() {
                                 <Button
                                   variant="secondary"
                                   size="sm"
-                                  className="h-7 w-full text-xs shadow-sm"
+                                  className="w-full"
                                   onClick={() => setDeliveryStatusInvoice(invoice)}
                                 >
                                   View Delivery Status
@@ -1345,12 +1349,12 @@ export default function InvoicesPage() {
                             )}
                           </div>
                         </td>
-                        <td className="px-3 py-2 align-top">
-                          <div className="flex flex-col gap-2">
+                        <td className="px-3 py-2 align-top min-w-[148px]">
+                          <div className="flex min-w-[132px] flex-col gap-1.5">
                             {invoice.status === "draft" && canApprove ? (
                               <Button
                                 size="sm"
-                                className="h-8 w-full"
+                                className="w-full"
                                 asChild
                               >
                                 <Link href={`/admin/stock/invoices/${invoice._id}`}>
@@ -1359,10 +1363,10 @@ export default function InvoicesPage() {
                               </Button>
                             ) : null}
                             {invoice.status === "pending_approval" && canApprove ? (
-                              <div className="flex gap-1">
+                              <div className="flex gap-1.5">
                                 <Button
                                   size="sm"
-                                  className="h-8 flex-1"
+                                  className="flex-1"
                                   disabled={actingInvoiceId === invoice._id}
                                   onClick={() => void approvePendingInvoice(invoice._id)}
                                 >
@@ -1371,7 +1375,7 @@ export default function InvoicesPage() {
                                 <Button
                                   size="sm"
                                   variant="destructive"
-                                  className="h-8 flex-1"
+                                  className="flex-1"
                                   disabled={actingInvoiceId === invoice._id}
                                   onClick={() => void rejectPendingInvoice(invoice._id)}
                                 >
@@ -1384,7 +1388,7 @@ export default function InvoicesPage() {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  className="h-8 w-full whitespace-nowrap"
+                                  className="w-full"
                                   aria-label={`Actions for invoice ${invoice.invoiceNumber}`}
                                 >
                                   Actions
@@ -1543,19 +1547,23 @@ export default function InvoicesPage() {
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Button
+                  type="button"
                   variant="outline"
                   size="sm"
                   disabled={page === 1}
-                  onClick={() => setPage((current) => Math.max(1, current - 1))}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => goToPage(page - 1)}
                 >
                   Prev
                 </Button>
                 {visiblePages.map((pageNumber) => (
                   <Button
                     key={pageNumber}
+                    type="button"
                     variant={pageNumber === page ? "default" : "outline"}
                     size="sm"
-                    onClick={() => setPage(pageNumber)}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => goToPage(pageNumber)}
                     className="min-w-9"
                   >
                     {pageNumber}
@@ -1566,21 +1574,23 @@ export default function InvoicesPage() {
                 )}
                 {totalPages > 8 && (
                   <Button
+                    type="button"
                     variant={page === totalPages ? "default" : "outline"}
                     size="sm"
-                    onClick={() => setPage(totalPages)}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => goToPage(totalPages)}
                     className="min-w-9"
                   >
                     {totalPages}
                   </Button>
                 )}
                 <Button
+                  type="button"
                   variant="outline"
                   size="sm"
                   disabled={page === totalPages}
-                  onClick={() =>
-                    setPage((current) => Math.min(totalPages, current + 1))
-                  }
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => goToPage(page + 1)}
                 >
                   Next
                 </Button>

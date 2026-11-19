@@ -408,7 +408,7 @@ export default function ReportWritePage() {
             <Button
               onClick={submitReport}
               disabled={isSubmitting || isSaving || !currentDraft}
-              className="bg-primary hover:bg-primary/90 min-w-[160px]"
+              className="min-w-[160px]"
               size="lg"
             >
               {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
@@ -467,7 +467,7 @@ export default function ReportWritePage() {
             <Button variant="outline" onClick={() => setShowSummaryDialog(false)} className="min-w-[100px]">
               Cancel
             </Button>
-            <Button onClick={applySummary} className="bg-primary hover:bg-primary/90 min-w-[140px]" size="lg">
+            <Button onClick={applySummary} className="min-w-[140px]" size="lg">
               <Wand2 className="w-4 h-4 mr-2" />
               Apply Summary
             </Button>

@@ -38,7 +38,7 @@ export default function SignupPage() {
             </div>
             <Button
               size="lg"
-              className="w-full bg-primary hover:bg-primary/90 text-base py-6"
+              className="w-full text-base py-6"
               onClick={() => setStep("register")}
             >
               <Building2 className="mr-2 h-4 w-4" />

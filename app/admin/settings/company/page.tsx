@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1287,16 +1287,8 @@ export default function CompanySettingsPage() {
             </p>
             <div className="flex gap-3 flex-wrap">
               <button
-                className="px-4 py-2 text-white font-medium transition hover:opacity-90"
-                style={{
-                  background: primaryColor,
-                  borderRadius:
-                    buttonStyle === "pill"
-                      ? "9999px"
-                      : buttonStyle === "sharp"
-                        ? "0"
-                        : borderRadius,
-                }}
+                className="eh-btn-solid inline-flex items-center px-5 py-2.5 text-sm"
+                style={{ ["--eh-btn-fill"]: primaryColor } as CSSProperties}
               >
                 Primary Button
               </button>

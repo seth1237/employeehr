@@ -73,7 +73,7 @@ export default function ForgotPasswordPage() {
               </div>
             </div>
 
-            <Button type="submit" size="lg" className="w-full bg-primary hover:bg-primary/90" disabled={isLoading}>
+            <Button type="submit" size="lg" className="w-full" disabled={isLoading}>
               {isLoading ? "Sending..." : "Send Reset Link"}
             </Button>
           </form>

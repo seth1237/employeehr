@@ -172,11 +172,11 @@ export default function SystemSettingsPage() {
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
-                <a href="/PUBLIC_API_GUIDE.md" download className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700">
+                <a href="/PUBLIC_API_GUIDE.md" download className="eh-btn-solid inline-flex items-center gap-2 px-4 py-2 text-sm">
                   <Download className="w-4 h-4" />
                   API Guide for Developers
                 </a>
-                <a href="/documentation.md" download className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+                <a href="/documentation.md" download className="eh-btn-solid inline-flex items-center gap-2 px-4 py-2 text-sm">
                   <Download className="w-4 h-4" />
                   Quick Reference
                 </a>

@@ -143,7 +143,7 @@ export default function PDPReviewsPage() {
                   <XCircle size={18} className="mr-2" />
                   Reject
                 </Button>
-                <Button onClick={handleApprove} className="bg-primary hover:bg-primary/90">
+                <Button onClick={handleApprove}>
                   <CheckCircle2 size={18} className="mr-2" />
                   Approve
                 </Button>

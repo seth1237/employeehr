@@ -221,7 +221,7 @@ export default function InvitationForm({
             </div>
           )}
 
-          <Button type="submit" size="lg" className="w-full bg-primary hover:bg-primary/90" disabled={isLoading}>
+          <Button type="submit" size="lg" className="w-full" disabled={isLoading}>
             {isLoading ? "Setting up account..." : "Complete Setup & Sign In"}
           </Button>
         </form>

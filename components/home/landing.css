@@ -5,7 +5,7 @@ html:has(.elevate-landing) {
 .elevate-landing {
   --page: #f1f0f3;
   --ink: #10151d;
-  --blue: #3d74f5;
+  --blue: #296ff0;
   --border: #e1e0e5;
   color-scheme: light;
   background: var(--page);
@@ -195,11 +195,14 @@ html:has(.elevate-landing) {
 
 .elevate-landing .primary {
   color: #fff;
-  background: linear-gradient(#427dff, #3267e9);
-  border-color: #5185f9;
+  background-color: #296ff0;
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0) 46%);
+  border: 0;
   box-shadow:
-    inset 0 1px 1px #84a9ff,
-    0 1px 2px #718cdc38;
+    0 3px 6px rgba(0, 0, 0, 0.2),
+    0 0 0 1px #296ff0,
+    inset 0 0 0 1px rgba(255, 255, 255, 0.4),
+    inset 0 1px 6px 2px rgba(255, 255, 255, 0.24);
 }
 
 .elevate-landing .secondary {
@@ -209,7 +212,10 @@ html:has(.elevate-landing) {
     0 1px 2px #fff;
 }
 
-.elevate-landing .primary:hover,
+.elevate-landing .primary:hover {
+  filter: brightness(1.05);
+}
+
 .elevate-landing .secondary:hover,
 .elevate-landing .call-button:hover {
   filter: brightness(1.025);
@@ -217,7 +223,10 @@ html:has(.elevate-landing) {
   box-shadow: 0 4px 10px #537cdb20;
 }
 
-.elevate-landing .primary:active,
+.elevate-landing .primary:active {
+  transform: translateY(1px);
+}
+
 .elevate-landing .secondary:active,
 .elevate-landing .call-button:active {
   transform: translateY(1px);
@@ -769,15 +778,23 @@ html:has(.elevate-landing) {
 }
 
 .elevate-careers .apply-actions button {
-  border-radius: 8px;
-  padding: 0.62rem 1rem;
+  border-radius: 999px;
+  padding: 0.7rem 1.15rem;
   font-size: 0.92rem;
+  font-weight: 600;
 }
 
 .elevate-careers .apply-actions .primary {
-  background: #3d74f5;
-  border: 0;
   color: #fff;
+  background-color: #296ff0;
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0) 46%);
+  border: 0;
+  border-radius: 999px;
+  box-shadow:
+    0 3px 6px rgba(0, 0, 0, 0.2),
+    0 0 0 1px #296ff0,
+    inset 0 0 0 1px rgba(255, 255, 255, 0.4),
+    inset 0 1px 6px 2px rgba(255, 255, 255, 0.24);
 }
 
 .elevate-careers .apply-actions .primary:disabled {

@@ -118,7 +118,7 @@ export default function ReportsPage() {
               <div className="text-right">
                 <p className="text-xs text-muted-foreground mb-3">Last generated</p>
                 <p className="text-sm font-medium mb-3">{report.lastGenerated}</p>
-                <Button size="sm" onClick={() => handleDownload(report.id)} className="bg-primary hover:bg-primary/90">
+                <Button size="sm" onClick={() => handleDownload(report.id)}>
                   <Download size={16} className="mr-1" />
                   Download
                 </Button>
@@ -134,7 +134,7 @@ export default function ReportsPage() {
         <p className="text-muted-foreground mb-6">
           Create a custom report tailored to your specific needs and metrics.
         </p>
-        <Button className="bg-primary hover:bg-primary/90">
+        <Button>
           <FileText size={18} className="mr-2" />
           Build Custom Report
         </Button>

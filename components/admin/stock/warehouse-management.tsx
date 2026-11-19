@@ -1813,7 +1813,7 @@ function WarehouseManagementWrapper({
           </select>
           <button
             onClick={() => setShowCreateForm(!showCreateForm)}
-            className="px-3 py-2 text-sm font-medium rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition-colors"
+            className="eh-btn-solid inline-flex items-center px-4 py-2 text-sm"
           >
             + New Warehouse
           </button>

@@ -124,7 +124,7 @@ export default function CompanySetup({ onNext }: CompanySetupProps) {
           </div>
         </div>
 
-        <Button type="submit" size="lg" className="w-full bg-primary hover:bg-primary/90">
+        <Button type="submit" size="lg" className="w-full">
           Continue to Invite Team
         </Button>
       </form>

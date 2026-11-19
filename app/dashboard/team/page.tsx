@@ -140,7 +140,7 @@ export default function TeamManagement() {
           <h1 className="text-3xl font-bold">Team Members</h1>
           <p className="text-muted-foreground">Manage your organization's users and roles</p>
         </div>
-        <Button onClick={() => setShowForm(!showForm)} className="bg-primary hover:bg-primary/90">
+        <Button onClick={() => setShowForm(!showForm)}>
           <Plus size={18} className="mr-2" />
           Invite Member
         </Button>

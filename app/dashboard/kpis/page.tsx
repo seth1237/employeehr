@@ -52,7 +52,7 @@ export default function KPIManagement() {
           <h1 className="text-3xl font-bold">Performance KPIs</h1>
           <p className="text-muted-foreground">Define key performance indicators for your organization</p>
         </div>
-        <Button onClick={() => setShowForm(!showForm)} className="bg-primary hover:bg-primary/90">
+        <Button onClick={() => setShowForm(!showForm)}>
           <Plus size={18} className="mr-2" />
           Add KPI
         </Button>

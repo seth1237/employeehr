@@ -125,7 +125,7 @@ export default function ReportsPage() {
             <p className="text-muted-foreground">Track and manage your reports</p>
           </div>
         </div>
-        <Button onClick={() => router.push("/employee/reports/write")} size="lg" className="bg-primary gap-2">
+        <Button onClick={() => router.push("/employee/reports/write")} size="lg" className="gap-2">
           <Plus className="w-4 h-4" />
           Write New Report
         </Button>

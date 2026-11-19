@@ -1,5 +1,5 @@
 import type { Response } from "express"
-import { randomUUID } from "crypto"
+import { randomInt, randomUUID } from "crypto"
 import type { AuthenticatedRequest } from "../middleware/auth"
 import { Company } from "../models/Company"
 import { User } from "../models/User"
@@ -799,7 +799,7 @@ export class OwnerController {
         { $set: { used: true } },
       )
 
-      const otp = String(Math.floor(100000 + Math.random() * 900000))
+      const otp = String(randomInt(100000, 1000000))
       const challengeId = randomUUID()
       const expiresAt = new Date(Date.now() + COMPANY_DELETE_OTP_MINUTES * 60 * 1000)
 

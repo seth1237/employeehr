@@ -44,7 +44,7 @@ export const authLimiter = rateLimit({
  */
 export const authOtpLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 40,
+  max: 12,
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: true,

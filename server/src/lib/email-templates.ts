@@ -4,29 +4,20 @@ export const ELEVATE_EMAIL = {
   brandName: "ElevateHub",
   tagline: "Digital Solutions & Strategy",
   footerImagePath: "/elevateemail.png",
+  brandLogoPath: "/elevate-logo.png",
   contactEmail: "info@elevatehub.co.ke",
   website: "https://elevatehub.co.ke",
   websiteLabel: "elevatehub.co.ke",
   primary: "#6c0cd9",
   primaryDark: "#1800ad",
   accent: "#0ea5e9",
-  bg: "#f3f4f8",
-  card: "#fefefe",
+  bg: "#eef0f5",
+  card: "#ffffff",
   text: "#0f172a",
   muted: "#64748b",
-  border: "#e2e8f0",
-  dark: {
-    bg: "#0f1117",
-    card: "#1a1d27",
-    text: "#f1f5f9",
-    muted: "#94a3b8",
-    border: "#2d3548",
-    panel: "#252a37",
-    otpBg: "#2a2540",
-    otpBorder: "#4c3d78",
-    otpCode: "#c4b5fd",
-    link: "#93c5fd",
-  },
+  border: "#e6e8ee",
+  otpBg: "#f4f0ff",
+  otpBorder: "#ddd2ff",
 } as const
 
 export type EmailLayoutOptions = {
@@ -34,6 +25,7 @@ export type EmailLayoutOptions = {
   preheader?: string
   headline?: string
   subtitle?: string
+  headerBadge?: string
   bodyHtml: string
   accentColor?: string
   headerHtml?: string
@@ -47,70 +39,86 @@ function escapeHtml(value: string) {
     .replace(/"/g, "&quot;")
 }
 
+function isPublicHttpsUrl(value: string) {
+  try {
+    const parsed = new URL(value)
+    const host = parsed.hostname.toLowerCase()
+    return parsed.protocol === "https:" && host !== "localhost" && host !== "127.0.0.1"
+  } catch {
+    return false
+  }
+}
+
+function publicAssetBase() {
+  const configured = String(process.env.EMAIL_PUBLIC_ASSET_BASE || process.env.PUBLIC_SITE_URL || "").trim()
+  if (isPublicHttpsUrl(configured)) return configured.replace(/\/$/, "")
+  return "https://www.elevatehub.co.ke"
+}
+
+function publicAssetUrl(path: string) {
+  const normalized = path.startsWith("/") ? path : `/${path}`
+  return `${publicAssetBase()}${normalized}`
+}
+
 export function resolveFooterImageUrl() {
   const configured = String(process.env.EMAIL_FOOTER_IMAGE_URL || "").trim()
-  if (configured) return configured
+  if (isPublicHttpsUrl(configured)) return configured
+  return publicAssetUrl(ELEVATE_EMAIL.footerImagePath)
+}
 
-  const base = String(process.env.FRONTEND_URL || "https://elevatehub.co.ke").replace(/\/$/, "")
-  return `${base}${ELEVATE_EMAIL.footerImagePath}`
+export function resolveBrandLogoUrl() {
+  const configured = String(process.env.EMAIL_BRAND_LOGO_URL || "").trim()
+  if (isPublicHttpsUrl(configured)) return configured
+  return publicAssetUrl(ELEVATE_EMAIL.brandLogoPath)
 }
 
 function renderEmailStyles() {
   const b = ELEVATE_EMAIL
-  const d = b.dark
 
-  const darkBlock = `
-    .eh-body,
-    .eh-body-table { background-color: ${d.bg} !important; }
-    .eh-card { background-color: ${d.card} !important; border-color: ${d.border} !important; }
-    .eh-content,
-    .eh-text,
-    .eh-text p,
-    .eh-text strong,
-    .eh-text li { color: ${d.text} !important; }
-    .eh-muted,
-    .eh-muted p { color: ${d.muted} !important; }
-    .eh-disclaimer { color: ${d.muted} !important; }
-    .eh-panel { background-color: ${d.panel} !important; border-color: ${d.border} !important; }
-    .eh-panel-label { color: ${d.muted} !important; border-color: ${d.border} !important; }
-    .eh-panel-value { color: ${d.text} !important; border-color: ${d.border} !important; }
-    .eh-otp { background-color: ${d.otpBg} !important; border-color: ${d.otpBorder} !important; }
-    .eh-otp-code { color: ${d.otpCode} !important; -webkit-text-fill-color: ${d.otpCode} !important; }
-    .eh-callout-warn { background-color: #3d2a1a !important; border-color: #9a5b20 !important; }
-    .eh-callout-warn,
-    .eh-callout-warn p,
-    .eh-callout-warn strong { color: #fcd9b6 !important; }
-    .eh-callout-info { background-color: #3d3518 !important; border-color: #a68b1a !important; }
-    .eh-callout-info,
-    .eh-callout-info p,
-    .eh-callout-info span { color: #fde68a !important; }
-    .eh-header-cell { background: linear-gradient(135deg, ${b.primaryDark} 0%, ${b.primary} 100%) !important; }
-    .eh-footer-bar { background-color: ${b.primaryDark} !important; }
-    .eh-footer-logo-wrap { background-color: #ffffff !important; }
-    .eh-link { color: ${d.link} !important; }`
-
+  // Keep the branded card light. Gmail/Outlook dark mode often inverts
+  // backgrounds and would hide the dark logo or wash out the OTP.
   return `<style type="text/css">
-    :root { color-scheme: light dark; supported-color-schemes: light dark; }
-    body { color-scheme: light dark; }
+    :root { color-scheme: light; supported-color-schemes: light; }
+    body, .eh-body { color-scheme: light; }
 
     @media (prefers-color-scheme: dark) {
-      ${darkBlock}
+      .eh-body,
+      .eh-body-table { background-color: ${b.bg} !important; }
+      .eh-card,
+      .eh-brand-row,
+      .eh-footer-wrap,
+      .eh-content { background-color: ${b.card} !important; }
+      .eh-heading,
+      .eh-wordmark,
+      .eh-text,
+      .eh-text p,
+      .eh-text strong,
+      .eh-text li { color: ${b.text} !important; }
+      .eh-muted,
+      .eh-muted p,
+      .eh-disclaimer { color: ${b.muted} !important; }
+      .eh-otp { background-color: ${b.otpBg} !important; border-color: ${b.otpBorder} !important; }
+      .eh-otp-code { color: ${b.primaryDark} !important; -webkit-text-fill-color: ${b.primaryDark} !important; }
+      .eh-security { background-color: #faf9ff !important; border-color: ${b.otpBorder} !important; color: #3f3a5c !important; }
+      .eh-accent-bar { background-color: ${b.primary} !important; }
     }
 
-    [data-ogsc] .eh-body,
-    [data-ogsc] .eh-body-table { background-color: ${d.bg} !important; }
-    [data-ogsc] .eh-card { background-color: ${d.card} !important; border-color: ${d.border} !important; }
+    [data-ogsc] .eh-card,
+    [data-ogsb] .eh-card,
+    [data-ogsc] .eh-brand-row,
+    [data-ogsb] .eh-brand-row,
+    [data-ogsc] .eh-footer-wrap,
+    [data-ogsb] .eh-footer-wrap,
     [data-ogsc] .eh-content,
-    [data-ogsc] .eh-text,
-    [data-ogsc] .eh-text p,
-    [data-ogsc] .eh-text strong { color: ${d.text} !important; }
-    [data-ogsc] .eh-muted { color: ${d.muted} !important; }
-    [data-ogsc] .eh-panel { background-color: ${d.panel} !important; border-color: ${d.border} !important; }
-    [data-ogsc] .eh-otp { background-color: ${d.otpBg} !important; border-color: ${d.otpBorder} !important; }
-    [data-ogsc] .eh-otp-code { color: ${d.otpCode} !important; }
-    [data-ogsb] .eh-body,
-    [data-ogsb] .eh-body-table { background-color: ${d.bg} !important; }
-    [data-ogsb] .eh-card { background-color: ${d.card} !important; }
+    [data-ogsb] .eh-content { background-color: ${b.card} !important; }
+    [data-ogsc] .eh-heading,
+    [data-ogsb] .eh-heading,
+    [data-ogsc] .eh-wordmark,
+    [data-ogsb] .eh-wordmark { color: ${b.text} !important; }
+    [data-ogsc] .eh-otp,
+    [data-ogsb] .eh-otp { background-color: ${b.otpBg} !important; border-color: ${b.otpBorder} !important; }
+    [data-ogsc] .eh-otp-code,
+    [data-ogsb] .eh-otp-code { color: ${b.primaryDark} !important; -webkit-text-fill-color: ${b.primaryDark} !important; }
   </style>`
 }
 
@@ -131,31 +139,21 @@ export function renderCalloutBox(
 
 export function renderEmailFooter() {
   const b = ELEVATE_EMAIL
-  const footerImage = resolveFooterImageUrl()
+  const year = new Date().getFullYear()
+  const font = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
   return `
     <tr>
-      <td class="eh-footer-logo-wrap" bgcolor="#ffffff" style="padding:28px 32px 20px;text-align:center;background:#ffffff;border-top:1px solid ${b.border};">
-        <img
-          class="eh-footer-img"
-          src="${footerImage}"
-          alt="${escapeHtml(b.brandName)}"
-          width="300"
-          height="100"
-          style="display:block;width:100%;max-width:300px;height:auto;margin:0 auto;border:0;outline:none;text-decoration:none;"
-        />
-      </td>
-    </tr>
-    <tr>
-      <td class="eh-footer-bar" bgcolor="${b.primaryDark}" style="background:${b.primaryDark};padding:20px 24px;text-align:center;">
-        <p style="margin:0 0 6px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;font-size:14px;font-weight:600;color:#ffffff;letter-spacing:0.2px;">
-          ${escapeHtml(b.brandName)} | ${escapeHtml(b.tagline)}
+      <td class="eh-footer-wrap" bgcolor="${b.card}" style="padding:22px 32px 28px;text-align:center;background:${b.card};border-top:1px solid ${b.border};">
+        <p class="eh-muted" style="margin:0 0 10px;font-family:${font};font-size:12px;line-height:1.5;color:${b.muted};">
+          ${escapeHtml(b.brandName)} · ${escapeHtml(b.tagline)}
         </p>
-        <p style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;font-size:13px;line-height:1.6;color:rgba(255,255,255,0.88);">
-          Email:
-          <a href="mailto:${b.contactEmail}" class="eh-link" style="color:#ffffff;text-decoration:underline;">${b.contactEmail}</a>
+        <p class="eh-muted" style="margin:0 0 12px;font-family:${font};font-size:12px;line-height:1.6;color:${b.muted};">
+          <a href="mailto:${b.contactEmail}" class="eh-link" style="color:${b.muted};text-decoration:none;">${b.contactEmail}</a>
           &nbsp;·&nbsp;
-          Website:
-          <a href="${b.website}" class="eh-link" style="color:#ffffff;text-decoration:underline;">${b.websiteLabel}</a>
+          <a href="${b.website}" class="eh-link" style="color:${b.muted};text-decoration:none;">${b.websiteLabel}</a>
+        </p>
+        <p class="eh-muted" style="margin:0;font-family:${font};font-size:11px;line-height:1.5;color:${b.muted};">
+          © ${year} ${escapeHtml(b.brandName)}. All rights reserved.
         </p>
       </td>
     </tr>`
@@ -163,21 +161,42 @@ export function renderEmailFooter() {
 
 export function renderEmailLayout(options: EmailLayoutOptions) {
   const b = ELEVATE_EMAIL
-  const accent = options.accentColor || b.primary
   const preheader = escapeHtml(options.preheader || options.title)
-  const headline = options.headline ? escapeHtml(options.headline) : escapeHtml(options.title)
-  const subtitle = options.subtitle ? `<p style="margin:8px 0 0;font-size:14px;color:rgba(255,255,255,0.92);">${escapeHtml(options.subtitle)}</p>` : ""
+  const headline = options.headline ? escapeHtml(options.headline) : ""
+  const badge = options.headerBadge ? escapeHtml(options.headerBadge) : ""
+  const logo = resolveBrandLogoUrl()
+  const font = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
+
+  const headingBlock =
+    !options.headerHtml && headline
+      ? `
+        <h1 class="eh-heading" style="margin:8px 0 8px;font-family:${font};font-size:26px;line-height:1.25;font-weight:700;letter-spacing:-0.03em;color:${b.text};">
+          ${headline}
+        </h1>
+        ${options.subtitle ? `<p class="eh-muted" style="margin:0 0 24px;font-family:${font};font-size:15px;line-height:1.6;color:${b.muted};">${escapeHtml(options.subtitle)}</p>` : `<div style="height:16px;line-height:16px;font-size:16px;">&nbsp;</div>`}`
+      : ""
 
   const header = options.headerHtml || `
     <tr>
-      <td class="eh-header-cell" bgcolor="${b.primaryDark}" style="background:linear-gradient(135deg, ${b.primaryDark} 0%, ${accent} 100%);padding:28px 32px;text-align:left;">
-        <p style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:rgba(255,255,255,0.78);">
-          ${escapeHtml(b.brandName)}
-        </p>
-        <h1 style="margin:6px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;font-size:24px;line-height:1.25;font-weight:700;color:#ffffff;">
-          ${headline}
-        </h1>
-        ${subtitle}
+      <td class="eh-accent-bar" bgcolor="${b.primary}" style="background:${b.primary};height:4px;line-height:4px;font-size:0;">&nbsp;</td>
+    </tr>
+    <tr>
+      <td class="eh-brand-row" bgcolor="${b.card}" style="padding:18px 32px 4px;background:${b.card};">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td valign="middle" style="vertical-align:middle;">
+              <img
+                src="${logo}"
+                alt="${escapeHtml(b.brandName)}"
+                width="108"
+                style="display:block;width:108px;max-width:108px;height:auto;border:0;outline:none;text-decoration:none;"
+              />
+            </td>
+            <td valign="middle" align="right" style="vertical-align:middle;text-align:right;">
+              ${badge ? `<p style="margin:0;font-family:${font};font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:${b.primary};">${badge}</p>` : `<p class="eh-wordmark" style="margin:0;font-family:${font};font-size:13px;font-weight:700;color:${b.text};letter-spacing:-0.02em;">${escapeHtml(b.brandName)}</p>`}
+            </td>
+          </tr>
+        </table>
       </td>
     </tr>`
 
@@ -186,26 +205,27 @@ export function renderEmailLayout(options: EmailLayoutOptions) {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <meta name="color-scheme" content="light dark" />
-  <meta name="supported-color-schemes" content="light dark" />
+  <meta name="color-scheme" content="light" />
+  <meta name="supported-color-schemes" content="light" />
   <title>${escapeHtml(options.title)}</title>
   ${renderEmailStyles()}
 </head>
-<body class="eh-body" style="margin:0;padding:0;background:${b.bg};color-scheme:light dark;">
+<body class="eh-body" style="margin:0;padding:0;background:${b.bg};color-scheme:light;">
   <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${preheader}</div>
-  <table role="presentation" class="eh-body-table" width="100%" cellpadding="0" cellspacing="0" bgcolor="${b.bg}" style="background:${b.bg};padding:24px 12px;">
+  <table role="presentation" class="eh-body-table" width="100%" cellpadding="0" cellspacing="0" bgcolor="${b.bg}" style="background:${b.bg};padding:28px 12px;">
     <tr>
       <td align="center">
-        <table role="presentation" class="eh-card" width="600" cellpadding="0" cellspacing="0" bgcolor="${b.card}" style="width:100%;max-width:600px;background:${b.card};border-radius:16px;overflow:hidden;border:1px solid ${b.border};box-shadow:0 8px 30px rgba(15,23,42,0.08);">
+        <table role="presentation" class="eh-card" width="560" cellpadding="0" cellspacing="0" bgcolor="${b.card}" style="width:100%;max-width:560px;background:${b.card};border-radius:18px;overflow:hidden;border:1px solid ${b.border};box-shadow:0 10px 32px rgba(15,23,42,0.07);">
           ${header}
           <tr>
-            <td class="eh-content eh-text" style="padding:32px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;color:${b.text};font-size:15px;line-height:1.65;">
+            <td class="eh-content eh-text" style="padding:28px 32px 8px;font-family:${font};color:${b.text};font-size:15px;line-height:1.65;">
+              ${headingBlock}
               ${options.bodyHtml}
             </td>
           </tr>
           ${renderEmailFooter()}
         </table>
-        <p class="eh-disclaimer" style="margin:16px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;font-size:11px;line-height:1.5;color:${b.muted};text-align:center;max-width:600px;">
+        <p class="eh-disclaimer" style="margin:16px 0 0;font-family:${font};font-size:11px;line-height:1.5;color:${b.muted};text-align:center;max-width:560px;">
           You received this message from ${escapeHtml(b.brandName)}. If you did not expect it, you can safely ignore this email.
         </p>
       </td>
@@ -215,13 +235,34 @@ export function renderEmailLayout(options: EmailLayoutOptions) {
 </html>`
 }
 
-export function renderOtpBlock(code: string, label = "Your verification code") {
-  const safe = escapeHtml(code)
+export function renderOtpBlock(code: string, label = "Verification code") {
+  const safe = escapeHtml(String(code || "").replace(/\s+/g, ""))
+  const b = ELEVATE_EMAIL
+  const font = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
   return `
-    <p class="eh-muted" style="margin:0 0 12px;color:${ELEVATE_EMAIL.muted};font-size:14px;">${escapeHtml(label)}</p>
-    <div class="eh-otp" style="margin:0 0 20px;padding:18px 20px;background:#f8f7ff;border:1px solid #e9e0ff;border-radius:12px;text-align:center;">
-      <span class="eh-otp-code" style="display:inline-block;font-family:'SF Mono',Menlo,Monaco,Consolas,monospace;font-size:32px;font-weight:700;letter-spacing:0.35em;color:${ELEVATE_EMAIL.primaryDark};">${safe}</span>
-    </div>`
+    <p class="eh-muted" style="margin:0 0 10px;font-family:${font};font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:${b.muted};text-align:center;">${escapeHtml(label)}</p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;">
+      <tr>
+        <td class="eh-otp" bgcolor="${b.otpBg}" align="center" style="background:${b.otpBg};border:1px solid ${b.otpBorder};border-radius:12px;padding:18px 16px;">
+          <span class="eh-otp-code" style="display:inline-block;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono','Courier New',monospace;font-size:34px;line-height:1.2;font-weight:700;letter-spacing:0.28em;padding-left:0.28em;color:${b.primaryDark};-webkit-text-fill-color:${b.primaryDark};-webkit-user-select:all;user-select:all;">${safe}</span>
+        </td>
+      </tr>
+    </table>`
+}
+
+export function renderSecurityNote(message?: string) {
+  const b = ELEVATE_EMAIL
+  const copy =
+    message ||
+    "<strong>Keep this code confidential.</strong> ElevateHub will never ask you to share it. If someone contacts you for this code, it is not us."
+  return `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;">
+      <tr>
+        <td class="eh-security eh-muted" style="padding:12px 14px;background:#faf9ff;border:1px solid ${b.otpBorder};border-radius:10px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:13px;line-height:1.55;color:#3f3a5c;">
+          ${copy}
+        </td>
+      </tr>
+    </table>`
 }
 
 export function renderPrimaryButton(label: string, href: string) {
@@ -260,28 +301,31 @@ export function renderInfoPanel(title: string, rows: Array<{ label: string; valu
 
 export function loginOtpEmail(otp: string) {
   return renderEmailLayout({
-    title: "Login verification code",
-    preheader: `Your ElevateHub login code is ${otp}`,
-    headline: "Verify your login",
-    subtitle: "Use this one-time code to finish signing in.",
+    title: "Verify your ElevateHub sign-in",
+    preheader: `Your ElevateHub login code is ${otp}. It expires in 10 minutes.`,
+    headline: "Verify your sign-in",
+    subtitle: "We received a sign-in attempt. Enter this code in the browser window where you started signing in.",
+    headerBadge: "Account security",
     bodyHtml: `
-      ${renderOtpBlock(otp, "Enter this code on the login screen")}
-      <p class="eh-muted" style="margin:0 0 8px;color:${ELEVATE_EMAIL.muted};font-size:14px;">This code expires in <strong class="eh-text" style="color:${ELEVATE_EMAIL.text};">10 minutes</strong>.</p>
-      <p class="eh-muted" style="margin:0;color:${ELEVATE_EMAIL.muted};font-size:14px;">If you did not attempt to sign in, ignore this email and secure your account.</p>`,
+      ${renderOtpBlock(otp, "Your verification code")}
+      <p class="eh-muted" style="margin:0 0 16px;color:${ELEVATE_EMAIL.muted};font-size:14px;text-align:center;">This code expires in <strong class="eh-text" style="color:${ELEVATE_EMAIL.text};">10 minutes</strong>.</p>
+      ${renderSecurityNote()}
+      <p class="eh-muted" style="margin:0 0 12px;color:${ELEVATE_EMAIL.muted};font-size:13px;line-height:1.6;">If you did not try to sign in, you can ignore this email. The code will expire on its own.</p>`,
   })
 }
 
 export function passwordResetOtpEmail(otp: string) {
   return renderEmailLayout({
-    title: "Password reset code",
-    preheader: `Your ElevateHub password reset code is ${otp}`,
+    title: "Reset your ElevateHub password",
+    preheader: `Your ElevateHub password reset code is ${otp}. It expires in 15 minutes.`,
     headline: "Reset your password",
-    subtitle: "Confirm it is you before choosing a new password.",
-    accentColor: "#dc2626",
+    subtitle: "Confirm it is you before choosing a new password. Enter this code on the reset screen.",
+    headerBadge: "Account security",
     bodyHtml: `
       ${renderOtpBlock(otp, "Password reset code")}
-      <p class="eh-muted" style="margin:0 0 8px;color:${ELEVATE_EMAIL.muted};font-size:14px;">This code expires in <strong class="eh-text" style="color:${ELEVATE_EMAIL.text};">15 minutes</strong>.</p>
-      <p class="eh-muted" style="margin:0;color:${ELEVATE_EMAIL.muted};font-size:14px;">If you did not request a reset, ignore this email. Your password will stay unchanged.</p>`,
+      <p class="eh-muted" style="margin:0 0 16px;color:${ELEVATE_EMAIL.muted};font-size:14px;text-align:center;">This code expires in <strong class="eh-text" style="color:${ELEVATE_EMAIL.text};">15 minutes</strong>.</p>
+      ${renderSecurityNote()}
+      <p class="eh-muted" style="margin:0 0 12px;color:${ELEVATE_EMAIL.muted};font-size:13px;line-height:1.6;">If you did not request a reset, ignore this email. Your password will stay unchanged.</p>`,
   })
 }
 
@@ -298,7 +342,7 @@ export function companyDeleteOtpEmail(params: {
     preheader: `Deletion OTP for ${params.companyName}`,
     headline: "Confirm company deletion",
     subtitle: "This action is permanent and cannot be undone.",
-    accentColor: "#dc2626",
+    headerBadge: "Account security",
     bodyHtml: `
       ${renderInfoPanel("Deletion request", [
         { label: "Company", value: params.companyName },
@@ -307,8 +351,9 @@ export function companyDeleteOtpEmail(params: {
         { label: "Requested by", value: params.requestedBy },
       ])}
       ${renderOtpBlock(params.otp, "Owner verification code")}
-      <p class="eh-muted" style="margin:0 0 8px;color:${ELEVATE_EMAIL.muted};font-size:14px;">Expires in <strong class="eh-text" style="color:${ELEVATE_EMAIL.text};">${params.expiresMinutes} minutes</strong>.</p>
-      <p class="eh-muted" style="margin:0;color:${ELEVATE_EMAIL.muted};font-size:14px;">If you did not expect this request, ignore the email and secure the owner account immediately.</p>`,
+      <p class="eh-muted" style="margin:0 0 16px;color:${ELEVATE_EMAIL.muted};font-size:14px;text-align:center;">Expires in <strong class="eh-text" style="color:${ELEVATE_EMAIL.text};">${params.expiresMinutes} minutes</strong>.</p>
+      ${renderSecurityNote()}
+      <p class="eh-muted" style="margin:0 0 12px;color:${ELEVATE_EMAIL.muted};font-size:13px;">If you did not expect this request, ignore the email and secure the owner account immediately.</p>`,
   })
 }
 

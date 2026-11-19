@@ -8,7 +8,22 @@ import { emailService } from "./emailService"
 import { loginOtpEmail, passwordResetOtpEmail } from "../lib/email-templates"
 import { PasswordReset } from "../models/PasswordReset"
 import { LoginOtp } from "../models/LoginOtp"
-import { randomUUID } from "crypto"
+import { randomInt, randomUUID } from "crypto"
+
+const LOGIN_OTP_WINDOW_MS = 15 * 60 * 1000
+const LOGIN_OTP_MAX_PER_WINDOW = 5
+const LOGIN_OTP_RESEND_COOLDOWN_MS = 45 * 1000
+
+class LoginOtpRateLimitError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = "LoginOtpRateLimitError"
+  }
+}
+
+function generateSixDigitOtp() {
+  return String(randomInt(100000, 1000000))
+}
 
 type LoginOtpType = "standard" | "company" | "employee"
 
@@ -31,13 +46,27 @@ export class AuthService {
     loginType: LoginOtpType
     companySlug?: string
   }): Promise<string> {
-    const otp = Math.floor(100000 + Math.random() * 900000).toString()
+    const email = params.user.email.toLowerCase()
+    const recentCount = await LoginOtp.countDocuments({
+      email,
+      createdAt: { $gte: new Date(Date.now() - LOGIN_OTP_WINDOW_MS) },
+    })
+    if (recentCount >= LOGIN_OTP_MAX_PER_WINDOW) {
+      throw new LoginOtpRateLimitError("Too many verification codes requested. Wait a few minutes and try again.")
+    }
+
+    const latest = await LoginOtp.findOne({ email }).sort({ createdAt: -1 })
+    if (latest?.createdAt && Date.now() - new Date(latest.createdAt).getTime() < LOGIN_OTP_RESEND_COOLDOWN_MS) {
+      throw new LoginOtpRateLimitError("A code was just sent. Check your inbox or wait a minute before requesting another.")
+    }
+
+    const otp = generateSixDigitOtp()
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000)
     const challengeId = randomUUID()
 
     await LoginOtp.updateMany(
       {
-        email: params.user.email.toLowerCase(),
+        email,
         loginType: params.loginType,
         used: false,
       },
@@ -46,7 +75,7 @@ export class AuthService {
 
     await LoginOtp.create({
       challengeId,
-      email: params.user.email.toLowerCase(),
+      email,
       userId: params.user._id?.toString(),
       org_id: params.user.org_id,
       loginType: params.loginType,
@@ -137,6 +166,13 @@ export class AuthService {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to send login OTP"
+
+      if (error instanceof LoginOtpRateLimitError) {
+        return {
+          success: false,
+          message,
+        }
+      }
 
       // In production, OTP email failure blocks login. Local/dev may fall through.
       const strictOtp =
@@ -640,7 +676,7 @@ export class AuthService {
         }
       }
 
-      const otp = Math.floor(100000 + Math.random() * 900000).toString()
+      const otp = generateSixDigitOtp()
       const expiresAt = new Date(Date.now() + 15 * 60 * 1000) // 15 minutes
 
       await PasswordReset.create({ email: user.email.toLowerCase(), otp, expiresAt, used: false })

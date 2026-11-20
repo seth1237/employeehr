@@ -11,24 +11,11 @@ import {
   type ReactNode,
 } from "react"
 import { getUser } from "@/lib/auth"
-import { cn } from "@/lib/utils"
 
-const SPLASH_KEY = "elevate_field_login_splash"
+const LAST_SHOWN_KEY = "elevate_field_splash_at"
+const LONG_AWAY_MS = 8 * 60 * 60 * 1000
 const LINE_ONE = "Manage Everything"
 const LINE_TWO = "Grow Anything"
-
-export function markFieldLoginSplash(role?: string | null) {
-  if (typeof window === "undefined") return
-  if (role !== "sales_rep" && role !== "technical_service_engineer") return
-  sessionStorage.setItem(SPLASH_KEY, "1")
-}
-
-function consumeFieldLoginSplash() {
-  if (typeof window === "undefined") return false
-  const value = sessionStorage.getItem(SPLASH_KEY)
-  if (value) sessionStorage.removeItem(SPLASH_KEY)
-  return value === "1"
-}
 
 function prefersReducedMotion() {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -36,6 +23,23 @@ function prefersReducedMotion() {
 
 function isPhoneViewport() {
   return window.matchMedia("(max-width: 1023px)").matches
+}
+
+function wasReloaded() {
+  const nav = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined
+  if (nav?.type === "reload") return true
+  return (performance as Performance & { navigation?: { type?: number } }).navigation?.type === 1
+}
+
+function shouldPlaySplash() {
+  if (!isPhoneViewport()) return false
+  if (wasReloaded()) return true
+  const last = Number(window.localStorage.getItem(LAST_SHOWN_KEY) || 0)
+  return !last || Date.now() - last > LONG_AWAY_MS
+}
+
+function rememberSplashShown() {
+  window.localStorage.setItem(LAST_SHOWN_KEY, String(Date.now()))
 }
 
 function iosHapticPulse() {
@@ -67,11 +71,10 @@ function TypedBlurLine({
 }) {
   const [count, setCount] = useState(0)
   const finished = useRef(false)
-  const reduced = typeof window !== "undefined" && prefersReducedMotion()
 
   useEffect(() => {
     if (!active || finished.current) return
-    if (reduced) {
+    if (prefersReducedMotion()) {
       finished.current = true
       setCount(text.length)
       onDone?.()
@@ -82,26 +85,20 @@ function TypedBlurLine({
       onDone?.()
       return
     }
-    const wait = text[count] === " " ? 28 : 46
+    const wait = text[count] === " " ? 36 : 58
     const timer = window.setTimeout(() => setCount((value) => value + 1), wait)
     return () => window.clearTimeout(timer)
-  }, [active, count, onDone, reduced, text])
+  }, [active, count, onDone, text])
 
   return (
-    <p className="text-[1.7rem] font-semibold leading-tight tracking-tight text-slate-900 sm:text-3xl">
-      {text.split("").map((char, index) => (
-        <span
-          key={`${char}-${index}`}
-          className={cn("inline-block", index >= count && "opacity-0")}
-          style={
-            index < count && !reduced
-              ? { animation: "field-char-in 320ms ease forwards" }
-              : undefined
-          }
-        >
-          {char === " " ? "\u00A0" : char}
-        </span>
-      ))}
+    <p className="text-[1.7rem] font-semibold leading-tight tracking-tight text-slate-900">
+      {text.split("").map((char, index) =>
+        index >= count ? null : (
+          <span key={index} className={index === count - 1 ? "field-char-in" : undefined}>
+            {char === " " ? "\u00A0" : char}
+          </span>
+        ),
+      )}
     </p>
   )
 }
@@ -117,10 +114,10 @@ function FieldLoginSplash({
   const firstName = String(user?.first_name || "").trim()
   const [lineTwo, setLineTwo] = useState(false)
   const [haptic, setHaptic] = useState(false)
-  const [logo, setLogo] = useState(false)
   const [welcome, setWelcome] = useState(false)
   const [sequenceDone, setSequenceDone] = useState(false)
   const [leaving, setLeaving] = useState(false)
+  const startedRest = useRef(false)
 
   useEffect(() => {
     document.body.style.overflow = "hidden"
@@ -129,20 +126,17 @@ function FieldLoginSplash({
     }
   }, [])
 
-  const startedRest = useRef(false)
   const finishTyping = useCallback(() => {
     if (startedRest.current) return
     startedRest.current = true
     const reduced = prefersReducedMotion()
-    const hapticAt = reduced ? 120 : 280
-    const logoAt = reduced ? 280 : 720
-    const welcomeAt = reduced ? 480 : 1280
-    const readyAt = reduced ? 700 : 1880
+    const hapticAt = reduced ? 80 : 260
+    const welcomeAt = reduced ? 220 : 780
+    const readyAt = reduced ? 420 : 1500
     window.setTimeout(() => {
       setHaptic(true)
       iosHapticPulse()
     }, hapticAt)
-    window.setTimeout(() => setLogo(true), logoAt)
     window.setTimeout(() => setWelcome(true), welcomeAt)
     window.setTimeout(() => setSequenceDone(true), readyAt)
   }, [])
@@ -153,12 +147,13 @@ function FieldLoginSplash({
       const failsafe = window.setTimeout(() => setLeaving(true), 4500)
       return () => window.clearTimeout(failsafe)
     }
-    const leave = window.setTimeout(() => setLeaving(true), 280)
+    const leave = window.setTimeout(() => setLeaving(true), 320)
     return () => window.clearTimeout(leave)
   }, [homeReady, sequenceDone])
 
   useEffect(() => {
     if (!leaving) return
+    rememberSplashShown()
     const done = window.setTimeout(onDone, 420)
     return () => window.clearTimeout(done)
   }, [leaving, onDone])
@@ -167,35 +162,19 @@ function FieldLoginSplash({
 
   return (
     <div
-      className="fixed inset-0 z-[90] flex flex-col items-center justify-center bg-white px-8 text-center lg:hidden"
-      style={leaving ? { animation: "field-splash-out 420ms ease forwards" } : undefined}
+      className={leaving ? "field-splash-out fixed inset-0 z-[90] flex flex-col items-center justify-center bg-white px-8 text-center" : "fixed inset-0 z-[90] flex flex-col items-center justify-center bg-white px-8 text-center"}
       role="status"
       aria-live="polite"
       aria-label="Loading your workspace"
     >
-      <div
-        className="flex max-w-sm flex-col items-center"
-        style={haptic ? { animation: "field-ios-haptic 520ms cubic-bezier(0.22, 1, 0.36, 1)" } : undefined}
-      >
+      <div className={haptic ? "field-haptic flex max-w-sm flex-col items-center" : "flex max-w-sm flex-col items-center"}>
         <div className="min-h-[5.6rem] space-y-1">
           <TypedBlurLine text={LINE_ONE} active onDone={() => setLineTwo(true)} />
           <TypedBlurLine text={LINE_TWO} active={lineTwo} onDone={finishTyping} />
         </div>
-
-        <div className="mt-10 flex min-h-[5.5rem] flex-col items-center justify-start">
-          {logo ? (
-            <img
-              src="/elevate-logo.png"
-              alt="Elevate"
-              className="h-14 w-auto"
-              style={{ animation: "field-logo-in 700ms ease forwards" }}
-            />
-          ) : null}
+        <div className="mt-8 min-h-[2rem]">
           {welcome ? (
-            <p
-              className="mt-4 text-base font-medium text-slate-600"
-              style={{ animation: "field-welcome-in 640ms ease forwards" }}
-            >
+            <p className="field-welcome-in text-base font-medium text-slate-600">
               {welcomeText}
             </p>
           ) : null}
@@ -210,11 +189,7 @@ export function FieldSplashProvider({ children }: { children: ReactNode }) {
   const [homeReady, setHomeReady] = useState(false)
 
   useEffect(() => {
-    if (!isPhoneViewport()) {
-      setShow(false)
-      return
-    }
-    setShow(consumeFieldLoginSplash())
+    setShow(shouldPlaySplash())
   }, [])
 
   const markHomeReady = useCallback(() => {

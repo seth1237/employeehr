@@ -315,6 +315,23 @@
   }
 }
 
+.field-char-in {
+  display: inline-block;
+  animation: field-char-in 0.34s ease both;
+}
+
+.field-haptic {
+  animation: field-ios-haptic 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.field-welcome-in {
+  animation: field-welcome-in 0.7s ease both;
+}
+
+.field-splash-out {
+  animation: field-splash-out 0.42s ease forwards;
+}
+
 @media (prefers-reduced-motion: reduce) {
   @keyframes field-char-in {
     from,

@@ -9,6 +9,7 @@ import { AlertTriangle, ChevronRight, ClipboardList, Inbox, Palmtree, CircleDoll
 import { EngineerHeader, EngineerKpi, EngineerPage } from "@/components/engineer/engineer-ui"
 import { useEngineerBranding } from "@/components/engineer/branding"
 import { ShimmerButton } from "@/components/ui/shimmer-button"
+import { useMarkFieldHomeReady } from "@/components/field/login-splash"
 
 function dueLabel(value?: string) {
   if (!value) return "Unscheduled"
@@ -18,6 +19,7 @@ function dueLabel(value?: string) {
 export default function EngineerDashboard() {
   const branding = useEngineerBranding()
   const router = useRouter()
+  const markHomeReady = useMarkFieldHomeReady()
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState<any>(null)
 
@@ -28,6 +30,10 @@ export default function EngineerDashboard() {
       .catch((error) => console.error(error))
       .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    if (!loading) markHomeReady()
+  }, [loading, markHomeReady])
 
   if (loading) return <PageLoadingSkeleton title="Today" />
 

@@ -10,6 +10,7 @@ import { EngineerMobileNav } from "@/components/engineer/mobile-nav"
 import { AiAssistantChat } from "@/components/ai/ai-assistant-chat"
 import { WalkthroughProvider } from "@/components/walkthrough"
 import { FieldPwa } from "@/components/pwa/field-pwa"
+import { FieldSplashProvider } from "@/components/field/login-splash"
 
 function EngineerShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -49,8 +50,8 @@ export default function EngineerLayoutClient({ children }: { children: React.Rea
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-50">
-        <div className="h-10 w-10 animate-spin rounded-full border-2 border-slate-200 border-t-teal-700" />
+      <div className="flex h-screen items-center justify-center bg-white lg:bg-slate-50">
+        <div className="hidden h-10 w-10 animate-spin rounded-full border-2 border-slate-200 border-t-teal-700 lg:block" />
         <span className="sr-only">Loading engineer portal</span>
       </div>
     )
@@ -58,7 +59,9 @@ export default function EngineerLayoutClient({ children }: { children: React.Rea
 
   return (
     <EngineerBrandProvider>
-      <EngineerShell>{children}</EngineerShell>
+      <FieldSplashProvider>
+        <EngineerShell>{children}</EngineerShell>
+      </FieldSplashProvider>
     </EngineerBrandProvider>
   )
 }

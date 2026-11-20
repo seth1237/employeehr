@@ -9,6 +9,7 @@ import { SalesMobileNav } from "@/components/sales/mobile-nav"
 import { AiAssistantChat } from "@/components/ai/ai-assistant-chat"
 import { WalkthroughProvider } from "@/components/walkthrough"
 import { FieldPwa } from "@/components/pwa/field-pwa"
+import { FieldSplashProvider } from "@/components/field/login-splash"
 
 export default function SalesLayoutClient({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -30,25 +31,27 @@ export default function SalesLayoutClient({ children }: { children: React.ReactN
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-50">
-        <div className="h-10 w-10 animate-spin rounded-full border-2 border-slate-200 border-t-teal-700" />
+      <div className="flex h-screen items-center justify-center bg-white lg:bg-slate-50">
+        <div className="hidden h-10 w-10 animate-spin rounded-full border-2 border-slate-200 border-t-teal-700 lg:block" />
         <span className="sr-only">Loading sales</span>
       </div>
     )
   }
 
   return (
-    <WalkthroughProvider portal="sales">
-      <div className="flex h-screen overflow-hidden bg-slate-50">
-        <SalesSidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(false)} />
-        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-          <SalesTopNav onMenuClick={() => setSidebarOpen(true)} />
-          <FieldPwa manifest="/manifest-sales.webmanifest" appName="Field Sales" />
-          <main className="flex-1 overflow-y-auto">{children}</main>
-          <SalesMobileNav />
+    <FieldSplashProvider>
+      <WalkthroughProvider portal="sales">
+        <div className="flex h-screen overflow-hidden bg-slate-50">
+          <SalesSidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(false)} />
+          <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+            <SalesTopNav onMenuClick={() => setSidebarOpen(true)} />
+            <FieldPwa manifest="/manifest-sales.webmanifest" appName="Field Sales" />
+            <main className="flex-1 overflow-y-auto">{children}</main>
+            <SalesMobileNav />
+          </div>
+          <AiAssistantChat variant="sales" />
         </div>
-        <AiAssistantChat variant="sales" />
-      </div>
-    </WalkthroughProvider>
+      </WalkthroughProvider>
+    </FieldSplashProvider>
   )
 }

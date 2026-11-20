@@ -170,6 +170,189 @@
   }
 }
 
+@keyframes job-star-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.2) rotate(-18deg);
+  }
+  58% {
+    opacity: 1;
+    transform: scale(1.16) rotate(8deg);
+  }
+  78% {
+    transform: scale(0.94) rotate(-4deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+@keyframes job-star-glow {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 8px rgba(250, 204, 21, 0.35));
+  }
+  50% {
+    filter: drop-shadow(0 0 22px rgba(250, 204, 21, 0.9));
+  }
+}
+
+@keyframes job-star-spark {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.4);
+  }
+  35% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-28px) scale(0.5);
+  }
+}
+
+@keyframes job-reward-out {
+  to {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  @keyframes job-star-pop {
+    from,
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes job-star-glow {
+    from,
+    to {
+      filter: none;
+    }
+  }
+  @keyframes job-star-spark {
+    from,
+    to {
+      opacity: 0;
+    }
+  }
+  @keyframes job-reward-out {
+    to {
+      opacity: 0;
+    }
+  }
+}
+
+@keyframes field-char-in {
+  from {
+    opacity: 0;
+    filter: blur(12px);
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: none;
+  }
+}
+
+@keyframes field-ios-haptic {
+  0% {
+    transform: scale(1) translate3d(0, 0, 0);
+  }
+  16% {
+    transform: scale(0.982) translate3d(-3px, 1px, 0);
+  }
+  32% {
+    transform: scale(1.018) translate3d(3px, -1px, 0);
+  }
+  48% {
+    transform: scale(0.994) translate3d(-1.5px, 0, 0);
+  }
+  64% {
+    transform: scale(1.008) translate3d(1px, 0, 0);
+  }
+  100% {
+    transform: scale(1) translate3d(0, 0, 0);
+  }
+}
+
+@keyframes field-logo-in {
+  from {
+    opacity: 0;
+    filter: blur(16px);
+    transform: scale(0.86) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes field-welcome-in {
+  from {
+    opacity: 0;
+    filter: blur(10px);
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: none;
+  }
+}
+
+@keyframes field-splash-out {
+  to {
+    opacity: 0;
+    filter: blur(8px);
+    transform: scale(1.03);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  @keyframes field-char-in {
+    from,
+    to {
+      opacity: 1;
+      filter: none;
+      transform: none;
+    }
+  }
+  @keyframes field-ios-haptic {
+    from,
+    to {
+      transform: none;
+    }
+  }
+  @keyframes field-logo-in {
+    from,
+    to {
+      opacity: 1;
+      filter: none;
+      transform: none;
+    }
+  }
+  @keyframes field-welcome-in {
+    from,
+    to {
+      opacity: 1;
+      filter: none;
+      transform: none;
+    }
+  }
+  @keyframes field-splash-out {
+    to {
+      opacity: 0;
+    }
+  }
+}
+
 @keyframes shimmer-slide {
   to {
     transform: translate(calc(100cqw - 100%), 0);

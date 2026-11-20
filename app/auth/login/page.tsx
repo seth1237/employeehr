@@ -12,6 +12,7 @@ import { useState } from "react"
 import { ArrowLeft, Mail, Lock, ShieldCheck } from "lucide-react"
 import { api } from "@/lib/api"
 import { removeToken, removeUser, setToken, setUser, getToken, postLoginPath } from "@/lib/auth"
+import { markFieldLoginSplash } from "@/components/field/login-splash"
 import InvitationForm from "@/components/auth/invitation-form"
 
 function LoginContent() {
@@ -68,6 +69,7 @@ function LoginContent() {
     })
 
     const role = authData.user.role
+    markFieldLoginSplash(role)
     router.push(postLoginPath(role))
   }
 

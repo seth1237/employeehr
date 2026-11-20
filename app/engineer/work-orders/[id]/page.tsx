@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { useToast } from "@/hooks/use-toast"
-import { Download, Trash2 } from "lucide-react"
+import { Download, Star, Trash2 } from "lucide-react"
 import { jsPDF } from "jspdf"
 import { useEngineerBranding } from "@/components/engineer/branding"
 import {
@@ -37,6 +37,108 @@ const ATTENDANT_ROLES = [
 function photoSrc(url?: string) {
   if (!url) return ""
   return url.startsWith("http") ? url : `${API_URL}${url}`
+}
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number) {
+  return new Promise<Blob | null>((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), type, quality)
+  })
+}
+
+async function loadImageBitmap(file: File) {
+  try {
+    return await createImageBitmap(file, { imageOrientation: "from-image" } as ImageBitmapOptions)
+  } catch {
+    try {
+      return await createImageBitmap(file)
+    } catch {
+      const url = URL.createObjectURL(file)
+      try {
+        const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+          const img = new Image()
+          img.onload = () => resolve(img)
+          img.onerror = () => reject(new Error("Could not read photo"))
+          img.src = url
+        })
+        const canvas = document.createElement("canvas")
+        canvas.width = image.naturalWidth || image.width
+        canvas.height = image.naturalHeight || image.height
+        const ctx = canvas.getContext("2d")
+        if (!ctx) throw new Error("Could not read photo")
+        ctx.drawImage(image, 0, 0)
+        return createImageBitmap(canvas)
+      } finally {
+        URL.revokeObjectURL(url)
+      }
+    }
+  }
+}
+
+async function fileToLightWebp(file: File) {
+  if (file.type === "image/webp" && file.size <= 350 * 1024) return file
+  const bitmap = await loadImageBitmap(file)
+  const maxEdge = 1280
+  const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height))
+  const width = Math.max(1, Math.round(bitmap.width * scale))
+  const height = Math.max(1, Math.round(bitmap.height * scale))
+  const canvas = document.createElement("canvas")
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext("2d")
+  if (!ctx) throw new Error("Could not compress image")
+  ctx.fillStyle = "#ffffff"
+  ctx.fillRect(0, 0, width, height)
+  ctx.drawImage(bitmap, 0, 0, width, height)
+  bitmap.close?.()
+  const webp = await canvasToBlob(canvas, "image/webp", 0.62)
+  const jpeg = (!webp || webp.size === 0) ? await canvasToBlob(canvas, "image/jpeg", 0.7) : null
+  const blob = webp && webp.size > 0 ? webp : jpeg
+  if (!blob) throw new Error("Could not convert photo")
+  if (blob.size >= file.size && file.size <= 4.5 * 1024 * 1024) return file
+  const extension = blob.type === "image/webp" ? "webp" : "jpg"
+  const base = file.name.replace(/\.[^.]+$/, "") || "job-card"
+  return new File([blob], `${base}.${extension}`, { type: blob.type || `image/${extension}` })
+}
+
+function JobCompleteReward({ collapsing }: { collapsing: boolean }) {
+  return (
+    <div
+      className={cn(
+        "fixed inset-0 z-[80] flex flex-col items-center justify-center bg-white/92 px-6 text-center backdrop-blur-sm",
+        collapsing && "pointer-events-none",
+      )}
+      style={collapsing ? { animation: "job-reward-out 420ms ease-in forwards" } : undefined}
+      role="status"
+      aria-live="polite"
+    >
+      <div className="relative h-28 w-28">
+        <span
+          className="absolute left-2 top-3 h-2 w-2 rounded-full bg-amber-300"
+          style={{ animation: "job-star-spark 1.1s ease-out 0.15s both" }}
+        />
+        <span
+          className="absolute right-1 top-6 h-1.5 w-1.5 rounded-full bg-yellow-400"
+          style={{ animation: "job-star-spark 1.15s ease-out 0.28s both" }}
+        />
+        <span
+          className="absolute bottom-4 left-4 h-1.5 w-1.5 rounded-full bg-amber-400"
+          style={{ animation: "job-star-spark 1.2s ease-out 0.4s both" }}
+        />
+        <Star
+          className="absolute inset-0 m-auto h-20 w-20 fill-amber-400 text-amber-400"
+          style={{ animation: "job-star-pop 700ms ease-out both, job-star-glow 1.35s ease-in-out 0.45s infinite" }}
+        />
+      </div>
+      <p className="mt-3 text-xl font-semibold tracking-tight text-slate-900">Nice work</p>
+      <p className="mt-1 text-sm text-slate-600">Job complete. Heading home…</p>
+    </div>
+  )
 }
 
 async function imageToJpegDataUrl(url: string) {
@@ -224,6 +326,9 @@ export default function WorkOrderDetailPage() {
   const [attendantNumber, setAttendantNumber] = useState("")
   const [jobCardFile, setJobCardFile] = useState<File | null>(null)
   const [jobCardPreview, setJobCardPreview] = useState("")
+  const [jobCardBytes, setJobCardBytes] = useState<number | null>(null)
+  const [compressing, setCompressing] = useState(false)
+  const [celebrate, setCelebrate] = useState<"in" | "out" | null>(null)
   const [machineOkay, setMachineOkay] = useState<"" | "yes" | "no">("")
 
   const load = () => {
@@ -256,6 +361,16 @@ export default function WorkOrderDetailPage() {
   }, [id])
 
   useEffect(() => {
+    if (celebrate !== "in") return
+    const collapse = window.setTimeout(() => setCelebrate("out"), 1600)
+    const goHome = window.setTimeout(() => router.push("/engineer"), 2050)
+    return () => {
+      window.clearTimeout(collapse)
+      window.clearTimeout(goHome)
+    }
+  }, [celebrate, router])
+
+  useEffect(() => {
     if (!jobCardFile) {
       setJobCardPreview("")
       return
@@ -264,6 +379,30 @@ export default function WorkOrderDetailPage() {
     setJobCardPreview(url)
     return () => URL.revokeObjectURL(url)
   }, [jobCardFile])
+
+  const pickJobCard = async (file?: File | null) => {
+    if (!file) {
+      setJobCardFile(null)
+      setJobCardBytes(null)
+      return
+    }
+    setCompressing(true)
+    try {
+      const light = await fileToLightWebp(file)
+      setJobCardFile(light)
+      setJobCardBytes(light.size)
+    } catch (error: any) {
+      setJobCardFile(null)
+      setJobCardBytes(null)
+      toast({
+        title: "Could not compress photo",
+        description: error?.message || "Try another photo of the job card.",
+        variant: "destructive",
+      })
+    } finally {
+      setCompressing(false)
+    }
+  }
 
   const isInstallation =
     row?.type === "installation" || /install/i.test(String(row?.serviceType || ""))
@@ -325,6 +464,10 @@ export default function WorkOrderDetailPage() {
       })
       return
     }
+    if (compressing) {
+      toast({ title: "Still compressing the job card" })
+      return
+    }
     if (!jobCardFile && !existingPhoto) {
       toast({
         title: "Job card required",
@@ -365,10 +508,14 @@ export default function WorkOrderDetailPage() {
             checklist,
             ...costPayload(),
           }
-      const res = await engineeringApi.completeWorkOrder(id, payload, jobCardFile)
+      let photo = jobCardFile
+      if (photo && photo.type !== "image/webp") {
+        photo = await fileToLightWebp(photo)
+      }
+      const res = await engineeringApi.completeWorkOrder(id, payload, photo)
       setRow(res.data)
       setJobCardFile(null)
-      toast({ title: isInstallation ? "Installation completed" : "Work complete" })
+      setCelebrate("in")
     } catch (error: any) {
       toast({ title: "Could not complete", description: error?.message, variant: "destructive" })
     } finally {
@@ -398,7 +545,11 @@ export default function WorkOrderDetailPage() {
         : "Complete"
   const onPrimary = !isStarted ? start : complete
 
+  const busy = saving || compressing || Boolean(celebrate)
+
   return (
+    <>
+      {celebrate ? <JobCompleteReward collapsing={celebrate === "out"} /> : null}
     <EngineerPage className="space-y-3 pb-28 sm:pb-8">
       <EngineerHeader
         eyebrow={row.woNumber || "Work order"}
@@ -409,12 +560,12 @@ export default function WorkOrderDetailPage() {
             <EngineerStatusBadge status={row.status} />
             {primaryLabel ? (
               <Button
-                disabled={saving}
+                disabled={busy}
                 className="h-9 text-white"
                 style={{ backgroundColor: branding.primaryColor }}
                 onClick={() => void onPrimary()}
               >
-                {primaryLabel}
+                {compressing ? "Compressing…" : primaryLabel}
               </Button>
             ) : null}
           </div>
@@ -460,7 +611,7 @@ export default function WorkOrderDetailPage() {
               type="button"
               className="text-xs font-medium"
               style={{ color: branding.primaryColor }}
-              disabled={saving}
+              disabled={busy}
               onClick={() => void save()}
             >
               Save
@@ -624,7 +775,7 @@ export default function WorkOrderDetailPage() {
             <div>
               <Label>Job card</Label>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                Upload after the machine work is done. Starting a job does not need a job card.
+                Photo is converted to a light WebP as you upload. Starting a job does not need a job card.
               </p>
               {!isComplete ? (
                 <Input
@@ -632,8 +783,14 @@ export default function WorkOrderDetailPage() {
                   type="file"
                   accept="image/*"
                   capture="environment"
-                  onChange={(e) => setJobCardFile(e.target.files?.[0] || null)}
+                  disabled={busy}
+                  onChange={(e) => void pickJobCard(e.target.files?.[0] || null)}
                 />
+              ) : null}
+              {compressing ? (
+                <p className="mt-2 text-xs text-slate-600">Compressing job card…</p>
+              ) : jobCardBytes != null ? (
+                <p className="mt-2 text-xs text-slate-600">Ready to upload · {formatBytes(jobCardBytes)}</p>
               ) : null}
               {previewSrc ? (
                 <img
@@ -727,15 +884,16 @@ export default function WorkOrderDetailPage() {
           style={{ bottom: "calc(3.5rem + env(safe-area-inset-bottom))" }}
         >
           <Button
-            disabled={saving}
+            disabled={busy}
             className="h-10 w-full text-white"
             style={{ backgroundColor: branding.primaryColor }}
             onClick={() => void onPrimary()}
           >
-            {primaryLabel}
+            {compressing ? "Compressing…" : primaryLabel}
           </Button>
         </div>
       ) : null}
     </EngineerPage>
+    </>
   )
 }

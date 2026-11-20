@@ -157,7 +157,11 @@ export const uploadProductImage = multer({
   limits: { fileSize: 5 * 1024 * 1024 },
 })
 
-export const uploadVisitPhoto = uploadProductImage
+export const uploadVisitPhoto = multer({
+  storage: multer.memoryStorage(),
+  fileFilter,
+  limits: { fileSize: 12 * 1024 * 1024 },
+})
 
 // Expense proofs — memory so images can be compressed to WebP before save
 export const uploadExpenseProof = multer({

@@ -37,6 +37,7 @@ import {
 } from "@/components/sales/sales-ui"
 import { SalesCompanion } from "@/components/sales/companion"
 import { dateLabel } from "@/lib/sales-calendar"
+import { useMarkFieldHomeReady } from "@/components/field/login-splash"
 
 function todayKey() {
   const d = new Date()
@@ -71,6 +72,7 @@ async function readGps(timeoutMs = 2500) {
 export default function SalesDashboardPage() {
   const { toast } = useToast()
   const branding = useSalesBranding()
+  const markHomeReady = useMarkFieldHomeReady()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [data, setData] = useState<any>(null)
@@ -93,6 +95,10 @@ export default function SalesDashboardPage() {
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    if (!loading) markHomeReady()
+  }, [loading, markHomeReady])
 
   const report = data?.report
   const kpis = data?.kpis

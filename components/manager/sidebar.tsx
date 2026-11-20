@@ -1,13 +1,19 @@
 "use client"
 
-import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
-import { ChevronLeft, LogOut } from "lucide-react"
-import { logout } from "@/lib/auth"
-import { cn } from "@/lib/utils"
+import { getUser, logout } from "@/lib/auth"
 import { getManagerAllowedSections, MANAGER_MENU_ITEMS } from "@/lib/manager-access"
 import { isInterBranchNavHref, useCompanyBranches } from "@/lib/company-branches"
+import { ADMIN_SECTION_LABELS, navIcon } from "@/lib/nav-icons"
+import {
+  SidebarBrand,
+  SidebarFooter,
+  SidebarFrame,
+  SidebarNavLink,
+  SidebarSectionLabel,
+  isExactOrNestedPath,
+} from "@/components/nav/sidebar-chrome"
 
 interface SidebarProps {
   isOpen: boolean
@@ -16,11 +22,18 @@ interface SidebarProps {
   onCollapseToggle: () => void
 }
 
+const MANAGER_SECTION_LABELS: Record<string, string> = {
+  ...ADMIN_SECTION_LABELS,
+  FINANCE: "Finance",
+  COMMUNICATIONS: "Communications",
+}
+
 export default function ManagerSidebar({ isOpen, isCollapsed, onToggle, onCollapseToggle }: SidebarProps) {
   const pathname = usePathname()
   const { hasBranches } = useCompanyBranches()
   const [allowedSections, setAllowedSections] = useState<Set<string> | null>(null)
   const [loadingAccess, setLoadingAccess] = useState(true)
+  const user = getUser()
 
   useEffect(() => {
     let mounted = true
@@ -31,7 +44,6 @@ export default function ManagerSidebar({ isOpen, isCollapsed, onToggle, onCollap
         setLoadingAccess(false)
       }
     })()
-
     return () => {
       mounted = false
     }
@@ -39,10 +51,7 @@ export default function ManagerSidebar({ isOpen, isCollapsed, onToggle, onCollap
 
   const sectionEntries = useMemo(() => {
     const grouped: Record<string, typeof MANAGER_MENU_ITEMS> = {}
-
-    // If allowedSections is null, show all items. Otherwise, filter based on allowed sections.
-    const hasAccess = (section: string) => 
-      allowedSections === null || allowedSections.has(section)
+    const hasAccess = (section: string) => allowedSections === null || allowedSections.has(section)
 
     MANAGER_MENU_ITEMS.forEach((item) => {
       if (isInterBranchNavHref(item.href) && !hasBranches) return
@@ -56,93 +65,48 @@ export default function ManagerSidebar({ isOpen, isCollapsed, onToggle, onCollap
     return Object.entries(grouped)
   }, [allowedSections, hasBranches])
 
-  const showLoadingPlaceholder = loadingAccess
-
   return (
-    <>
-      {isOpen && <div className="fixed inset-0 z-40 bg-black/50 lg:hidden" onClick={onToggle} />}
-
-      <aside
-        className={cn(
-          "fixed left-0 top-0 z-50 flex h-screen w-64 flex-col border-r border-border bg-card transition-all duration-300 lg:static",
-          isCollapsed ? "lg:w-20" : "lg:w-64",
-          isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
-        )}
-      >
-        <div className={cn("flex items-center border-b border-border p-4", isCollapsed ? "justify-center" : "justify-between")}> 
-          <Link href="/manager" className={cn("flex items-center font-bold text-lg", isCollapsed ? "justify-center" : "gap-3") }>
-            <div className="h-8 w-8 rounded-md bg-[var(--company-logo-url)] bg-contain bg-center bg-no-repeat" />
-            {!isCollapsed && <span style={{ color: "var(--brand-primary)" }}>Manager Portal</span>}
-          </Link>
-          {!isCollapsed && (
-            <button onClick={onToggle} className="rounded p-1 hover:bg-secondary lg:hidden">
-              <ChevronLeft size={20} />
-            </button>
-          )}
-        </div>
-
-        <nav className="min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-4">
-          {showLoadingPlaceholder ? (
-            <div className="px-4 py-3 text-sm text-muted-foreground">Loading menu…</div>
-          ) : sectionEntries.map(([sectionName, items]) => (
+    <SidebarFrame isOpen={isOpen} isCollapsed={isCollapsed} onToggle={onToggle}>
+      <SidebarBrand
+        href="/manager"
+        title="Manager"
+        subtitle="Portal"
+        isCollapsed={isCollapsed}
+        onMobileClose={onToggle}
+      />
+      <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-2 py-3" aria-label="Manager pages">
+        {loadingAccess ? (
+          <p className="px-2.5 py-3 text-[13px] text-slate-500">Loading menu…</p>
+        ) : (
+          sectionEntries.map(([sectionName, items]) => (
             <div key={sectionName}>
-              {!isCollapsed && (
-                <h3 className="px-4 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  {sectionName}
-                </h3>
-              )}
-              <div className="space-y-2">
-                {items.map((item) => {
-                  const Icon = item.icon
-                  const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
-
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      title={isCollapsed ? item.label : undefined}
-                      className={cn(
-                        "flex items-center rounded-lg text-sm transition",
-                        isCollapsed ? "justify-center px-2 py-2.5" : "gap-3 px-4 py-2.5",
-                        isActive
-                          ? "bg-primary font-medium text-primary-foreground"
-                          : "text-foreground hover:bg-secondary",
-                      )}
-                    >
-                      <Icon size={18} />
-                      {!isCollapsed && <span>{item.label}</span>}
-                    </Link>
-                  )
-                })}
+              <SidebarSectionLabel
+                label={MANAGER_SECTION_LABELS[sectionName] || sectionName}
+                isCollapsed={isCollapsed}
+              />
+              <div className="space-y-0.5">
+                {items.map((item) => (
+                  <SidebarNavLink
+                    key={item.href}
+                    href={item.href}
+                    label={item.label}
+                    icon={navIcon(item.href, item.icon)}
+                    isActive={isExactOrNestedPath(pathname, item.href, ["/manager"])}
+                    isCollapsed={isCollapsed}
+                  />
+                ))}
               </div>
             </div>
-          ))}
-        </nav>
-
-        <div className="space-y-2 border-t border-border p-4">
-          <button
-            onClick={onCollapseToggle}
-            className={cn(
-              "flex w-full items-center rounded-lg px-3 py-2 text-muted-foreground transition hover:bg-secondary hover:text-foreground",
-              isCollapsed ? "justify-center" : "gap-3",
-            )}
-            title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-          >
-            <ChevronLeft size={18} className={isCollapsed ? "rotate-180" : ""} />
-            {!isCollapsed && <span className="font-medium">Collapse</span>}
-          </button>
-          <button
-            onClick={logout}
-            className={cn(
-              "flex w-full items-center rounded-lg px-4 py-3 text-muted-foreground transition hover:bg-destructive/10 hover:text-foreground",
-              isCollapsed ? "justify-center" : "gap-3",
-            )}
-          >
-            <LogOut size={20} />
-            {!isCollapsed && <span className="font-medium">Log Out</span>}
-          </button>
-        </div>
-      </aside>
-    </>
+          ))
+        )}
+      </nav>
+      <SidebarFooter
+        isCollapsed={isCollapsed}
+        onCollapseToggle={onCollapseToggle}
+        onLogout={() => logout()}
+        userName={[user?.first_name, user?.last_name].filter(Boolean).join(" ")}
+        userRole={user?.role}
+      />
+    </SidebarFrame>
   )
 }

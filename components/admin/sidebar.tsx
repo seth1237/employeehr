@@ -1,537 +1,147 @@
-"use client";
+"use client"
 
-import React from "react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import {
-  LayoutDashboard,
-  Users,
-  Target,
-  Award,
-  BarChart3,
-  Settings,
-  Building2,
-  FileText,
-  ChevronLeft,
-  LogOut,
-  Shield,
-  Calendar,
-  Lightbulb,
-  Vote,
-  FileCheck,
-  AlertCircle,
-  Bell,
-  ChevronDown,
-  Briefcase,
-  UserCheck,
-  TrendingUp,
-  Mail,
-  Banknote,
-  Video,
-  Package,
-  Stamp,
-  ShieldCheck,
-  Clock3,
-  Truck,
-  Activity,
-  Wallet,
-  Star,
-  FolderKanban,
-  ShoppingCart,
-  ReceiptText,
-  Scale,
-  Undo2,
-  CreditCard,
-  ScrollText,
-  MessageSquare,
-  Wrench,
-  ArrowLeftRight,
-  ClipboardList,
-} from "lucide-react";
-import { getUser, logout } from "@/lib/auth";
-import { getToken } from "@/lib/auth";
-import API_URL from "@/lib/apiBase";
-import { fetchNoStore } from "@/lib/apiFetch";
-import { parseResponse } from "@/lib/fetchUtils";
-import { companyApi } from "@/lib/api";
-import { getFavoriteHrefs } from "@/lib/admin-personalization";
-import { resolveAdminAllowedSections } from "@/lib/admin-sections";
-import { isProcurementEnabled } from "@/lib/module-flags";
-import { isInterBranchNavHref, useCompanyBranches } from "@/lib/company-branches";
-import { isOnTheGoNavHref, useOnTheGo } from "@/lib/on-the-go";
+import React, { useEffect, useMemo, useState } from "react"
+import { usePathname } from "next/navigation"
+import { getUser, logout, getToken } from "@/lib/auth"
+import API_URL from "@/lib/apiBase"
+import { fetchNoStore } from "@/lib/apiFetch"
+import { parseResponse } from "@/lib/fetchUtils"
+import { companyApi } from "@/lib/api"
+import { getFavoriteHrefs } from "@/lib/admin-personalization"
+import { resolveAdminAllowedSections } from "@/lib/admin-sections"
+import { isProcurementEnabled } from "@/lib/module-flags"
+import { isInterBranchNavHref, useCompanyBranches } from "@/lib/company-branches"
+import { isOnTheGoNavHref, useOnTheGo } from "@/lib/on-the-go"
 import {
   getAccountsSidebarModules,
   resolveAccountsPageFromPathname,
-} from "@/lib/accounts-nav";
-import { useEffect, useMemo, useState } from "react";
+} from "@/lib/accounts-nav"
+import {
+  ADMIN_SECTION_LABELS,
+  ADMIN_SECTION_ORDER,
+  accountsNavIcon,
+  navIcon,
+} from "@/lib/nav-icons"
+import {
+  SidebarBrand,
+  SidebarCount,
+  SidebarFooter,
+  SidebarFrame,
+  SidebarNavLink,
+  SidebarSectionLabel,
+  isExactOrNestedPath,
+} from "@/components/nav/sidebar-chrome"
 
 interface SidebarProps {
-  isOpen: boolean;
-  isCollapsed: boolean;
-  onToggle: () => void;
-  onCollapseToggle: () => void;
+  isOpen: boolean
+  isCollapsed: boolean
+  onToggle: () => void
+  onCollapseToggle: () => void
 }
 
-const COLLAPSED_SECTIONS_KEY = "admin_sidebar_collapsed_sections";
+const COLLAPSED_SECTIONS_KEY = "admin_sidebar_collapsed_sections_v2"
 
 const adminMenuItems = [
-  // Core Management
-  {
-    label: "Dashboard",
-    icon: LayoutDashboard,
-    href: "/admin",
-    section: "CORE",
-  },
-  {
-    label: "Manage Users",
-    icon: Users,
-    href: "/admin/users",
-    section: "CORE",
-  },
+  { label: "Dashboard", href: "/admin", section: "CORE" },
+  { label: "Manage Users", href: "/admin/users", section: "CORE" },
+  { label: "Projects", href: "/admin/projects", section: "PROJECT MANAGEMENT" },
+  { label: "Vendors & Suppliers", href: "/admin/procurement/suppliers", section: "PROCUREMENT (P2P)" },
+  { label: "Budgets", href: "/admin/procurement/budgets", section: "PROCUREMENT (P2P)" },
+  { label: "Purchase Requests", href: "/admin/procurement/requests", section: "PROCUREMENT (P2P)" },
+  { label: "RFQs & Tenders", href: "/admin/procurement/rfq", section: "PROCUREMENT (P2P)" },
+  { label: "Purchase Orders", href: "/admin/procurement/orders", section: "PROCUREMENT (P2P)" },
+  { label: "Goods Receipt Note", href: "/admin/procurement/grns", section: "PROCUREMENT (P2P)" },
+  { label: "Purchase Returns", href: "/admin/procurement/returns", section: "PROCUREMENT (P2P)" },
+  { label: "Supplier Bills (AP)", href: "/admin/procurement/invoices", section: "PROCUREMENT (P2P)" },
+  { label: "Payments", href: "/admin/procurement/payments", section: "PROCUREMENT (P2P)" },
+  { label: "Contracts", href: "/admin/procurement/contracts", section: "PROCUREMENT (P2P)" },
+  { label: "Job Postings", href: "/admin/jobs", section: "RECRUITMENT" },
+  { label: "Applications", href: "/admin/applications", section: "RECRUITMENT" },
+  { label: "Job Analytics", href: "/admin/analytics", section: "RECRUITMENT" },
+  { label: "Communications", href: "/admin/communications", section: "RECRUITMENT" },
+  { label: "Employees", href: "/admin/employees", section: "EMPLOYEE MANAGEMENT" },
+  { label: "Staff Transfers", href: "/admin/stock/transfers?type=employee", section: "EMPLOYEE MANAGEMENT" },
+  { label: "Onboarding", href: "/admin/onboarding", section: "EMPLOYEE MANAGEMENT" },
+  { label: "Leave Requests", href: "/admin/leave", section: "EMPLOYEE MANAGEMENT" },
+  { label: "Attendance Tracker", href: "/admin/attendance", section: "EMPLOYEE MANAGEMENT" },
+  { label: "Allocations", href: "/admin/allocations", section: "EMPLOYEE MANAGEMENT" },
+  { label: "Payroll Management", href: "/admin/payroll", section: "EMPLOYEE MANAGEMENT" },
+  { label: "Meetings", href: "/admin/meetings", section: "EMPLOYEE MANAGEMENT" },
+  { label: "Add Inventory", href: "/admin/stock/add-inventory", section: "INVENTORY MANAGER" },
+  { label: "Warehouse Management", href: "/admin/stock/wms", section: "INVENTORY MANAGER" },
+  { label: "Inter-branch Transfers", href: "/admin/stock/transfers", section: "INVENTORY MANAGER" },
+  { label: "Stock Checks", href: "/admin/stock/stock-check", section: "INVENTORY MANAGER" },
+  { label: "Sales", href: "/admin/stock/sales", section: "INVENTORY MANAGER" },
+  { label: "Quotations", href: "/admin/stock/quotations", section: "INVENTORY MANAGER" },
+  { label: "Sales Orders", href: "/admin/stock/sales-orders", section: "INVENTORY MANAGER" },
+  { label: "Tender", href: "/admin/stock/tender", section: "INVENTORY MANAGER" },
+  { label: "Services", href: "/admin/stock/services", section: "INVENTORY MANAGER" },
+  { label: "Invoices", href: "/admin/stock/invoices", section: "INVENTORY MANAGER" },
+  { label: "Credit Notes", href: "/admin/stock/credit-notes", section: "INVENTORY MANAGER" },
+  { label: "Debit Notes", href: "/admin/accounts/receivables/debit-notes", section: "INVENTORY MANAGER" },
+  { label: "Dispatch", href: "/admin/stock/dispatch", section: "INVENTORY MANAGER" },
+  { label: "Website orders", href: "/admin/stock/website-orders", section: "INVENTORY MANAGER" },
+  { label: "Inventory Status", href: "/admin/stock/status", section: "INVENTORY MANAGER" },
+  { label: "Analytics", href: "/admin/stock/analytics", section: "INVENTORY MANAGER" },
+  { label: "Outsourced Analytics", href: "/admin/stock/outsourced", section: "INVENTORY MANAGER" },
+  { label: "IMPORTANTION", href: "/admin/stock/importation", section: "IMPORTATION" },
+  { label: "Inventory History", href: "/admin/stock/history", section: "INVENTORY MANAGER" },
+  { label: "Clients Hub", href: "/admin/clients", section: "CLIENTS" },
+  { label: "Telesales Activity", href: "/admin/clients/telesales-activity", section: "CLIENTS" },
+  { label: "Sales Reports", href: "/admin/sales-reports", section: "CLIENTS" },
+  { label: "Email Marketing", href: "/admin/clients/email-marketing", section: "CLIENTS" },
+  { label: "Bulk SMS", href: "/admin/clients/bulk-sms", section: "CLIENTS" },
+  { label: "Installed Machines", href: "/admin/clients/installed-machines", section: "CLIENTS" },
+  { label: "Technical Service", href: "/admin/clients/technical-service", section: "CLIENTS" },
+  { label: "Client Complaints", href: "/admin/clients/complaints", section: "CLIENTS" },
+  { label: "Delivery Feedback", href: "/admin/clients/delivery-feedback", section: "CLIENTS" },
+  { label: "Exhibitions & Events", href: "/admin/clients/exhibitions", section: "CLIENTS" },
+  { label: "Clients list", href: "/admin/clients/clients-list", section: "CLIENTS" },
+  { label: "Planner", href: "/admin/field-management/planner", section: "FIELD MANAGEMENT" },
+  { label: "Reports", href: "/admin/field-management/reports", section: "FIELD MANAGEMENT" },
+  { label: "Performance", href: "/admin/field-management/performance", section: "FIELD MANAGEMENT" },
+  { label: "Fleet Tracker", href: "/admin/fleet", section: "FLEET" },
+  { label: "Resource Booking", href: "/admin/bookings", section: "EMPLOYEE MANAGEMENT" },
+  { label: "Suggestions", href: "/admin/suggestions", section: "EMPLOYEE MANAGEMENT" },
+  { label: "Badges & Awards", href: "/admin/badges", section: "EMPLOYEE MANAGEMENT" },
+  { label: "Polls & Voting", href: "/admin/polls", section: "EMPLOYEE MANAGEMENT" },
+  { label: "Contracts", href: "/admin/contracts", section: "EMPLOYEE MANAGEMENT" },
+  { label: "Alerts", href: "/admin/alerts", section: "EMPLOYEE MANAGEMENT" },
+  { label: "KPI Configuration", href: "/admin/kpis", section: "PERFORMANCE" },
+  { label: "360° Feedback", href: "/admin/feedback-360", section: "PERFORMANCE" },
+  { label: "Analytics & Reports", href: "/admin/reports", section: "PERFORMANCE" },
+  { label: "Stamps", href: "/admin/stamps", section: "SYSTEM" },
+  { label: "Company Settings", href: "/admin/settings/company", section: "SYSTEM" },
+  { label: "User Settings", href: "/admin/settings/users", section: "SYSTEM" },
+  { label: "System Settings", href: "/admin/settings/system", section: "SYSTEM" },
+  { label: "Email Settings", href: "/admin/settings/system/email", section: "SYSTEM" },
+  { label: "Page Access Control", href: "/admin/settings/system/page-access", section: "SYSTEM" },
+]
 
-  // Project Management
-      {
-        label: "Projects",
-        icon: FolderKanban,
-        href: "/admin/projects",
-        section: "PROJECT MANAGEMENT",
-      },
-      // Procurement & P2P
-  {
-    label: "Vendors & Suppliers",
-    icon: Truck,
-    href: "/admin/procurement/suppliers",
-    section: "PROCUREMENT (P2P)",
-  },
-  {
-    label: "Budgets",
-    icon: Wallet,
-    href: "/admin/procurement/budgets",
-    section: "PROCUREMENT (P2P)",
-  },
-  {
-    label: "Purchase Requests",
-    icon: FileText,
-    href: "/admin/procurement/requests",
-    section: "PROCUREMENT (P2P)",
-  },
-  {
-    label: "RFQs & Tenders",
-    icon: Scale,
-    href: "/admin/procurement/rfq",
-    section: "PROCUREMENT (P2P)",
-  },
-  {
-    label: "Purchase Orders",
-    icon: ShoppingCart,
-    href: "/admin/procurement/orders",
-    section: "PROCUREMENT (P2P)",
-  },
-  {
-    label: "Goods Receipt Note",
-    icon: FileCheck,
-    href: "/admin/procurement/grns",
-    section: "PROCUREMENT (P2P)",
-  },
-  {
-    label: "Purchase Returns",
-    icon: Undo2,
-    href: "/admin/procurement/returns",
-    section: "PROCUREMENT (P2P)",
-  },
-  {
-    label: "Supplier Bills (AP)",
-    icon: ReceiptText,
-    href: "/admin/procurement/invoices",
-    section: "PROCUREMENT (P2P)",
-  },
-  {
-    label: "Payments",
-    icon: CreditCard,
-    href: "/admin/procurement/payments",
-    section: "PROCUREMENT (P2P)",
-  },
-  {
-    label: "Contracts",
-    icon: ScrollText,
-    href: "/admin/procurement/contracts",
-    section: "PROCUREMENT (P2P)",
-  },
+const DISPATCH_HREFS = [
+  "/admin/stock/add-inventory",
+  "/admin/stock/wms",
+  "/admin/stock/stock-check",
+  "/admin/stock/dispatch",
+  "/admin/stock/website-orders",
+  "/admin/stock/status",
+  "/admin/stock/history",
+]
 
-  // Recruitment & Jobs
-  {
-    label: "Job Postings",
-    icon: Briefcase,
-    href: "/admin/jobs",
-    section: "RECRUITMENT",
-  },
-  {
-    label: "Applications",
-    icon: UserCheck,
-    href: "/admin/applications",
-    section: "RECRUITMENT",
-  },
-  {
-    label: "Job Analytics",
-    icon: TrendingUp,
-    href: "/admin/analytics",
-    section: "RECRUITMENT",
-  },
-  {
-    label: "Communications",
-    icon: Mail,
-    href: "/admin/communications",
-    section: "RECRUITMENT",
-  },
-
-  // Employee Management
-  {
-    label: "Employees",
-    icon: Users,
-    href: "/admin/employees",
-    section: "EMPLOYEE MANAGEMENT",
-  },
-  {
-    label: "Staff Transfers",
-    icon: ArrowLeftRight,
-    href: "/admin/stock/transfers?type=employee",
-    section: "EMPLOYEE MANAGEMENT",
-  },
-  {
-    label: "Onboarding",
-    icon: UserCheck,
-    href: "/admin/onboarding",
-    section: "EMPLOYEE MANAGEMENT",
-  },
-  {
-    label: "Leave Requests",
-    icon: Calendar,
-    href: "/admin/leave",
-    section: "EMPLOYEE MANAGEMENT",
-  },
-  {
-    label: "Attendance Tracker",
-    icon: Clock3,
-    href: "/admin/attendance",
-    section: "EMPLOYEE MANAGEMENT",
-  },
-  {
-    label: "Allocations",
-    icon: Target,
-    href: "/admin/allocations",
-    section: "EMPLOYEE MANAGEMENT",
-  },
-  {
-    label: "Payroll Management",
-    icon: Banknote,
-    href: "/admin/payroll",
-    section: "EMPLOYEE MANAGEMENT",
-  },
-  {
-    label: "Meetings",
-    icon: Video,
-    href: "/admin/meetings",
-    section: "EMPLOYEE MANAGEMENT",
-  },
-  {
-    label: "Add Inventory",
-    icon: Package,
-    href: "/admin/stock/add-inventory",
-    section: "INVENTORY MANAGER",
-  },
-  {
-    label: "Warehouse Management",
-    icon: Package,
-    href: "/admin/stock/wms",
-    section: "INVENTORY MANAGER",
-  },
-  {
-    label: "Inter-branch Transfers",
-    icon: ArrowLeftRight,
-    href: "/admin/stock/transfers",
-    section: "INVENTORY MANAGER",
-  },
-  {
-    label: "Stock Checks",
-    icon: FileCheck,
-    href: "/admin/stock/stock-check",
-    section: "INVENTORY MANAGER",
-  },
-  {
-    label: "Sales",
-    icon: Package,
-    href: "/admin/stock/sales",
-    section: "INVENTORY MANAGER",
-  },
-  {
-    label: "Quotations",
-    icon: FileText,
-    href: "/admin/stock/quotations",
-    section: "INVENTORY MANAGER",
-  },
-  {
-    label: "Sales Orders",
-    icon: ClipboardList,
-    href: "/admin/stock/sales-orders",
-    section: "INVENTORY MANAGER",
-  },
-  {
-    label: "Tender",
-    icon: FileCheck,
-    href: "/admin/stock/tender",
-    section: "INVENTORY MANAGER",
-  },
-  {
-    label: "Services",
-    icon: Stamp,
-    href: "/admin/stock/services",
-    section: "INVENTORY MANAGER",
-  },
-  {
-    label: "Clients Hub",
-    icon: Building2,
-    href: "/admin/clients",
-    section: "CLIENTS",
-  },
-  {
-    label: "Telesales Activity",
-    icon: Activity,
-    href: "/admin/clients/telesales-activity",
-    section: "CLIENTS",
-  },
-  {
-    label: "Sales Reports",
-    icon: FileText,
-    href: "/admin/sales-reports",
-    section: "CLIENTS",
-  },
-  {
-    label: "Email Marketing",
-    icon: Mail,
-    href: "/admin/clients/email-marketing",
-    section: "CLIENTS",
-  },
-  {
-    label: "Bulk SMS",
-    icon: MessageSquare,
-    href: "/admin/clients/bulk-sms",
-    section: "CLIENTS",
-  },
-  {
-    label: "Installed Machines",
-    icon: Package,
-    href: "/admin/clients/installed-machines",
-    section: "CLIENTS",
-  },
-  {
-    label: "Technical Service",
-    icon: Wrench,
-    href: "/admin/clients/technical-service",
-    section: "CLIENTS",
-  },
-  {
-    label: "Client Complaints",
-    icon: AlertCircle,
-    href: "/admin/clients/complaints",
-    section: "CLIENTS",
-  },
-  {
-    label: "Delivery Feedback",
-    icon: Star,
-    href: "/admin/clients/delivery-feedback",
-    section: "CLIENTS",
-  },
-  {
-    label: "Exhibitions & Events",
-    icon: Calendar,
-    href: "/admin/clients/exhibitions",
-    section: "CLIENTS",
-  },
-  {
-    label: "Planner",
-    icon: Calendar,
-    href: "/admin/field-management/planner",
-    section: "FIELD MANAGEMENT",
-  },
-  {
-    label: "Reports",
-    icon: FileText,
-    href: "/admin/field-management/reports",
-    section: "FIELD MANAGEMENT",
-  },
-  {
-    label: "Performance",
-    icon: BarChart3,
-    href: "/admin/field-management/performance",
-    section: "FIELD MANAGEMENT",
-  },
-  {
-    label: "Fleet Tracker",
-    icon: Truck,
-    href: "/admin/fleet",
-    section: "FLEET",
-  },
-  {
-    label: "Invoices",
-    icon: FileCheck,
-    href: "/admin/stock/invoices",
-    section: "INVENTORY MANAGER",
-  },
-  {
-    label: "Credit Notes",
-    icon: FileText,
-    href: "/admin/stock/credit-notes",
-    section: "INVENTORY MANAGER",
-  },
-  {
-    label: "Debit Notes",
-    icon: FileText,
-    href: "/admin/accounts/receivables/debit-notes",
-    section: "INVENTORY MANAGER",
-  },
-  {
-    label: "Dispatch",
-    icon: Package,
-    href: "/admin/stock/dispatch",
-    section: "INVENTORY MANAGER",
-  },
-  {
-    label: "Website orders",
-    icon: Package,
-    href: "/admin/stock/website-orders",
-    section: "INVENTORY MANAGER",
-  },
-  {
-    label: "Inventory Status",
-    icon: Package,
-    href: "/admin/stock/status",
-    section: "INVENTORY MANAGER",
-  },
-  {
-    label: "Analytics",
-    icon: Package,
-    href: "/admin/stock/analytics",
-    section: "INVENTORY MANAGER",
-  },
-  {
-    label: "Outsourced Analytics",
-    icon: Package,
-    href: "/admin/stock/outsourced",
-    section: "INVENTORY MANAGER",
-  },
-  {
-    label: "IMPORTANTION",
-    icon: Package,
-    href: "/admin/stock/importation",
-    section: "IMPORTATION",
-  },
-  {
-    label: "Inventory History",
-    icon: Package,
-    href: "/admin/stock/history",
-    section: "INVENTORY MANAGER",
-  },
-  {
-    label: "Clients list",
-    icon: Users,
-    href: "/admin/clients/clients-list",
-    section: "CLIENTS",
-  },
-  {
-    label: "Stamps",
-    icon: Stamp,
-    href: "/admin/stamps",
-    section: "SYSTEM",
-  },
-  {
-    label: "Resource Booking",
-    icon: Calendar,
-    href: "/admin/bookings",
-    section: "EMPLOYEE MANAGEMENT",
-  },
-  {
-    label: "Suggestions",
-    icon: Lightbulb,
-    href: "/admin/suggestions",
-    section: "EMPLOYEE MANAGEMENT",
-  },
-  {
-    label: "Badges & Awards",
-    icon: Award,
-    href: "/admin/badges",
-    section: "EMPLOYEE MANAGEMENT",
-  },
-  {
-    label: "Polls & Voting",
-    icon: Vote,
-    href: "/admin/polls",
-    section: "EMPLOYEE MANAGEMENT",
-  },
-  {
-    label: "Contracts",
-    icon: FileCheck,
-    href: "/admin/contracts",
-    section: "EMPLOYEE MANAGEMENT",
-  },
-  {
-    label: "Alerts",
-    icon: AlertCircle,
-    href: "/admin/alerts",
-    section: "EMPLOYEE MANAGEMENT",
-  },
-
-  // Performance & Configuration
-  {
-    label: "KPI Configuration",
-    icon: Target,
-    href: "/admin/kpis",
-    section: "PERFORMANCE",
-  },
-  {
-    label: "360° Feedback",
-    icon: Users,
-    href: "/admin/feedback-360",
-    section: "PERFORMANCE",
-  },
-  {
-    label: "Analytics & Reports",
-    icon: BarChart3,
-    href: "/admin/reports",
-    section: "PERFORMANCE",
-  },
-
-  // System Configuration
-  {
-    label: "Company Settings",
-    icon: Building2,
-    href: "/admin/settings/company",
-    section: "SYSTEM",
-  },
-  {
-    label: "User Settings",
-    icon: Users,
-    href: "/admin/settings/users",
-    section: "SYSTEM",
-  },
-  {
-    label: "System Settings",
-    icon: Settings,
-    href: "/admin/settings/system",
-    section: "SYSTEM",
-  },
-  {
-    label: "Email Settings",
-    icon: Mail,
-    href: "/admin/settings/system/email",
-    section: "SYSTEM",
-  },
-  {
-    label: "Page Access Control",
-    icon: ShieldCheck,
-    href: "/admin/settings/system/page-access",
-    section: "SYSTEM",
-  },
-];
+function useCompanyName() {
+  const [name, setName] = useState("Admin")
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem("elevate_branding")
+      if (!raw) return
+      const parsed = JSON.parse(raw)
+      if (parsed?.name) setName(parsed.name)
+    } catch {
+      // ignore
+    }
+  }, [])
+  return name
+}
 
 export default function AdminSidebar({
   isOpen,
@@ -539,521 +149,257 @@ export default function AdminSidebar({
   onToggle,
   onCollapseToggle,
 }: SidebarProps) {
-  const pathname = usePathname();
-  const [allowedSections, setAllowedSections] = useState<Set<string> | null>(
-    null,
-  );
-  const [pendingQuotationCount, setPendingQuotationCount] = useState(0);
-  const [pendingInvoiceCount, setPendingInvoiceCount] = useState(0);
-  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
-    new Set(),
-  );
+  const pathname = usePathname()
+  const [allowedSections, setAllowedSections] = useState<Set<string> | null>(null)
+  const [pendingQuotationCount, setPendingQuotationCount] = useState(0)
+  const [pendingInvoiceCount, setPendingInvoiceCount] = useState(0)
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set())
+  const [favoriteHrefs, setFavoriteHrefs] = useState<string[]>([])
 
-  const currentUser = useMemo(() => getUser(), []);
-  const { hasBranches } = useCompanyBranches();
-  const { onTheGo } = useOnTheGo();
+  const currentUser = useMemo(() => getUser(), [])
+  const { hasBranches } = useCompanyBranches()
+  const { onTheGo } = useOnTheGo()
+  const companyName = useCompanyName()
 
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(COLLAPSED_SECTIONS_KEY);
-      if (saved) {
-        setCollapsedSections(new Set(JSON.parse(saved)));
-      }
+      const saved = localStorage.getItem(COLLAPSED_SECTIONS_KEY)
+      if (saved) setCollapsedSections(new Set(JSON.parse(saved)))
     } catch {
-      setCollapsedSections(new Set());
+      setCollapsedSections(new Set())
     }
-  }, []);
+  }, [])
 
   useEffect(() => {
     const expandForTour = () => {
       if (document.body.dataset.walkthrough === "open") {
-        setCollapsedSections(new Set());
+        setCollapsedSections(new Set())
       }
-    };
-    expandForTour();
-    const observer = new MutationObserver(expandForTour);
-    observer.observe(document.body, { attributes: true, attributeFilter: ["data-walkthrough"] });
-    return () => observer.disconnect();
-  }, []);
+    }
+    expandForTour()
+    const observer = new MutationObserver(expandForTour)
+    observer.observe(document.body, { attributes: true, attributeFilter: ["data-walkthrough"] })
+    return () => observer.disconnect()
+  }, [])
 
   useEffect(() => {
     const loadSectionAccess = async () => {
-      const role = currentUser?.role;
+      const role = currentUser?.role
       if (!role || role === "super_admin") {
-        setAllowedSections(null);
-        return;
+        setAllowedSections(null)
+        return
       }
-
       try {
-        const response = await companyApi.getPageAccess();
+        const response = await companyApi.getPageAccess()
         if (!response?.success) {
-          setAllowedSections(null);
-          return;
+          setAllowedSections(null)
+          return
         }
-
-        const userId = currentUser?._id || (currentUser as any)?.userId;
-        const allowed = resolveAdminAllowedSections({
-          role,
-          userId,
-          pageAccess: response.data,
-        });
-        setAllowedSections(allowed);
+        const userId = currentUser?._id || (currentUser as { userId?: string })?.userId
+        setAllowedSections(
+          resolveAdminAllowedSections({
+            role,
+            userId,
+            pageAccess: response.data,
+          }),
+        )
       } catch {
-        setAllowedSections(null);
+        setAllowedSections(null)
       }
-    };
-
-    loadSectionAccess();
-  }, [currentUser?.role, currentUser?._id]);
+    }
+    loadSectionAccess()
+  }, [currentUser?.role, currentUser?._id])
 
   useEffect(() => {
-    const role = currentUser?.role;
+    const role = currentUser?.role
     if (!role || !["company_admin", "admin", "hr"].includes(role)) {
-      setPendingQuotationCount(0);
-      setPendingInvoiceCount(0);
-      return;
+      setPendingQuotationCount(0)
+      setPendingInvoiceCount(0)
+      return
     }
 
-    let mounted = true;
+    let mounted = true
     const loadPendingCount = async () => {
       try {
-        const token = getToken();
-        if (!token) return;
-        const headers = { Authorization: `Bearer ${token}` };
+        const token = getToken()
+        if (!token) return
+        const headers = { Authorization: `Bearer ${token}` }
         const [quotesResponse, invoicesResponse] = await Promise.all([
           fetchNoStore(`${API_URL}/api/stock/quotations?status=pending_approval&count=1`, { headers }),
           fetchNoStore(`${API_URL}/api/stock/invoices?status=pending_approval&count=1`, { headers }),
-        ]);
-        const quotesParsed = await parseResponse(quotesResponse);
-        const invoicesParsed = await parseResponse(invoicesResponse);
-        const pendingQuotes = quotesParsed.response.ok
-          ? Number(quotesParsed.data?.data?.count || 0)
-          : 0;
-        const pendingInvoices = invoicesParsed.response.ok
-          ? Number(invoicesParsed.data?.data?.count || 0)
-          : 0;
-        if (mounted) {
-          setPendingQuotationCount(pendingQuotes);
-          setPendingInvoiceCount(pendingInvoices);
-        }
+        ])
+        const quotesParsed = await parseResponse(quotesResponse)
+        const invoicesParsed = await parseResponse(invoicesResponse)
+        if (!mounted) return
+        setPendingQuotationCount(
+          quotesParsed.response.ok ? Number(quotesParsed.data?.data?.count || 0) : 0,
+        )
+        setPendingInvoiceCount(
+          invoicesParsed.response.ok ? Number(invoicesParsed.data?.data?.count || 0) : 0,
+        )
       } catch {}
-    };
+    }
 
-    loadPendingCount();
-    const interval = setInterval(loadPendingCount, 30000);
+    loadPendingCount()
+    const interval = setInterval(loadPendingCount, 30000)
     return () => {
-      mounted = false;
-      clearInterval(interval);
-    };
-  }, [currentUser?.role]);
-
-  const handleLogout = () => {
-    logout();
-  };
-
-  const renderNavLink = (
-    href: string,
-    label: string,
-    Icon: typeof LayoutDashboard,
-    options?: { muted?: boolean },
-  ) => {
-    const isActive = pathname === href || pathname.startsWith(`${href}/`);
-    return (
-      <Link
-        key={href}
-        href={href}
-        title={isCollapsed ? label : undefined}
-        className={`
-          flex items-center rounded-lg transition text-sm
-          ${isCollapsed ? "justify-center px-2 py-2.5" : "gap-3 px-4 py-2.5"}
-          ${
-            isActive
-              ? "bg-primary text-primary-foreground font-medium"
-              : options?.muted
-                ? "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                : "text-foreground hover:bg-secondary"
-          }
-        `}
-      >
-        <Icon size={18} />
-        {!isCollapsed && <span className="truncate">{label}</span>}
-      </Link>
-    );
-  };
-
-  const renderAccountsSection = () => {
-    const modules = getAccountsSidebarModules();
-    const activeAccountsPage = resolveAccountsPageFromPathname(pathname || "");
-
-    return (
-      <div key="ACCOUNTS" data-tour="wt-section-ACCOUNTS">
-        {!isCollapsed ? (
-          <button
-            type="button"
-            onClick={() => toggleSection("ACCOUNTS")}
-            className="mb-1 flex w-full items-center justify-between rounded-md px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground transition hover:bg-secondary hover:text-foreground"
-            aria-expanded={!collapsedSections.has("ACCOUNTS")}
-          >
-            <span>ACCOUNTS</span>
-            <ChevronDown
-              size={14}
-              className={`transition-transform ${collapsedSections.has("ACCOUNTS") ? "-rotate-90" : "rotate-0"}`}
-            />
-          </button>
-        ) : null}
-        <div
-          className={`space-y-1 ${!isCollapsed && collapsedSections.has("ACCOUNTS") ? "hidden" : ""}`}
-        >
-          {modules.map((mod) => {
-            const isActive =
-              activeAccountsPage?.groupId === mod.groupId ||
-              pathname === mod.href ||
-              (pathname || "").startsWith(`${mod.href}/`);
-            const Icon =
-              mod.groupId === "expenses"
-                ? Wallet
-                : mod.groupId === "receivables"
-                  ? Banknote
-                  : mod.groupId === "cash-banking"
-                    ? Building2
-                    : mod.groupId === "payroll"
-                      ? Users
-                      : mod.groupId === "inventory-accounting"
-                        ? Package
-                        : FileText;
-
-            return (
-              <Link
-                key={mod.groupId}
-                href={mod.href}
-                title={isCollapsed ? mod.label : mod.description}
-                className={`
-                  flex items-center rounded-lg transition text-sm
-                  ${isCollapsed ? "justify-center px-2 py-2.5" : "gap-3 px-4 py-2.5"}
-                  ${
-                    isActive
-                      ? "bg-primary text-primary-foreground font-medium"
-                      : "text-foreground hover:bg-secondary"
-                  }
-                `}
-              >
-                <Icon size={18} className="shrink-0" />
-                {!isCollapsed && <span className="truncate">{mod.label}</span>}
-              </Link>
-            );
-          })}
-        </div>
-      </div>
-    );
-  };
-
-  const toggleSection = (sectionName: string) => {
-    setCollapsedSections((current) => {
-      const next = new Set(current);
-      if (next.has(sectionName)) {
-        next.delete(sectionName);
-      } else {
-        next.add(sectionName);
-      }
-
-      try {
-        localStorage.setItem(
-          COLLAPSED_SECTIONS_KEY,
-          JSON.stringify(Array.from(next)),
-        );
-      } catch {}
-
-      return next;
-    });
-  };
-
-  // Group menu items by section
-  const sections: { [key: string]: typeof adminMenuItems } = {};
-  adminMenuItems.forEach((item) => {
-    if (item.section === "PROCUREMENT (P2P)" && !isProcurementEnabled()) {
-      return;
+      mounted = false
+      clearInterval(interval)
     }
-    if (isInterBranchNavHref(item.href) && !hasBranches) {
-      return;
-    }
-    if (onTheGo && !isOnTheGoNavHref(item.href)) {
-      return;
-    }
-
-    // If role is dispatch, restrict to specific items
-    if (currentUser?.role === "dispatch") {
-      const allowedDispatchHrefs = [
-        "/admin/stock/add-inventory",
-        "/admin/stock/wms",
-        "/admin/stock/stock-check",
-        "/admin/stock/dispatch",
-        "/admin/stock/website-orders",
-        "/admin/stock/status",
-        "/admin/stock/history"
-      ];
-      if (!allowedDispatchHrefs.includes(item.href)) {
-        return;
-      }
-    }
-
-    const section = item.section || "OTHER";
-    if (!sections[section]) {
-      sections[section] = [];
-    }
-    sections[section].push(item);
-  });
-
-  const sectionEntries = Object.entries(sections).filter(([sectionName]) => {
-    if (!allowedSections) return true;
-    return allowedSections.has(sectionName);
-  });
-
-  const [favoriteHrefs, setFavoriteHrefs] = useState<string[]>([]);
+  }, [currentUser?.role])
 
   useEffect(() => {
-    setFavoriteHrefs(getFavoriteHrefs());
-    const onStorage = () => setFavoriteHrefs(getFavoriteHrefs());
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
-  }, [pathname]);
+    setFavoriteHrefs(getFavoriteHrefs())
+    const onStorage = () => setFavoriteHrefs(getFavoriteHrefs())
+    window.addEventListener("storage", onStorage)
+    return () => window.removeEventListener("storage", onStorage)
+  }, [pathname])
+
+  const itemVisible = (item: (typeof adminMenuItems)[number]) => {
+    if (item.section === "PROCUREMENT (P2P)" && !isProcurementEnabled()) return false
+    if (isInterBranchNavHref(item.href) && !hasBranches) return false
+    if (onTheGo && !isOnTheGoNavHref(item.href)) return false
+    if (currentUser?.role === "dispatch" && !DISPATCH_HREFS.includes(item.href)) return false
+    if (allowedSections && !allowedSections.has(item.section)) return false
+    return true
+  }
+
+  const sections: Record<string, typeof adminMenuItems> = {}
+  adminMenuItems.forEach((item) => {
+    if (!itemVisible(item)) return
+    if (!sections[item.section]) sections[item.section] = []
+    sections[item.section].push(item)
+  })
 
   const favoriteItems = useMemo(
-    () =>
-      adminMenuItems.filter((item) => {
-        if (item.section === "PROCUREMENT (P2P)" && !isProcurementEnabled()) return false;
-        if (isInterBranchNavHref(item.href) && !hasBranches) return false;
-        if (onTheGo && !isOnTheGoNavHref(item.href)) return false;
-        if (!favoriteHrefs.includes(item.href)) return false;
-        
-        if (currentUser?.role === "dispatch") {
-          const allowedDispatchHrefs = [
-            "/admin/stock/add-inventory",
-            "/admin/stock/wms",
-            "/admin/stock/stock-check",
-            "/admin/stock/dispatch",
-            "/admin/stock/website-orders",
-            "/admin/stock/status",
-            "/admin/stock/history"
-          ];
-          if (!allowedDispatchHrefs.includes(item.href)) return false;
-        }
-
-        if (!allowedSections) return true;
-        return allowedSections.has(item.section);
-      }),
+    () => adminMenuItems.filter((item) => favoriteHrefs.includes(item.href) && itemVisible(item)),
     [favoriteHrefs, allowedSections, currentUser?.role, hasBranches, onTheGo],
-  );
+  )
 
   const showAccountsSection =
     !onTheGo &&
     (!allowedSections || allowedSections.has("ACCOUNTS")) &&
-    currentUser?.role !== "dispatch";
+    currentUser?.role !== "dispatch"
+
+  const toggleSection = (sectionName: string) => {
+    setCollapsedSections((current) => {
+      const next = new Set(current)
+      if (next.has(sectionName)) next.delete(sectionName)
+      else next.add(sectionName)
+      try {
+        localStorage.setItem(COLLAPSED_SECTIONS_KEY, JSON.stringify(Array.from(next)))
+      } catch {}
+      return next
+    })
+  }
+
+  const badgeFor = (href: string) => {
+    if (href === "/admin/stock/quotations") return <SidebarCount value={pendingQuotationCount} />
+    if (href === "/admin/stock/invoices") return <SidebarCount value={pendingInvoiceCount} />
+    return null
+  }
+
+  const renderItem = (item: (typeof adminMenuItems)[number], keyPrefix = "") => (
+    <SidebarNavLink
+      key={`${keyPrefix}${item.href}`}
+      href={item.href}
+      label={item.label}
+      icon={navIcon(item.href)}
+      isActive={isExactOrNestedPath(pathname, item.href, ["/admin"])}
+      isCollapsed={isCollapsed}
+      dataTour={keyPrefix ? undefined : `wt-nav-${item.href}`}
+      badge={badgeFor(item.href)}
+    />
+  )
+
+  const renderAccountsSection = () => {
+    const modules = getAccountsSidebarModules()
+    const activeAccountsPage = resolveAccountsPageFromPathname(pathname || "")
+    const collapsed = collapsedSections.has("ACCOUNTS")
+
+    return (
+      <div key="ACCOUNTS" data-tour="wt-section-ACCOUNTS">
+        <SidebarSectionLabel
+          label={ADMIN_SECTION_LABELS.ACCOUNTS}
+          isCollapsed={isCollapsed}
+          collapsed={collapsed}
+          onToggle={() => toggleSection("ACCOUNTS")}
+        />
+        <div className={`space-y-0.5 ${!isCollapsed && collapsed ? "hidden" : ""}`}>
+          {modules.map((mod) => {
+            const isActive =
+              activeAccountsPage?.groupId === mod.groupId ||
+              pathname === mod.href ||
+              (pathname || "").startsWith(`${mod.href}/`)
+            return (
+              <SidebarNavLink
+                key={mod.groupId}
+                href={mod.href}
+                label={mod.label}
+                icon={accountsNavIcon(mod.groupId)}
+                isActive={isActive}
+                isCollapsed={isCollapsed}
+                title={mod.description}
+              />
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
+  const orderedSections = ADMIN_SECTION_ORDER.filter((sectionName) => {
+    if (sectionName === "ACCOUNTS") return showAccountsSection
+    return Boolean(sections[sectionName]?.length)
+  })
+
+  const userName = [currentUser?.first_name, currentUser?.last_name].filter(Boolean).join(" ")
 
   return (
-    <>
-      {/* Overlay for mobile */}
-      {isOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-          onClick={onToggle}
-        ></div>
-      )}
+    <SidebarFrame isOpen={isOpen} isCollapsed={isCollapsed} onToggle={onToggle}>
+      <SidebarBrand
+        href="/admin"
+        title={onTheGo ? "On the Go" : companyName}
+        subtitle={onTheGo ? companyName : "Admin"}
+        isCollapsed={isCollapsed}
+        onMobileClose={onToggle}
+      />
 
-      <aside
-        data-tour="wt-sidebar"
-        className={`
-        fixed lg:static top-0 left-0 h-screen bg-card border-r border-border z-50 flex flex-col
-        transition-all duration-300 ${isCollapsed ? "lg:w-20" : "lg:w-64"} w-64
-        ${isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
-      `}
-      >
-        <div
-          className={`p-4 flex items-center border-b border-border ${isCollapsed ? "justify-center" : "justify-between"}`}
-        >
-          <Link
-            href="/admin"
-            className={`flex items-center font-bold text-lg ${isCollapsed ? "justify-center" : "gap-3"}`}
-          >
-            <div
-              className="w-8 h-8 bg-center bg-no-repeat bg-contain"
-              style={{ backgroundImage: "var(--company-logo-url)" }}
-            ></div>
-            {!isCollapsed && (
-              <span style={{ color: "var(--brand-primary)" }}>
-                {onTheGo ? "On the Go" : "Admin Panel"}
-              </span>
-            )}
-          </Link>
-          {!isCollapsed && (
-            <button
-              onClick={onToggle}
-              className="lg:hidden p-1 hover:bg-secondary rounded"
-            >
-              <ChevronLeft size={20} />
-            </button>
-          )}
-        </div>
+      <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-2 py-3" aria-label="Admin pages">
+        {favoriteItems.length > 0 ? (
+          <div>
+            <SidebarSectionLabel label="Favorites" isCollapsed={isCollapsed} />
+            <div className="space-y-0.5">{favoriteItems.map((item) => renderItem(item, "fav-"))}</div>
+          </div>
+        ) : null}
 
-        <nav
-          className={`px-3 py-4 space-y-4 flex-1 min-h-0 overflow-y-auto ${isCollapsed ? "" : ""}`}
-        >
-          {favoriteItems.length > 0 && (
-            <div>
-              {!isCollapsed ? (
-                <p className="mb-1 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Favorites
-                </p>
-              ) : null}
-              <div className="space-y-2">
-                {favoriteItems.map((item) => {
-                  const Icon = item.icon;
-                  const isActive =
-                    pathname === item.href ||
-                    pathname.startsWith(item.href + "/");
-                  return (
-                    <Link
-                      key={`fav-${item.href}`}
-                      href={item.href}
-                      title={isCollapsed ? item.label : undefined}
-                      className={`
-                        flex items-center rounded-lg transition text-sm
-                        ${isCollapsed ? "justify-center px-2 py-2.5" : "gap-3 px-4 py-2.5"}
-                        ${
-                          isActive
-                            ? "bg-primary text-primary-foreground font-medium"
-                            : "text-foreground hover:bg-secondary"
-                        }
-                      `}
-                    >
-                      <Star
-                        size={16}
-                        className={isActive ? "fill-current" : "text-amber-500"}
-                      />
-                      {!isCollapsed && <span>{item.label}</span>}
-                    </Link>
-                  );
-                })}
+        {orderedSections.map((sectionName) => {
+          if (sectionName === "ACCOUNTS") return renderAccountsSection()
+          const items = sections[sectionName] || []
+          const collapsed = collapsedSections.has(sectionName)
+          return (
+            <div key={sectionName} data-tour={`wt-section-${sectionName}`}>
+              <SidebarSectionLabel
+                label={ADMIN_SECTION_LABELS[sectionName] || sectionName}
+                isCollapsed={isCollapsed}
+                collapsed={collapsed}
+                onToggle={() => toggleSection(sectionName)}
+              />
+              <div className={`space-y-0.5 ${!isCollapsed && collapsed ? "hidden" : ""}`}>
+                {items.map((item) => renderItem(item))}
               </div>
             </div>
-          )}
-          {sectionEntries.flatMap(([sectionName, items]) => {
-            const blocks: React.ReactNode[] = [];
+          )
+        })}
+      </nav>
 
-            if (sectionName === "CLIENTS" && showAccountsSection) {
-              blocks.push(renderAccountsSection());
-            }
-
-            blocks.push(
-              <div key={sectionName} data-tour={`wt-section-${sectionName}`}>
-                {!isCollapsed ? (
-                  <button
-                    type="button"
-                    onClick={() => toggleSection(sectionName)}
-                    className="mb-1 flex w-full items-center justify-between rounded-md px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground transition hover:bg-secondary hover:text-foreground"
-                    aria-expanded={!collapsedSections.has(sectionName)}
-                  >
-                    <span>{sectionName}</span>
-                    <ChevronDown
-                      size={14}
-                      className={`transition-transform ${collapsedSections.has(sectionName) ? "-rotate-90" : "rotate-0"}`}
-                    />
-                  </button>
-                ) : null}
-                <div
-                  className={`space-y-2 ${!isCollapsed && collapsedSections.has(sectionName) ? "hidden" : ""}`}
-                >
-                  {items.map((item) => {
-                    const Icon = item.icon;
-                    const isActive =
-                      pathname === item.href ||
-                      pathname.startsWith(item.href + "/");
-                    return (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        data-tour={`wt-nav-${item.href}`}
-                        title={isCollapsed ? item.label : undefined}
-                        className={`
-                        flex items-center rounded-lg transition text-sm
-                        ${isCollapsed ? "justify-center px-2 py-2.5" : "gap-3 px-4 py-2.5"}
-                        ${
-                          isActive
-                            ? "bg-primary text-primary-foreground font-medium"
-                            : "text-foreground hover:bg-secondary"
-                        }
-                      `}
-                      >
-                        <div className="relative">
-                          <Icon size={18} />
-                          {item.href === "/admin/stock/quotations" &&
-                          pendingQuotationCount > 0 &&
-                          isCollapsed ? (
-                            <span className="absolute -right-2 -top-2 min-w-4 rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground text-center">
-                              {pendingQuotationCount > 99
-                                ? "99+"
-                                : pendingQuotationCount}
-                            </span>
-                          ) : null}
-                          {item.href === "/admin/stock/invoices" &&
-                          pendingInvoiceCount > 0 &&
-                          isCollapsed ? (
-                            <span className="absolute -right-2 -top-2 min-w-4 rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground text-center">
-                              {pendingInvoiceCount > 99
-                                ? "99+"
-                                : pendingInvoiceCount}
-                            </span>
-                          ) : null}
-                        </div>
-                        {!isCollapsed && (
-                          <span className="flex items-center gap-2">
-                            {item.label}
-                            {item.href === "/admin/stock/quotations" &&
-                            pendingQuotationCount > 0 ? (
-                              <span className="rounded-full bg-destructive px-2 py-0.5 text-[11px] font-semibold text-destructive-foreground">
-                                {pendingQuotationCount > 99
-                                  ? "99+"
-                                  : pendingQuotationCount}
-                              </span>
-                            ) : null}
-                          </span>
-                        )}
-                      </Link>
-                    );
-                  })}
-                </div>
-              </div>,
-            );
-
-            return blocks;
-          })}
-          {showAccountsSection &&
-          !sectionEntries.some(([sectionName]) => sectionName === "CLIENTS")
-            ? renderAccountsSection()
-            : null}
-        </nav>
-
-        <div className="p-4 border-t border-border space-y-2">
-          <button
-            onClick={onCollapseToggle}
-            className={`w-full flex items-center px-3 py-2 text-muted-foreground hover:text-foreground hover:bg-secondary rounded-lg transition ${isCollapsed ? "justify-center" : "gap-3"}`}
-            title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-          >
-            <ChevronLeft
-              size={18}
-              className={isCollapsed ? "rotate-180" : ""}
-            />
-            {!isCollapsed && <span className="font-medium">Collapse</span>}
-          </button>
-          <button
-            onClick={handleLogout}
-            className={`w-full flex items-center px-4 py-3 text-muted-foreground hover:text-foreground hover:bg-destructive/10 rounded-lg transition ${isCollapsed ? "justify-center" : "gap-3"}`}
-            title={isCollapsed ? "Log Out" : undefined}
-          >
-            <LogOut size={20} />
-            {!isCollapsed && <span className="font-medium">Log Out</span>}
-          </button>
-        </div>
-      </aside>
-    </>
-  );
+      <SidebarFooter
+        isCollapsed={isCollapsed}
+        onCollapseToggle={onCollapseToggle}
+        onLogout={() => logout()}
+        userName={userName}
+        userRole={currentUser?.role}
+      />
+    </SidebarFrame>
+  )
 }

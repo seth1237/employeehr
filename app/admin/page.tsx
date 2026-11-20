@@ -1,56 +1,30 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { motion, MotionConfig, type Variants } from 'framer-motion'
 import {
   Users,
-  TrendingUp,
   UserPlus,
-  BarChart3,
   AlertCircle,
-  RefreshCw,
-  Search,
-  Bell,
   CalendarDays,
-  ClipboardCheck,
   FileText,
-  BadgeCheck,
   DollarSign,
-  MessageSquare,
   Clock3,
-  BriefcaseBusiness,
-  Settings,
   Activity,
-  PackageCheck,
   TriangleAlert,
   ArrowUpRight,
   ArrowDownRight,
+  Truck,
 } from 'lucide-react'
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  CartesianGrid,
-  Tooltip,
-  XAxis,
-  YAxis,
-  LineChart,
-  Line,
-  PieChart,
-  Pie,
-  Cell,
-} from 'recharts'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { PurchaseVelocityHeatmap, type DailyActivity } from '@/components/admin/activity-heatmap'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
-import { Progress } from '@/components/ui/progress'
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
 import { getUser } from '@/lib/auth'
-import type { User } from '@/lib/types'
 import { DashboardWidgetsMenu } from '@/components/admin/personalization-panel'
 import { SalesWorkflowTour } from '@/components/admin/guided-tour'
 import { OnTheGoHub } from '@/components/admin/on-the-go-hub'
@@ -59,6 +33,21 @@ import {
   getDashboardWidgetOrder,
   type DashboardWidgetId,
 } from '@/lib/admin-personalization'
+
+const SalesPerformanceChart = dynamic(
+  () => import('@/components/admin/dashboard-charts').then((mod) => mod.SalesPerformanceChart),
+  { ssr: false, loading: () => <div className="h-full animate-pulse rounded-xl bg-slate-100" /> },
+)
+
+const fadeUp: Variants = {
+  hidden: { opacity: 0, y: 14 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] } },
+}
+
+const stagger: Variants = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.07, delayChildren: 0.04 } },
+}
 
 type DepartmentRow = {
   name: string
@@ -70,21 +59,54 @@ type DepartmentRow = {
   attendanceRate: number
 }
 
+type StockItem = { name: string; currentQuantity?: number }
+
 type DashboardData = {
-  users: User[]
-  kpis: any[]
-  awards: any[]
-  performances: any[]
-  attendance: any[]
-  leaveRequests: any[]
-  payroll: any[]
-  meetings: any[]
-  reports: any[]
-  feedback: any[]
-  pdps: any[]
-  stockInvoices: any[]
-  stockProducts: any[]
-  stockQuotations: any[]
+  snapshot: boolean
+  stats: {
+    totalUsers: number
+    activeUsers: number
+    departments: number
+    kpis: number
+    awards: number
+    avgPerformance: number
+    pendingLeave: number
+    meetingsThisMonth: number
+    reportsThisMonth: number
+    payrollProcessed: number
+    invoices: number
+    quotations: number
+    products: number
+  }
+  attendanceToday: { checkedIn: number; checkedOut: number; pendingCheckOut: number }
+  dispatch: { pending: number; dispatched: number; delivered: number }
+  inventory: {
+    quotationsGenerated: number
+    invoicesConverted: number
+    leadingSalesPerson: string
+    leadingSalesAmount: number
+  }
+  departments: DepartmentRow[]
+  salesAnalytics: {
+    mostInStock: StockItem[]
+    outOfStock: StockItem[]
+    topSelling: Array<{ productName: string; soldQuantity: number; salesAmount: number }>
+  }
+  monthlyTrends: Array<{ key: string; label: string; meetings: number; reports: number; invoices: number; sales?: number }>
+  dailyActivity: DailyActivity[]
+  purchaseVelocity: {
+    weeks: string[]
+    products: Array<{ name: string; volumes: number[] }>
+  }
+  activityFeed: Array<{ label: string; detail: string; timestamp: string | Date; href: string }>
+  kpiTrends: { employees: number; leave: number; meetings: number; invoices: number }
+  topPurchasingClients: Array<{ name: string; spent: number; invoiceCount: number }>
+  stockSeverity: {
+    critical: StockItem[]
+    warning: StockItem[]
+    low: StockItem[]
+    productCount: number
+  }
 }
 
 type Branding = {
@@ -100,23 +122,50 @@ type Branding = {
 }
 
 const DEFAULT_DATA: DashboardData = {
-  users: [],
-  kpis: [],
-  awards: [],
-  performances: [],
-  attendance: [],
-  leaveRequests: [],
-  payroll: [],
-  meetings: [],
-  reports: [],
-  feedback: [],
-  pdps: [],
-  stockInvoices: [],
-  stockProducts: [],
-  stockQuotations: [],
+  snapshot: true,
+  stats: {
+    totalUsers: 0,
+    activeUsers: 0,
+    departments: 0,
+    kpis: 0,
+    awards: 0,
+    avgPerformance: 0,
+    pendingLeave: 0,
+    meetingsThisMonth: 0,
+    reportsThisMonth: 0,
+    payrollProcessed: 0,
+    invoices: 0,
+    quotations: 0,
+    products: 0,
+  },
+  attendanceToday: { checkedIn: 0, checkedOut: 0, pendingCheckOut: 0 },
+  dispatch: { pending: 0, dispatched: 0, delivered: 0 },
+  inventory: {
+    quotationsGenerated: 0,
+    invoicesConverted: 0,
+    leadingSalesPerson: 'No sales data',
+    leadingSalesAmount: 0,
+  },
+  departments: [],
+  salesAnalytics: { mostInStock: [], outOfStock: [], topSelling: [] },
+  monthlyTrends: [],
+  dailyActivity: [],
+  purchaseVelocity: { weeks: [], products: [] },
+  activityFeed: [],
+  kpiTrends: { employees: 0, leave: 0, meetings: 0, invoices: 0 },
+  topPurchasingClients: [],
+  stockSeverity: { critical: [], warning: [], low: [], productCount: 0 },
 }
 
-const departmentOrder = ['HR', 'Operations', 'Finance', 'Sales', 'Engineering', 'Support']
+function readCachedBranding(): Branding | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = sessionStorage.getItem('elevate_branding')
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
 
 export default function AdminDashboard() {
   const router = useRouter()
@@ -126,11 +175,9 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [data, setData] = useState<DashboardData>(DEFAULT_DATA)
-  const [branding, setBranding] = useState<Branding | null>(null)
-  const [isRefreshing, setIsRefreshing] = useState(false)
-  const [dashboardSearch, setDashboardSearch] = useState('')
+  const [branding, setBranding] = useState<Branding | null>(() => readCachedBranding())
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null)
-  const [trendDuration, setTrendDuration] = useState<'1' | '3' | '6'>('6')
+  const [trendDuration, setTrendDuration] = useState<'1' | '3' | '6'>('3')
   const [widgetOrder, setWidgetOrder] = useState<DashboardWidgetId[]>(() => [
     'hr-overview',
     'sales-analytics',
@@ -149,40 +196,32 @@ export default function AdminDashboard() {
     setWidgetOrder(getDashboardWidgetOrder())
   }, [currentUser?.role, router])
 
-  const leftWidgets = useMemo(() => {
-    const leftIds: DashboardWidgetId[] = [
-      'hr-overview',
-      'sales-analytics',
-      'dispatch-summary',
-      'departments',
-    ]
-    return widgetOrder.filter((id) => leftIds.includes(id))
-  }, [widgetOrder])
-
-  const rightWidgets = useMemo(() => {
-    const rightIds: DashboardWidgetId[] = ['stock-summary', 'attention']
-    return widgetOrder.filter((id) => rightIds.includes(id))
-  }, [widgetOrder])
+  const isVisible = (id: DashboardWidgetId) => widgetOrder.includes(id)
 
   useEffect(() => {
     if (!currentUser) {
       router.push('/auth/login')
       return
     }
-    if (!onTheGoReady || onTheGo) return
+    if (onTheGo) return
 
     loadDashboard()
-    // Refresh every 2 minutes instead of 30 seconds for better performance
     const interval = setInterval(() => {
-      loadDashboard()
+      if (!onTheGo) loadDashboard()
     }, 120000)
     return () => clearInterval(interval)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onTheGo, onTheGoReady])
+  }, [onTheGo])
 
   useEffect(() => {
-    loadBranding()
-  }, [])
+    if (branding) return
+    const cached = readCachedBranding()
+    if (cached) {
+      setBranding(cached)
+      return
+    }
+    void loadBranding()
+  }, [branding])
 
   const loadBranding = async () => {
     try {
@@ -207,41 +246,37 @@ export default function AdminDashboard() {
 
   const loadDashboard = async () => {
     try {
-      setIsRefreshing(true)
       setError(null)
 
-      let statsRes = await api.dashboard.getStats()
-      const statsMessage = String((statsRes as any)?.message || "")
-      if (!statsRes?.success && /invalid|empty/i.test(statsMessage)) {
-        statsRes = await api.dashboard.getStats()
-      }
+      const statsRes = await api.dashboard.getStats()
 
       if (!statsRes?.success) {
-        if (/empty|invalid/i.test(String((statsRes as any)?.message || ""))) {
-          setData(DEFAULT_DATA)
-          setLastUpdatedAt(new Date())
-          return
-        }
         throw new Error((statsRes as any)?.message || 'Failed to fetch dashboard stats')
       }
       
       const payload = (statsRes as any)?.data || {}
-
       setData({
-        users: payload.users || [],
-        kpis: payload.kpis || [],
-        awards: payload.awards || [],
-        performances: payload.performances || [],
-        attendance: payload.attendance || [],
-        leaveRequests: payload.leaveRequests || [],
-        payroll: payload.payroll || [],
-        meetings: payload.meetings || [],
-        reports: payload.reports || [],
-        feedback: payload.feedback || [],
-        pdps: payload.pdps || [],
-        stockInvoices: payload.stockInvoices || [],
-        stockProducts: payload.stockProducts || [],
-        stockQuotations: payload.stockQuotations || [],
+        ...DEFAULT_DATA,
+        ...payload,
+        stats: {
+          ...DEFAULT_DATA.stats,
+          totalUsers: payload.users?.length ?? payload.stats?.totalUsers ?? 0,
+          invoices: payload.stockInvoices?.length ?? payload.stats?.invoices ?? 0,
+          quotations: payload.stockQuotations?.length ?? payload.stats?.quotations ?? 0,
+          ...(payload.stats || {}),
+        },
+        attendanceToday: { ...DEFAULT_DATA.attendanceToday, ...(payload.attendanceToday || {}) },
+        dispatch: { ...DEFAULT_DATA.dispatch, ...(payload.dispatch || {}) },
+        inventory: { ...DEFAULT_DATA.inventory, ...(payload.inventory || {}) },
+        departments: payload.departments || [],
+        salesAnalytics: { ...DEFAULT_DATA.salesAnalytics, ...(payload.salesAnalytics || {}) },
+        monthlyTrends: payload.monthlyTrends || [],
+        dailyActivity: payload.dailyActivity || [],
+        purchaseVelocity: payload.purchaseVelocity || DEFAULT_DATA.purchaseVelocity,
+        activityFeed: payload.activityFeed || [],
+        kpiTrends: { ...DEFAULT_DATA.kpiTrends, ...(payload.kpiTrends || {}) },
+        topPurchasingClients: payload.topPurchasingClients || [],
+        stockSeverity: { ...DEFAULT_DATA.stockSeverity, ...(payload.stockSeverity || {}) },
       })
       setLastUpdatedAt(new Date())
 
@@ -270,420 +305,136 @@ export default function AdminDashboard() {
       if (loading) {
         setLoading(false)
       }
-      setIsRefreshing(false)
     }
   }
 
   const brand = useMemo(() => ({
     name: branding?.name?.trim() || 'Organization',
     logo: branding?.logo || '',
-    primary: branding?.primaryColor || '#2563eb',
+    primary: branding?.primaryColor || '#296ff0',
     secondary: branding?.secondaryColor || '#059669',
     accent: branding?.accentColor || '#f59e0b',
     background: branding?.backgroundColor || '#f5f7fb',
     text: branding?.textColor || '#111827',
   }), [branding])
 
-  const stats = useMemo(() => {
-    const users = data.users
-    const activeUsers = users.filter((u) => u.status !== 'inactive').length
-    const departments = Array.from(new Set(users.map((u) => u.department).filter(Boolean)))
-    const totalLeavePending = data.leaveRequests.filter((r: any) => r.status === 'pending').length
-    const meetingsThisMonth = data.meetings.filter((m: any) => {
-      const date = new Date(m.scheduled_at || m.scheduled_start || m.createdAt)
-      const now = new Date()
-      return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()
-    }).length
-    const reportsThisMonth = data.reports.filter((r: any) => {
-      const date = new Date(r.createdAt || r.created_at)
-      const now = new Date()
-      return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()
-    }).length
-    const payrollProcessed = data.payroll.filter((p: any) => ['processed', 'paid'].includes(p.status)).length
-    const avgPerformance = data.performances.length
-      ? data.performances.reduce((sum: number, p: any) => sum + Number(p.overall_score || 0), 0) / data.performances.length
+  const stats = data.stats
+
+  const departmentRows = data.departments
+
+  const dispatchSummary = data.dispatch
+  const inventorySummary = data.inventory
+  const heatmapWeeks = trendDuration === '1' ? 4 : trendDuration === '3' ? 12 : 16
+
+  const salesChartPoints = useMemo(() => {
+    const days = data.dailyActivity
+    const hasSales = days.some((day) => Number(day.sales || 0) > 0)
+    if (!hasSales) {
+      return data.monthlyTrends.slice(-Number(trendDuration)).map((row) => ({
+        label: row.label,
+        sales: Number(row.sales || 0),
+      }))
+    }
+
+    const localIso = (date: Date) => {
+      const copy = new Date(date)
+      copy.setHours(0, 0, 0, 0)
+      return new Date(copy.getTime() - copy.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+    }
+    const byDate = new Map(days.map((day) => [day.date, Number(day.sales || 0)]))
+    const cutoff = new Date()
+    cutoff.setHours(0, 0, 0, 0)
+    cutoff.setDate(cutoff.getDate() - heatmapWeeks * 7)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    if (trendDuration === '1') {
+      const points: Array<{ label: string; sales: number }> = []
+      const cursor = new Date(cutoff)
+      while (cursor <= today) {
+        points.push({
+          label: cursor.toLocaleDateString('en-KE', { day: 'numeric', month: 'short' }),
+          sales: byDate.get(localIso(cursor)) || 0,
+        })
+        cursor.setDate(cursor.getDate() + 1)
+      }
+      return points
+    }
+
+    const weeks: Array<{ label: string; sales: number }> = []
+    const cursor = new Date(cutoff)
+    cursor.setDate(cursor.getDate() - cursor.getDay())
+    while (cursor <= today) {
+      let sales = 0
+      for (let i = 0; i < 7; i += 1) {
+        const day = new Date(cursor)
+        day.setDate(cursor.getDate() + i)
+        sales += byDate.get(localIso(day)) || 0
+      }
+      weeks.push({
+        label: cursor.toLocaleDateString('en-KE', { month: 'short', day: 'numeric' }),
+        sales,
+      })
+      cursor.setDate(cursor.getDate() + 7)
+    }
+    return weeks
+  }, [data.dailyActivity, data.monthlyTrends, heatmapWeeks, trendDuration])
+
+  const salesPeriodTotal = useMemo(
+    () => salesChartPoints.reduce((sum, point) => sum + Number(point.sales || 0), 0),
+    [salesChartPoints],
+  )
+
+  const activityFeed = useMemo(
+    () =>
+      data.activityFeed.map((item) => ({
+        ...item,
+        timestamp: new Date(item.timestamp),
+      })),
+    [data.activityFeed],
+  )
+
+  const stockSeverity = data.stockSeverity
+  const kpiTrends = data.kpiTrends
+
+  const dispatchTotal = dispatchSummary.pending + dispatchSummary.dispatched + dispatchSummary.delivered
+  const dispatchRows = [
+    { name: 'Pending', value: dispatchSummary.pending, status: 'Needs action' },
+    { name: 'Dispatched', value: dispatchSummary.dispatched, status: 'In transit' },
+    { name: 'Delivered', value: dispatchSummary.delivered, status: 'Complete' },
+  ]
+  const conversionRate =
+    inventorySummary.quotationsGenerated > 0
+      ? Math.round((inventorySummary.invoicesConverted / inventorySummary.quotationsGenerated) * 100)
       : 0
 
-    return {
-      totalUsers: users.length,
-      activeUsers,
-      departments: departments.length,
-      kpis: data.kpis.length,
-      awards: data.awards.length,
-      avgPerformance,
-      pendingLeave: totalLeavePending,
-      meetingsThisMonth,
-      reportsThisMonth,
-      payrollProcessed,
-    }
-  }, [data])
+  const greetingName = currentUser?.first_name?.trim() || 'there'
 
-  const departmentRows = useMemo<DepartmentRow[]>(() => {
-    const now = new Date()
-    const users = data.users
-    const meetingSet = data.meetings.filter((m: any) => {
-      const date = new Date(m.scheduled_at || m.createdAt)
-      return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()
-    })
-
-    return departmentOrder
-      .map((name) => {
-        const departmentUsers = users.filter((u) => (u.department || 'Unassigned') === name)
-        const deptUserIds = departmentUsers.map((u) => String(u._id || (u as any).userId))
-        const deptPerformances = data.performances.filter((p: any) => deptUserIds.includes(String(p.user_id)))
-        const pendingLeave = data.leaveRequests.filter((r: any) => deptUserIds.includes(String(r.user_id)) && r.status === 'pending').length
-        const reportsThisMonth = data.reports.filter((r: any) => {
-          const userId = String(r.user_id?._id || r.user_id)
-          return deptUserIds.includes(userId)
-        }).length
-        const attendanceRecords = data.attendance.filter((a: any) => deptUserIds.includes(String(a.user_id)))
-        const attended = attendanceRecords.filter((a: any) => ['present', 'late', 'half_day'].includes(a.status)).length
-        const attendanceRate = attendanceRecords.length ? Math.round((attended / attendanceRecords.length) * 100) : 0
-        const avgPerformance = deptPerformances.length
-          ? deptPerformances.reduce((sum: number, p: any) => sum + Number(p.overall_score || 0), 0) / deptPerformances.length
-          : 0
-
-        return {
-          name,
-          headcount: departmentUsers.length,
-          avgPerformance: Number(avgPerformance.toFixed(1)),
-          pendingLeave,
-          meetingsThisMonth: meetingSet.filter((m: any) => deptUserIds.includes(String(m.organizer_id))).length,
-          reportsThisMonth,
-          attendanceRate,
-        }
-      })
-      .filter((row) => row.headcount > 0)
-      .sort((a, b) => b.headcount - a.headcount)
-  }, [data])
-
-  const performanceChart = useMemo(() => departmentRows.map((d) => ({ name: d.name, performance: d.avgPerformance })), [departmentRows])
-
-  const attentionItems = useMemo(() => {
-    const items: Array<{ label: string; value: string; tone?: string }> = []
-    const lowAttendance = departmentRows.filter((d) => d.attendanceRate > 0 && d.attendanceRate < 85)
-    if (lowAttendance.length > 0) {
-      items.push({ label: 'Attendance below 85%', value: lowAttendance.map((d) => d.name).join(', '), tone: 'text-amber-700' })
-    }
-    if (stats.pendingLeave > 0) {
-      items.push({ label: 'Pending leave requests', value: String(stats.pendingLeave), tone: 'text-blue-700' })
-    }
-    if (stats.reportsThisMonth > 0) {
-      items.push({ label: 'Reports this month', value: String(stats.reportsThisMonth), tone: 'text-emerald-700' })
-    }
-    if (items.length === 0) {
-      items.push({ label: 'System status', value: 'Stable across departments', tone: 'text-emerald-700' })
-    }
-    return items.slice(0, 3)
-  }, [departmentRows, stats.pendingLeave, stats.reportsThisMonth])
-
-  const dispatchSummary = useMemo(() => {
-    const now = new Date()
-    const monthlyInvoices = data.stockInvoices.filter((invoice: any) => {
-      const activityDate = new Date(
-        invoice.dispatch?.delivery?.arrivalTime ||
-        invoice.dispatch?.dispatchedAt ||
-        invoice.createdAt ||
-        invoice.updatedAt ||
-        0,
-      )
-      return activityDate.getMonth() === now.getMonth() && activityDate.getFullYear() === now.getFullYear()
-    })
-
-    const pendingStatuses = new Set(['not_assigned', 'assigned', 'packing', 'packed'])
-
-    const pending = monthlyInvoices.filter((invoice: any) => pendingStatuses.has(invoice.dispatch?.status || 'not_assigned')).length
-    const dispatched = monthlyInvoices.filter((invoice: any) => (invoice.dispatch?.status || '') === 'dispatched').length
-    const delivered = monthlyInvoices.filter((invoice: any) => (invoice.dispatch?.status || '') === 'delivered').length
-
-    return { pending, dispatched, delivered }
-  }, [data.stockInvoices])
-
-  const attendanceToday = useMemo(() => {
-    const now = new Date()
-    const isSameDay = (value: any) => {
-      const date = new Date(value)
-      return date.getDate() === now.getDate() && date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()
-    }
-
-    const todayRecords = data.attendance.filter((row: any) => isSameDay(row.date || row.createdAt))
-    const checkedIn = todayRecords.filter((row: any) => Boolean(row.checkIn)).length
-    const checkedOut = todayRecords.filter((row: any) => Boolean(row.checkOut)).length
-    const pendingCheckOut = Math.max(0, checkedIn - checkedOut)
-
-    return {
-      checkedIn,
-      checkedOut,
-      pendingCheckOut,
-    }
-  }, [data.attendance])
-
-  const inventorySummary = useMemo(() => {
-    const quotationsGenerated = data.stockQuotations.length
-    const invoicesConverted = data.stockInvoices.filter((invoice: any) => invoice.quotationId || invoice.quotationNumber).length
-
-    const salesByUser = new Map<string, number>()
-    data.stockInvoices.forEach((invoice: any) => {
-      const actorId = String(invoice.createdBy || '')
-      if (!actorId) return
-      salesByUser.set(actorId, (salesByUser.get(actorId) || 0) + Number(invoice.subTotal || 0))
-    })
-
-    let leadingSalesPerson = 'No sales data'
-    let leadingSalesAmount = 0
-    for (const [userId, amount] of salesByUser.entries()) {
-      if (amount > leadingSalesAmount) {
-        const user = data.users.find((u) => String(u._id) === userId)
-        leadingSalesPerson = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email : userId
-        leadingSalesAmount = amount
-      }
-    }
-
-    return {
-      quotationsGenerated,
-      invoicesConverted,
-      leadingSalesPerson,
-      leadingSalesAmount,
-    }
-  }, [data.stockInvoices, data.stockQuotations, data.users])
-
-  const salesAnalytics = useMemo(() => {
-    const products = data.stockProducts || []
-    const mostInStock = products
-      .slice()
-      .sort((a: any, b: any) => Number(b.currentQuantity || 0) - Number(a.currentQuantity || 0))
-      .slice(0, 5)
-
-    const outOfStock = products
-      .filter((product: any) => Number(product.currentQuantity || 0) <= 0)
-      .sort((a: any, b: any) => String(a.name || '').localeCompare(String(b.name || '')))
-
-    const salesByProduct = new Map<string, { productName: string; soldQuantity: number; salesAmount: number }>()
-    data.stockInvoices.forEach((invoice: any) => {
-      const items = Array.isArray(invoice.items) ? invoice.items : []
-      items.forEach((item: any) => {
-        const key = String(item.productId || item.productName || '')
-        if (!key) return
-        const existing = salesByProduct.get(key) || {
-          productName: String(item.productName || item.product?.name || item.name || 'Unknown'),
-          soldQuantity: 0,
-          salesAmount: 0,
-        }
-        existing.soldQuantity += Number(item.quantity || 0)
-        existing.salesAmount += Number(item.lineTotal || 0)
-        salesByProduct.set(key, existing)
-      })
-    })
-
-    const topSelling = Array.from(salesByProduct.values())
-      .sort((a, b) => b.soldQuantity - a.soldQuantity)
-      .slice(0, 5)
-
-    return {
-      mostInStock,
-      outOfStock,
-      topSelling,
-    }
-  }, [data.stockInvoices, data.stockProducts])
-
-  const monthlyTrends = useMemo(() => {
-    const now = new Date()
-    const months = Array.from({ length: Number(trendDuration) }, (_, index) => {
-      const date = new Date(now.getFullYear(), now.getMonth() - (Number(trendDuration) - 1 - index), 1)
-      return {
-        key: `${date.getFullYear()}-${date.getMonth()}`,
-        label: date.toLocaleString('default', { month: 'short' }),
-        meetings: 0,
-        reports: 0,
-        invoices: 0,
-      }
-    })
-
-    const indexByMonth = new Map(months.map((month, index) => [month.key, index]))
-
-    const attach = (value: any, field: 'meetings' | 'reports' | 'invoices') => {
-      const date = new Date(value)
-      if (Number.isNaN(date.getTime())) return
-      const key = `${date.getFullYear()}-${date.getMonth()}`
-      const monthIndex = indexByMonth.get(key)
-      if (monthIndex === undefined) return
-      months[monthIndex][field] += 1
-    }
-
-    data.meetings.forEach((meeting: any) => attach(meeting.scheduled_at || meeting.createdAt, 'meetings'))
-    data.reports.forEach((report: any) => attach(report.createdAt || report.created_at, 'reports'))
-    data.stockInvoices.forEach((invoice: any) => attach(invoice.createdAt || invoice.updatedAt, 'invoices'))
-
-    return months
-  }, [data.meetings, data.reports, data.stockInvoices, trendDuration])
-
-  const quickActions = useMemo(() => {
-    const actions = [
-      { label: 'New invoice', description: 'Create stock invoice', href: '/admin/stock/invoices' },
-      { label: 'Add product', description: 'Open stock products', href: '/admin/stock' },
-      { label: 'Dispatch', description: 'Manage dispatch pipeline', href: '/admin/stock/dispatch' },
-      { label: 'Add staff', description: 'Register employee account', href: '/admin/users' },
-      { label: 'Review leave', description: 'Pending leave requests', href: '/admin/leave' },
-      { label: 'Open reports', description: 'View submitted reports', href: '/admin/reports' },
-    ]
-
-    const query = dashboardSearch.trim().toLowerCase()
-    if (!query) return actions.slice(0, 4)
-    return actions.filter((item) => `${item.label} ${item.description}`.toLowerCase().includes(query)).slice(0, 6)
-  }, [dashboardSearch])
-
-  const activityFeed = useMemo(() => {
-    const items: Array<{ label: string; detail: string; timestamp: Date; href: string }> = []
-
-    data.stockInvoices.slice(0, 8).forEach((invoice: any) => {
-      const time = new Date(invoice.updatedAt || invoice.createdAt || 0)
-      if (Number.isNaN(time.getTime())) return
-      const invoiceNumber = invoice.invoiceNumber || invoice.number || String(invoice._id || '').slice(-6)
-      items.push({
-        label: `Invoice ${invoiceNumber}`,
-        detail: 'Updated in stock billing',
-        timestamp: time,
-        href: '/admin/stock/invoices',
-      })
-    })
-
-    data.leaveRequests.slice(0, 8).forEach((request: any) => {
-      const time = new Date(request.updatedAt || request.createdAt || 0)
-      if (Number.isNaN(time.getTime())) return
-      items.push({
-        label: `Leave ${request.status || 'request'}`,
-        detail: `${request.leave_type || 'Leave'} request updated`,
-        timestamp: time,
-        href: '/admin/leave',
-      })
-    })
-
-    data.meetings.slice(0, 8).forEach((meeting: any) => {
-      const time = new Date(meeting.updatedAt || meeting.scheduled_at || meeting.createdAt || 0)
-      if (Number.isNaN(time.getTime())) return
-      items.push({
-        label: meeting.title || 'Meeting update',
-        detail: 'Meeting activity captured',
-        timestamp: time,
-        href: '/admin/meetings',
-      })
-    })
-
-    return items.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()).slice(0, 6)
-  }, [data.leaveRequests, data.meetings, data.stockInvoices])
-
-  const stockSeverity = useMemo(() => {
-    const products = data.stockProducts || []
-    const critical = products.filter((product: any) => Number(product.currentQuantity || 0) <= 0)
-    const warning = products.filter((product: any) => Number(product.currentQuantity || 0) > 0 && Number(product.currentQuantity || 0) < 5)
-    const low = products.filter((product: any) => Number(product.currentQuantity || 0) >= 5 && Number(product.currentQuantity || 0) < 10)
-    return { critical, warning, low }
-  }, [data.stockProducts])
-
-  const kpiTrends = useMemo(() => {
-    const now = new Date()
-    const thisMonth = now.getMonth()
-    const thisYear = now.getFullYear()
-    const previousMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-    const previousMonth = previousMonthDate.getMonth()
-    const previousYear = previousMonthDate.getFullYear()
-
-    const countInMonth = (rows: any[], valueGetter: (row: any) => any) => {
-      let current = 0
-      let previous = 0
-      rows.forEach((row) => {
-        const value = valueGetter(row)
-        const date = new Date(value)
-        if (Number.isNaN(date.getTime())) return
-        const month = date.getMonth()
-        const year = date.getFullYear()
-        if (month === thisMonth && year === thisYear) current += 1
-        if (month === previousMonth && year === previousYear) previous += 1
-      })
-      return { current, previous }
-    }
-
-    const newEmployees = countInMonth(data.users, (row) => row.createdAt)
-    const leaveRequests = countInMonth(data.leaveRequests, (row) => row.createdAt || row.updatedAt)
-    const meetings = countInMonth(data.meetings, (row) => row.scheduled_at || row.createdAt)
-    const invoices = countInMonth(data.stockInvoices, (row) => row.createdAt || row.updatedAt)
-
-    const toPercentDelta = (current: number, previous: number) => {
-      if (previous <= 0) {
-        if (current <= 0) return 0
-        return 100
-      }
-      return Math.round(((current - previous) / previous) * 100)
-    }
-
-    return {
-      employees: toPercentDelta(newEmployees.current, newEmployees.previous),
-      leave: toPercentDelta(leaveRequests.current, leaveRequests.previous),
-      meetings: toPercentDelta(meetings.current, meetings.previous),
-      invoices: toPercentDelta(invoices.current, invoices.previous),
-    }
-  }, [data.leaveRequests, data.meetings, data.stockInvoices, data.users])
-
-  const dispatchChartData = useMemo(() => [
-    { name: 'Pending', value: dispatchSummary.pending, color: brand.accent },
-    { name: 'Dispatched', value: dispatchSummary.dispatched, color: brand.primary },
-    { name: 'Delivered', value: dispatchSummary.delivered, color: brand.secondary },
-  ], [brand.accent, brand.primary, brand.secondary, dispatchSummary.delivered, dispatchSummary.dispatched, dispatchSummary.pending])
-
-  const topPurchasingClients = useMemo(() => {
-    const clientSpending = new Map<string, { name: string; spent: number; invoiceCount: number }>()
-    data.stockInvoices.forEach((invoice: any) => {
-      const rawClient = invoice.clientName || invoice.client || invoice.buyer || 'Unknown'
-      const clientName = typeof rawClient === 'string'
-        ? rawClient
-        : typeof rawClient === 'number'
-          ? String(rawClient)
-          : rawClient && typeof rawClient === 'object'
-            ? String(rawClient.name || rawClient.companyName || rawClient.number || rawClient.location || rawClient.email || 'Unknown')
-            : 'Unknown'
-      const key = clientName.toLowerCase()
-      const spent = Number(invoice.subTotal || 0)
-      if (!clientSpending.has(key)) {
-        clientSpending.set(key, { name: clientName, spent: 0, invoiceCount: 0 })
-      }
-      const existing = clientSpending.get(key)!
-      existing.spent += spent
-      existing.invoiceCount += 1
-    })
-
-    return Array.from(clientSpending.values())
-      .sort((a, b) => b.spent - a.spent)
-      .slice(0, 8)
-  }, [data.stockInvoices])
-
-  const stockTrends = useMemo(() => {
-    return salesAnalytics.topSelling
-      .slice(0, 6)
-      .map((item) => ({
-        name: item.productName,
-        soldQuantity: item.soldQuantity,
-      }))
-  }, [salesAnalytics.topSelling])
-
-  const totalAlerts = stockSeverity.critical.length + stats.pendingLeave
+  const topPurchasingClients = data.topPurchasingClients
 
   if (onTheGoReady && onTheGo) {
     return <OnTheGoHub />
   }
 
-  if (loading && !data.users.length) {
+  if (loading && !lastUpdatedAt) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="animate-pulse space-y-4 w-full max-w-4xl px-6">
-          <div className="h-8 bg-slate-200 rounded w-72" />
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="h-28 bg-slate-200 rounded-2xl" />
-            ))}
-          </div>
-          <div className="grid xl:grid-cols-[1.7fr_1fr] gap-4">
-            <div className="h-96 bg-slate-200 rounded-2xl" />
-            <div className="h-96 bg-slate-200 rounded-2xl" />
+      <div className="min-h-screen bg-[#f6f7fb] p-4 lg:p-6">
+        <div className="mx-auto w-full max-w-[1600px] animate-pulse space-y-4">
+          <div className="h-8 w-64 rounded-lg bg-slate-200" />
+          <div className="grid gap-3 xl:grid-cols-12">
+            <div className="space-y-3 xl:col-span-8">
+              <div className="h-20 rounded-2xl border border-slate-200 bg-white" />
+              <div className="grid grid-cols-5 gap-3">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div key={i} className="h-24 rounded-2xl border border-slate-200 bg-white" />
+                ))}
+              </div>
+              <div className="h-[228px] rounded-2xl border border-slate-200 bg-white" />
+            </div>
+            <div className="space-y-3 xl:col-span-4">
+              <div className="h-[228px] rounded-2xl border border-slate-200 bg-white" />
+              <div className="h-40 rounded-2xl border border-slate-200 bg-white" />
+            </div>
           </div>
         </div>
       </div>
@@ -691,54 +442,38 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div
-      className="min-h-screen overflow-x-hidden p-2 sm:p-4 lg:p-6 bg-slate-50"
-      style={{
-        color: brand.text,
-      }}
+    <MotionConfig reducedMotion="user">
+    <motion.div
+      className="min-h-screen overflow-x-hidden bg-[#f6f7fb] p-3 sm:p-4 lg:p-5"
+      style={{ color: brand.text }}
+      initial="hidden"
+      animate="show"
+      variants={stagger}
     >
-      <div className="mx-auto w-full max-w-[1600px] space-y-4 lg:space-y-6">
-        <div
-          className="rounded-2xl border px-4 sm:px-5 py-3 sm:py-4 shadow-sm"
-          style={{
-            borderColor: hexToRgba(brand.primary, 0.2),
-            background: `linear-gradient(120deg, ${hexToRgba(brand.primary, 0.1)} 0%, #ffffff 55%)`,
-          }}
-        >
-          <div className="flex flex-col gap-3 lg:gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="min-w-0">
-              <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">Administration</p>
-              <p className="mt-1 text-xs sm:text-sm text-slate-600">Here&apos;s what&apos;s happening today across {brand.name}.</p>
-              <div className="mt-2 sm:mt-3 flex flex-wrap items-center gap-1.5 sm:gap-2">
-                <Badge variant="secondary" className="bg-white/80 text-slate-700 text-xs">{stats.activeUsers} active staff</Badge>
-                <Badge variant="secondary" className="bg-white/80 text-slate-700 text-xs">{stats.pendingLeave} leave pending</Badge>
-                <Badge variant="secondary" className="bg-white/80 text-slate-700 text-xs">{data.stockInvoices.length} invoices</Badge>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 sm:justify-end">
-              <Badge variant="outline" className="gap-1.5 border-slate-300 bg-white text-slate-700 text-xs sm:text-sm hidden sm:flex">
-                <Clock3 className="h-3.5 w-3.5" />
-                {lastUpdatedAt ? `Last updated ${formatTime(lastUpdatedAt)}` : 'Updating...'}
-              </Badge>
-              <Button variant="outline" size="sm" className="bg-white text-slate-700" onClick={loadDashboard}>
-                <RefreshCw className={`mr-1.5 h-3.5 w-3.5 sm:h-4 sm:w-4 sm:mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-                <span className="hidden sm:inline">Refresh</span>
-              </Button>
-              <DashboardWidgetsMenu order={widgetOrder} onChange={setWidgetOrder} />
-              <Button variant="outline" size="sm" className="gap-1.5 bg-white">
-                <Bell className="h-3.5 w-3.5" />
-                {totalAlerts > 0 && <span className="rounded-full bg-rose-500 px-1 text-[9px] font-semibold text-white">{totalAlerts}</span>}
-              </Button>
-              <Link href="/admin/users">
-                <Button size="sm" className="gap-1.5 text-white" style={{ backgroundColor: brand.primary }}>
-                  <UserPlus size={14} />
-                  <span className="hidden sm:inline">Add Staff</span>
-                </Button>
-              </Link>
-            </div>
+      <div className="mx-auto w-full max-w-[1600px] space-y-4">
+        <motion.div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between" variants={fadeUp}>
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl">
+              Welcome back, {greetingName}
+            </h1>
+            <p className="mt-1 text-sm text-slate-500">
+              See operational activity, sales, and stock risk across {brand.name}.
+            </p>
           </div>
-        </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="hidden items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-500 sm:inline-flex">
+              <Clock3 className="h-3.5 w-3.5" />
+              {lastUpdatedAt ? `Updated ${formatTime(lastUpdatedAt)}` : 'Updating...'}
+            </span>
+            <DashboardWidgetsMenu order={widgetOrder} onChange={setWidgetOrder} />
+            <Link href="/admin/users">
+              <Button size="sm" className="gap-1.5 rounded-full text-white" style={{ backgroundColor: brand.primary }}>
+                <UserPlus size={14} />
+                Add Staff
+              </Button>
+            </Link>
+          </div>
+        </motion.div>
 
         {error && (
           <Card className="border-rose-200 bg-rose-50">
@@ -756,466 +491,344 @@ export default function AdminDashboard() {
 
         <SalesWorkflowTour pathname="/admin" />
 
-        {/* Main grid */}
-        <div data-tour="wt-dashboard" className="grid gap-4 lg:gap-6 xl:grid-cols-[1.65fr_1fr]">
-          <div className="space-y-4 lg:space-y-6">
-            {leftWidgets.map((widgetId) => {
-              if (widgetId === 'hr-overview') {
-                return (
-            <div key={widgetId} className="grid grid-cols-4 gap-1.5 sm:grid-cols-5 sm:gap-2 lg:grid-cols-5">
-              <MetricCard accentColor={brand.primary} trend={kpiTrends.employees} label="Total Employees" mobileLabel="Employees" value={stats.totalUsers} sublabel={`${stats.activeUsers} active`} mobileSublabel={`${stats.activeUsers} active`} icon={<Users className="h-5 w-5" />} />
-              <MetricCard className="hidden sm:block" accentColor={brand.secondary} trend={kpiTrends.meetings} label="Meetings" mobileLabel="Meet" value={stats.meetingsThisMonth} sublabel="Scheduled this month" mobileSublabel="month" icon={<ClipboardCheck className="h-5 w-5" />} />
-              <MetricCard accentColor={brand.accent} trend={kpiTrends.leave * -1} label="Pending Leave" mobileLabel="Leave" value={stats.pendingLeave} sublabel="Requires review" mobileSublabel="pending" icon={<CalendarDays className="h-5 w-5" />} />
-              <MetricCard accentColor={brand.primary} trend={kpiTrends.invoices} label="Invoices" mobileLabel="Invoices" value={data.stockInvoices.length} sublabel="Billing activity" mobileSublabel="bills" icon={<DollarSign className="h-5 w-5" />} />
-              <MetricCard accentColor={brand.secondary} trend={0} label="Quotations" mobileLabel="Quotation" value={data.stockQuotations.length} sublabel="Stock quotations" mobileSublabel="quotes" icon={<FileText className="h-5 w-5" />} />
-            </div>
-                )
-              }
+        <div data-tour="wt-dashboard" className="space-y-4">
+          <motion.div variants={fadeUp} className="grid items-stretch gap-3 xl:grid-cols-12">
+            <div className="flex min-w-0 flex-col gap-3 xl:col-span-8">
+              {isVisible('hr-overview') ? (
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+                  <MetricCard trend={kpiTrends.employees} label="Total Employees" value={stats.totalUsers} sublabel={`${stats.activeUsers} active`} icon={<Users className="h-4 w-4" />} />
+                  <MetricCard trend={0} label="Quotations" value={stats.quotations} sublabel="Open pipeline" icon={<FileText className="h-4 w-4" />} />
+                  <MetricCard trend={kpiTrends.invoices} label="Invoices" value={stats.invoices} sublabel="Billing" icon={<DollarSign className="h-4 w-4" />} />
+                  <MetricCard trend={0} label="Dispatches" value={dispatchTotal} sublabel={`${dispatchSummary.pending} pending`} icon={<Truck className="h-4 w-4" />} />
+                  <MetricCard className="col-span-2 sm:col-span-1 lg:col-span-1" trend={kpiTrends.leave * -1} label="Pending Leave" value={stats.pendingLeave} sublabel="Requires review" icon={<CalendarDays className="h-4 w-4" />} />
+                </div>
+              ) : null}
 
-              if (widgetId === 'sales-analytics') {
-                return (
-            <div key={widgetId} className="grid gap-4 xl:grid-cols-2">
-              <Card className="rounded-2xl border-slate-200 bg-white shadow-sm">
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <CardTitle className="text-base sm:text-lg font-semibold text-slate-900">Operational trends</CardTitle>
-                    <Select value={trendDuration} onValueChange={(value) => setTrendDuration(value as '1' | '3' | '6')}>
-                      <SelectTrigger className="w-32 h-9">
-                        <SelectValue placeholder="Duration" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="1">1 month</SelectItem>
-                        <SelectItem value="3">3 months</SelectItem>
-                        <SelectItem value="6">6 months</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </CardHeader>
-                <CardContent className="h-44 sm:h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={monthlyTrends}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="label" tickLine={false} axisLine={false} />
-                      <YAxis tickLine={false} axisLine={false} />
-                      <Tooltip />
-                      <Line type="monotone" dataKey="invoices" stroke={brand.primary} strokeWidth={2.5} dot={false} />
-                      <Line type="monotone" dataKey="meetings" stroke={brand.secondary} strokeWidth={2} dot={false} />
-                      <Line type="monotone" dataKey="reports" stroke={brand.accent} strokeWidth={2} dot={false} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
+              <div className="grid min-h-0 flex-1 items-stretch gap-3 lg:grid-cols-5">
+                {isVisible('sales-analytics') ? (
+                  <DashCard
+                    className="lg:col-span-3"
+                    title="Sales performance"
+                    subtitle={`KES ${Math.round(salesPeriodTotal).toLocaleString()} invoice revenue in this period`}
+                    action={
+                      <div className="flex rounded-full border border-slate-200 bg-slate-50 p-0.5 text-xs">
+                        {([
+                          ['1', '30D'],
+                          ['3', '3M'],
+                          ['6', '6M'],
+                        ] as const).map(([value, label]) => (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={() => setTrendDuration(value)}
+                            className={`rounded-full px-2.5 py-1 font-medium transition ${
+                              trendDuration === value ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    }
+                    bodyClassName="h-[208px]"
+                  >
+                    {salesChartPoints.length === 0 || salesPeriodTotal === 0 ? (
+                      <EmptyChart label="No sales recorded in this period." />
+                    ) : (
+                      <SalesPerformanceChart data={salesChartPoints} fill={brand.primary} />
+                    )}
+                  </DashCard>
+                ) : null}
 
-              <Card className="rounded-2xl border-slate-200 bg-white shadow-sm">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base sm:text-lg font-semibold text-slate-900">Sales performance</CardTitle>
-                </CardHeader>
-                <CardContent className="h-40 sm:h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={performanceChart}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="name" tickLine={false} axisLine={false} />
-                      <YAxis tickLine={false} axisLine={false} />
-                      <Tooltip />
-                      <Bar dataKey="performance" radius={[8, 8, 0, 0]} fill={brand.primary} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-            </div>
-                )
-              }
-
-              if (widgetId === 'dispatch-summary') {
-                return (
-            <div key={widgetId} className="grid gap-4 xl:grid-cols-2">
-              <Card className="rounded-2xl border-slate-200 bg-white shadow-sm">
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <CardTitle className="text-base sm:text-lg font-semibold text-slate-900">Dispatch activity</CardTitle>
-                    <Link href="/admin/stock/dispatch"><Button variant="outline" size="sm">Open dispatch</Button></Link>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_auto] sm:items-center">
-                    <div className="space-y-2">
-                      {dispatchChartData.map((item) => (
-                        <div key={item.name} className="rounded-xl border border-slate-200 bg-slate-50 p-2.5">
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-slate-700">{item.name}</span>
-                            <span className="font-semibold text-slate-900">{item.value}</span>
-                          </div>
-                          <Progress value={dispatchChartData.reduce((sum, entry) => sum + entry.value, 0) === 0 ? 0 : (item.value / dispatchChartData.reduce((sum, entry) => sum + entry.value, 0)) * 100} className="mt-2 h-2" />
-                        </div>
-                      ))}
-                    </div>
-                    <div className="hidden h-32 w-32 sm:block sm:h-40 sm:w-40">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie data={dispatchChartData} innerRadius={46} outerRadius={70} paddingAngle={2} dataKey="value">
-                            {dispatchChartData.map((entry) => (
-                              <Cell key={entry.name} fill={entry.color} />
-                            ))}
-                          </Pie>
-                          <Tooltip />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="rounded-2xl border-slate-200 bg-white shadow-sm">
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-base sm:text-lg font-semibold text-slate-900">Recent activity</CardTitle>
-                    <Activity className="h-4 w-4 text-slate-400" />
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {activityFeed.length === 0 ? (
-                    <p className="text-sm text-slate-500">No recent updates found.</p>
-                  ) : (
-                    activityFeed.map((item, index) => (
-                      <Link key={`${item.label}-${index}`} href={item.href}>
-                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 transition hover:bg-white">
-                          <div className="flex items-center justify-between gap-3">
+                {isVisible('dispatch-summary') ? (
+                  <DashCard
+                    className="min-h-0 lg:col-span-2"
+                    title="Recent activity"
+                    action={<Activity className="h-4 w-4 text-slate-400" />}
+                    bodyClassName="h-[208px] overflow-y-auto"
+                  >
+                    <div className="space-y-0.5">
+                      {activityFeed.length === 0 ? (
+                        <EmptyChart label="No recent updates found." />
+                      ) : (
+                        activityFeed.slice(0, 8).map((item, index) => (
+                          <Link key={`${item.label}-${index}`} href={item.href} className="flex items-center justify-between gap-3 rounded-lg px-1 py-1.5 transition hover:bg-slate-50">
                             <p className="truncate text-sm font-medium text-slate-800">{item.label}</p>
-                            <span className="shrink-0 text-[11px] text-slate-500">{formatRelativeTime(item.timestamp)}</span>
-                          </div>
-                          <p className="mt-0.5 truncate text-xs text-slate-500">{item.detail}</p>
-                        </div>
-                      </Link>
-                    ))
-                  )}
-                </CardContent>
-              </Card>
+                            <span className="shrink-0 text-[11px] text-slate-400">{formatRelativeTime(item.timestamp)}</span>
+                          </Link>
+                        ))
+                      )}
+                    </div>
+                  </DashCard>
+                ) : null}
+              </div>
             </div>
-                )
-              }
 
-              if (widgetId === 'departments') {
-                return (
-            <div key={widgetId} className="grid gap-4 lg:grid-cols-2">
-              <Card className="rounded-2xl border-slate-200 bg-white shadow-sm">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base sm:text-lg font-semibold text-slate-900">Department snapshot</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2">
-                    {departmentRows.map((dept) => (
-                      <div key={dept.name} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                        <div className="mb-2 flex items-start justify-between gap-2">
-                          <div>
-                            <p className="font-semibold text-slate-900 text-sm">{dept.name}</p>
-                            <p className="text-xs text-slate-500">{dept.headcount} members</p>
-                          </div>
-                          <Badge variant="outline" className="text-[10px]">{dept.reportsThisMonth} reports</Badge>
+            <div className="flex min-w-0 flex-col gap-3 xl:col-span-4">
+              {isVisible('sales-analytics') ? (
+                <DashCard title="Operational trends" bodyClassName="px-0 pb-0">
+                  <div className="grid grid-cols-2 divide-x divide-y divide-slate-100 border-t border-slate-100">
+                    <StatCell label="Invoices converted" value={inventorySummary.invoicesConverted} />
+                    <StatCell label="Conversion rate" value={`${conversionRate}%`} />
+                    <StatCell label="Top seller" value={inventorySummary.leadingSalesPerson} />
+                    <StatCell label="Top sales value" value={`KES ${Math.round(inventorySummary.leadingSalesAmount).toLocaleString()}`} />
+                  </div>
+                </DashCard>
+              ) : null}
+
+              {isVisible('stock-summary') ? (
+                <DashCard
+                  className="min-h-0 flex-1"
+                  title="Purchase velocity"
+                  subtitle="Top products · last 12 weeks"
+                >
+                  <PurchaseVelocityHeatmap
+                    weeks={data.purchaseVelocity.weeks}
+                    products={data.purchaseVelocity.products}
+                    primary={brand.primary}
+                    compact
+                  />
+                </DashCard>
+              ) : null}
+            </div>
+          </motion.div>
+
+          {isVisible('dispatch-summary') || isVisible('departments') || isVisible('attention') ? (
+            <motion.div variants={fadeUp} className="grid items-stretch gap-3 md:grid-cols-2 xl:grid-cols-12">
+              {isVisible('dispatch-summary') ? (
+                <DashCard
+                  className="xl:col-span-3"
+                  title="Dispatch activity"
+                  action={
+                    <Link href="/admin/stock/dispatch">
+                      <Button variant="outline" size="sm" className="h-7 rounded-full px-3 text-xs">Open</Button>
+                    </Link>
+                  }
+                >
+                  <div className="space-y-2">
+                  {dispatchRows.map((item) => {
+                    const pct = dispatchTotal === 0 ? 0 : Math.round((item.value / dispatchTotal) * 100)
+                    return (
+                      <div key={item.name} className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 px-3 py-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-slate-800">{item.name}</p>
+                          <p className="text-[11px] text-slate-400">{item.status}</p>
                         </div>
-                        <div className="space-y-2">
-                          <div>
-                            <div className="mb-1 flex items-center justify-between text-[10px] text-slate-500"><span>Attendance</span><span>{dept.attendanceRate}%</span></div>
-                            <Progress value={dept.attendanceRate} className="h-2" />
-                          </div>
-                          <div>
-                            <div className="mb-1 flex items-center justify-between text-[10px] text-slate-500"><span>Performance</span><span>{dept.avgPerformance}</span></div>
-                            <Progress value={Math.min(100, Math.round((dept.avgPerformance || 0) * 10))} className="h-2" />
-                          </div>
-                        </div>
-                        <div className="mt-2 grid grid-cols-2 gap-2 text-[10px]">
-                          <StatPill label="Leave" value={`${dept.pendingLeave}`} />
-                          <StatPill label="Meetings" value={`${dept.meetingsThisMonth}`} />
+                        <div className="text-right">
+                          <p className="text-sm font-semibold text-slate-900">{item.value}</p>
+                          <p className="text-[11px] text-slate-400">{pct}%</p>
                         </div>
                       </div>
-                    ))}
+                    )
+                  })}
                   </div>
-                </CardContent>
-              </Card>
+                </DashCard>
+              ) : null}
 
-              <Card className="rounded-2xl border-slate-200 bg-white shadow-sm">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base sm:text-lg font-semibold text-slate-900">Top purchasing clients</CardTitle>
-                </CardHeader>
-                <CardContent>
+              {isVisible('departments') ? (
+                <DashCard className="xl:col-span-3" title="Top purchasing clients">
                   {topPurchasingClients.length === 0 ? (
-                    <p className="text-sm text-slate-500">No purchasing data yet.</p>
+                    <EmptyChart label="No purchasing data yet." />
                   ) : (
-                    <div className="space-y-2">
-                      {topPurchasingClients.map((client, index) => (
-                        <div key={`${client.name}-${index}`} className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                    <div className="divide-y divide-slate-100">
+                      {topPurchasingClients.slice(0, 5).map((client, index) => (
+                        <div key={`${client.name}-${index}`} className="flex items-center justify-between py-2 first:pt-0 last:pb-0">
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-sm font-medium text-slate-900">{client.name}</p>
                             <p className="text-xs text-slate-500">{client.invoiceCount} invoices</p>
                           </div>
-                          <div className="text-right pl-2">
-                            <p className="text-sm font-semibold text-slate-900">KES {Math.round(client.spent).toLocaleString()}</p>
-                          </div>
+                          <p className="pl-3 text-sm font-semibold tabular-nums text-slate-900">KES {Math.round(client.spent).toLocaleString()}</p>
                         </div>
                       ))}
                     </div>
                   )}
-                </CardContent>
-              </Card>
-            </div>
-                )
-              }
+                </DashCard>
+              ) : null}
 
-              return null
-            })}
-          </div>
-
-          <div className="space-y-4 lg:space-y-6">
-            {rightWidgets.map((widgetId) => {
-              if (widgetId === 'stock-summary') {
-                return (
-            <Card key={widgetId} className="overflow-hidden rounded-2xl border-slate-200 bg-white shadow-sm">
-              <div className="border-b border-slate-200 bg-slate-50 px-5 py-4">
-                <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">Inventory insights</p>
-                <h2 className="mt-1 text-lg font-semibold text-slate-900">Summary</h2>
-              </div>
-              <CardContent className="space-y-4 p-5">
-                <div className="grid grid-cols-2 gap-3">
-                  <SidebarMetric accentColor={brand.primary} label="Quotations" value={inventorySummary.quotationsGenerated} />
-                  <SidebarMetric accentColor={brand.secondary} label="Invoices Converted" value={inventorySummary.invoicesConverted} />
-                  <SidebarMetric accentColor={brand.accent} label="Top Seller" value={inventorySummary.leadingSalesPerson} />
-                  <SidebarMetric accentColor={brand.primary} label="Top Sales Value" value={`KES ${Math.round(inventorySummary.leadingSalesAmount).toLocaleString()}`} />
-                </div>
-
-                <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3.5">
-                  <InsightRow label="Out-of-stock ratio" value={`${data.stockProducts.length ? Math.round((stockSeverity.critical.length / data.stockProducts.length) * 100) : 0}%`} progress={data.stockProducts.length ? (stockSeverity.critical.length / data.stockProducts.length) * 100 : 0} />
-                  <InsightRow label="Quotation conversion" value={`${inventorySummary.quotationsGenerated ? Math.round((inventorySummary.invoicesConverted / inventorySummary.quotationsGenerated) * 100) : 0}%`} progress={inventorySummary.quotationsGenerated ? (inventorySummary.invoicesConverted / inventorySummary.quotationsGenerated) * 100 : 0} />
-                  <InsightRow label="Attendance checkout completion" value={`${attendanceToday.checkedIn ? Math.round((attendanceToday.checkedOut / attendanceToday.checkedIn) * 100) : 0}%`} progress={attendanceToday.checkedIn ? (attendanceToday.checkedOut / attendanceToday.checkedIn) * 100 : 0} />
-                </div>
-
-                <div className="rounded-xl border border-slate-200 bg-white p-3.5">
-                  <div className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-700">
-                    <PackageCheck className="h-4 w-4" />
-                    Stock quick links
+              {isVisible('attention') ? (
+                <DashCard className="xl:col-span-3" title="Stock risk center" action={<TriangleAlert className="h-4 w-4 text-slate-400" />}>
+                  <div className="space-y-2">
+                    <RiskRow label="Critical (0 stock)" count={stockSeverity.critical.length} tone="rose" items={stockSeverity.critical} />
+                    <RiskRow label="Warning (< 5)" count={stockSeverity.warning.length} tone="amber" items={stockSeverity.warning} />
+                    <RiskRow label="Low stock (< 10)" count={stockSeverity.low.length} tone="blue" items={stockSeverity.low} />
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Link href="/admin/stock/quotations"><Button variant="secondary" className="w-full justify-start">Quotations</Button></Link>
-                    <Link href="/admin/stock/sales-orders"><Button variant="secondary" className="w-full justify-start">Sales orders</Button></Link>
-                    <Link href="/admin/stock/invoices"><Button variant="secondary" className="w-full justify-start">Invoices</Button></Link>
-                    <Link href="/admin/stock/dispatch"><Button variant="secondary" className="w-full justify-start">Dispatch</Button></Link>
-                    <Link href="/admin/stock/sales"><Button variant="secondary" className="w-full justify-start">Sales</Button></Link>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-                )
-              }
+                </DashCard>
+              ) : null}
 
-              if (widgetId === 'attention') {
-                return (
-            <div key={widgetId} className="space-y-4">
-            <Card className="rounded-2xl border-slate-200 bg-white shadow-sm">
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg font-semibold text-slate-900">Stock risk center</CardTitle>
-                  <TriangleAlert className="h-4 w-4 text-slate-400" />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <Accordion type="single" collapsible defaultValue="critical" className="w-full space-y-2">
-                  <AccordionItem value="critical" className="rounded-xl border border-rose-200 bg-rose-50 px-3">
-                    <AccordionTrigger className="py-3 text-sm font-medium text-rose-700 hover:no-underline">
-                      Critical (0 stock) • {stockSeverity.critical.length}
-                    </AccordionTrigger>
-                    <AccordionContent className="pb-3">
-                      <SeverityList items={stockSeverity.critical} tone="critical" />
-                    </AccordionContent>
-                  </AccordionItem>
-
-                  <AccordionItem value="warning" className="rounded-xl border border-amber-200 bg-amber-50 px-3">
-                    <AccordionTrigger className="py-3 text-sm font-medium text-amber-700 hover:no-underline">
-                      Warning (&lt; 5) • {stockSeverity.warning.length}
-                    </AccordionTrigger>
-                    <AccordionContent className="pb-3">
-                      <SeverityList items={stockSeverity.warning} tone="warning" />
-                    </AccordionContent>
-                  </AccordionItem>
-
-                  <AccordionItem value="low" className="rounded-xl border border-blue-200 bg-blue-50 px-3">
-                    <AccordionTrigger className="py-3 text-sm font-medium text-blue-700 hover:no-underline">
-                      Low stock (&lt; 10) • {stockSeverity.low.length}
-                    </AccordionTrigger>
-                    <AccordionContent className="pb-3">
-                      <SeverityList items={stockSeverity.low} tone="low" />
-                    </AccordionContent>
-                  </AccordionItem>
-                </Accordion>
-              </CardContent>
-            </Card>
-
-            <Accordion type="single" collapsible className="w-full">
-              <AccordionItem value="stock-trend" className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <AccordionTrigger className="px-5 py-4 text-left hover:no-underline">
-                  <div className="flex w-full items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">Analytics</p>
-                      <h3 className="text-base sm:text-lg font-semibold text-slate-900">Stock trend centre</h3>
+              {isVisible('departments') ? (
+                <DashCard className="xl:col-span-3" title="Department snapshot">
+                  {departmentRows.length === 0 ? (
+                    <EmptyChart label="No departments to show yet." />
+                  ) : (
+                    <div className="space-y-2">
+                      {departmentRows.map((dept) => (
+                        <div key={dept.name} className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 px-3 py-2">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-slate-900">{dept.name}</p>
+                            <p className="text-[11px] text-slate-400">{dept.headcount} members · {dept.attendanceRate}% att.</p>
+                          </div>
+                          <span className="shrink-0 text-xs text-slate-500">{dept.pendingLeave} leave</span>
+                        </div>
+                      ))}
                     </div>
-                    <BarChart3 className="h-4 w-4 shrink-0 text-slate-400" />
-                  </div>
-                </AccordionTrigger>
-                <AccordionContent className="px-5 pb-5">
-                  <div className="h-56 sm:h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={stockTrends}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <XAxis dataKey="name" tickLine={false} axisLine={false} interval={0} angle={-18} textAnchor="end" height={72} />
-                        <YAxis tickLine={false} axisLine={false} allowDecimals={false} />
-                        <Tooltip />
-                        <Bar dataKey="soldQuantity" fill={brand.primary} radius={[8, 8, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </AccordionContent>
-              </AccordionItem>
-            </Accordion>
-            </div>
-                )
-              }
-
-              return null
-            })}
-          </div>
-
+                  )}
+                </DashCard>
+              ) : null}
+            </motion.div>
+          ) : null}
         </div>
       </div>
-    </div>
+    </motion.div>
+    </MotionConfig>
   )
+}
+
+function useCountUp(value: number) {
+  const numeric = Number(value) || 0
+  const [shown, setShown] = useState(0)
+  const fromRef = useRef(0)
+  useEffect(() => {
+    const from = fromRef.current
+    if (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      fromRef.current = numeric
+      setShown(numeric)
+      return
+    }
+    const start = performance.now()
+    let frame = 0
+    const step = (now: number) => {
+      const t = Math.min(1, (now - start) / 650)
+      const next = Math.round(from + (numeric - from) * (1 - Math.pow(1 - t, 3)))
+      setShown(next)
+      if (t < 1) frame = requestAnimationFrame(step)
+      else fromRef.current = numeric
+    }
+    frame = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(frame)
+  }, [numeric])
+  return shown
 }
 
 function MetricCard({
   label,
-  mobileLabel,
   value,
   sublabel,
-  mobileSublabel,
   icon,
-  accentColor,
   trend,
   className,
 }: {
   label: string
-  mobileLabel?: string
   value: string | number
   sublabel: string
-  mobileSublabel?: string
   icon: React.ReactNode
-  accentColor?: string
   trend?: number
   className?: string
 }) {
   const trendValue = Math.round(Number(trend || 0))
   const isPositive = trendValue >= 0
+  const counted = useCountUp(typeof value === 'number' ? value : 0)
+  const numericValue = typeof value === 'number' ? counted : value
   return (
-    <Card className={`min-w-0 rounded-md border-slate-200 bg-white shadow-sm sm:rounded-2xl ${className || ''}`}>
-      <CardContent className="h-[68px] px-1 py-1.5 sm:h-auto sm:p-3.5">
-        <div className="flex h-full min-w-0 flex-col items-center justify-center text-center sm:flex-row sm:items-start sm:justify-between sm:gap-3 sm:text-left">
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[10px] font-semibold uppercase leading-none tracking-normal text-slate-500 sm:text-xs sm:font-medium sm:tracking-wide">
-              <span className="sm:hidden">{mobileLabel || label}</span>
-              <span className="hidden sm:inline">{label}</span>
-            </p>
-            <p className="mt-1 truncate text-lg font-semibold leading-none text-slate-900 sm:mt-2 sm:text-3xl">{value}</p>
-            <p className="mt-1 truncate text-[9.5px] leading-none text-slate-500 sm:hidden">{mobileSublabel || sublabel}</p>
-            <div className="mt-1 flex min-w-0 items-center justify-center sm:mt-2 sm:justify-start sm:gap-2">
-              <p className="hidden min-w-0 flex-1 truncate text-xs text-slate-500 sm:block">{sublabel}</p>
-              <span className={`inline-flex max-w-full shrink-0 items-center justify-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-semibold leading-none sm:text-[10px] ${isPositive ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
-                {isPositive ? <ArrowUpRight className="hidden h-3 w-3 sm:block" /> : <ArrowDownRight className="hidden h-3 w-3 sm:block" />} {Math.abs(trendValue)}%
-              </span>
-            </div>
+    <motion.div variants={fadeUp} whileHover={{ y: -2 }} transition={{ duration: 0.2 }} className={className}>
+      <Card className="min-w-0 gap-0 rounded-2xl border-slate-200 bg-white py-0 shadow-none">
+        <CardContent className="px-3 py-3">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-xs font-medium text-slate-500">{label}</p>
+            <span className="shrink-0 text-slate-400">{icon}</span>
           </div>
-          <div className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 sm:flex" style={{ color: accentColor || '#334155' }}>{icon}</div>
+          <p className="mt-1 truncate text-xl font-semibold tracking-tight text-slate-900">{numericValue}</p>
+          <div className="mt-1 flex items-center justify-between gap-1">
+            <p className="truncate text-[11px] text-slate-500">{sublabel}</p>
+            {trendValue !== 0 ? (
+              <span className={`inline-flex shrink-0 items-center gap-0.5 text-[11px] font-medium ${isPositive ? 'text-emerald-600' : 'text-rose-600'}`}>
+                {isPositive ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                {Math.abs(trendValue)}%
+              </span>
+            ) : null}
+          </div>
+        </CardContent>
+      </Card>
+    </motion.div>
+  )
+}
+
+function DashCard({
+  title,
+  subtitle,
+  action,
+  children,
+  className,
+  bodyClassName,
+}: {
+  title?: string
+  subtitle?: string
+  action?: React.ReactNode
+  children: React.ReactNode
+  className?: string
+  bodyClassName?: string
+}) {
+  return (
+    <Card className={`flex h-full flex-col gap-0 overflow-hidden rounded-2xl border-slate-200 bg-white py-0 shadow-none ${className || ''}`}>
+      {title || action ? (
+        <div className="flex shrink-0 items-start justify-between gap-3 px-4 pb-2 pt-3.5">
+          <div className="min-w-0">
+            {title ? <h3 className="text-[15px] font-semibold text-slate-900">{title}</h3> : null}
+            {subtitle ? <p className="mt-1 text-xs text-slate-500">{subtitle}</p> : null}
+          </div>
+          {action ? <div className="shrink-0">{action}</div> : null}
         </div>
-      </CardContent>
+      ) : null}
+      <div className={cn('min-h-0 flex-1 px-4 pb-4', bodyClassName)}>{children}</div>
     </Card>
   )
 }
 
-function SmallMetric({ icon, label, value, accentColor }: { icon: React.ReactNode; label: string; value: number | string; accentColor?: string }) {
+function StatCell({ label, value }: { label: string; value: number | string }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-medium text-slate-500">{label}</p>
-        <div className="flex h-9 w-9 items-center justify-center rounded-md" style={{ color: accentColor || '#475569' }}>{icon}</div>
+    <div className="px-4 py-3">
+      <p className="text-xs font-medium text-slate-500">{label}</p>
+      <p className="mt-1 truncate text-lg font-semibold tracking-tight text-slate-900">{value}</p>
+    </div>
+  )
+}
+
+function RiskRow({
+  label,
+  count,
+  tone,
+  items,
+}: {
+  label: string
+  count: number
+  tone: 'rose' | 'amber' | 'blue'
+  items: StockItem[]
+}) {
+  const toneClass = tone === 'rose' ? 'text-rose-700' : tone === 'amber' ? 'text-amber-700' : 'text-slate-600'
+  const names = items.slice(0, 2).map((item) => item.name).filter(Boolean)
+  return (
+    <div className="rounded-xl border border-slate-100 px-3 py-2">
+      <div className="flex items-center justify-between gap-3">
+        <p className={`text-sm font-medium ${toneClass}`}>{label}</p>
+        <span className="text-sm font-semibold text-slate-900">{count}</span>
       </div>
-      <p className="mt-3 text-2xl font-semibold text-slate-900">{value}</p>
+      {names.length > 0 ? (
+        <p className="mt-1 truncate text-xs text-slate-500">
+          {names.join(', ')}
+          {items.length > 2 ? ` +${items.length - 2} more` : ''}
+        </p>
+      ) : (
+        <p className="mt-1 text-xs text-slate-400">None in this range</p>
+      )}
     </div>
   )
 }
 
-function SidebarMetric({ label, value, accentColor }: { label: string; value: number | string; accentColor?: string }) {
+function EmptyChart({ label }: { label: string }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-center">
-      <p className="text-sm font-medium text-slate-500">{label}</p>
-      <p className="mt-2 text-xl font-semibold text-slate-900">{value}</p>
+    <div className="flex h-full min-h-[72px] items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/60 px-4 text-center text-sm text-slate-500">
+      {label}
     </div>
   )
-}
-
-function InsightRow({ label, value, progress }: { label: string; value: string; progress: number }) {
-  return (
-    <div>
-      <div className="mb-1 flex items-center justify-between text-sm">
-        <span className="text-slate-600">{label}</span>
-        <span className="font-semibold text-slate-900">{value}</span>
-      </div>
-      <Progress value={Math.max(0, Math.min(100, progress))} className="h-2" />
-    </div>
-  )
-}
-
-function SeverityList({ items, tone }: { items: any[]; tone: 'critical' | 'warning' | 'low' }) {
-  if (!items.length) {
-    return <p className="text-xs text-slate-500">No products in this range.</p>
-  }
-
-  const textClass = tone === 'critical' ? 'text-rose-700' : tone === 'warning' ? 'text-amber-700' : 'text-blue-700'
-
-  return (
-    <div className="space-y-1.5">
-      {items.slice(0, 6).map((product: any) => (
-        <div key={String(product._id || product.name)} className="flex items-center justify-between rounded-md border border-white/70 bg-white/70 px-2 py-1.5 text-xs">
-          <span className={`truncate pr-2 ${textClass}`}>{product.name}</span>
-          <span className={`font-semibold ${textClass}`}>{Number(product.currentQuantity || 0)}</span>
-        </div>
-      ))}
-      {items.length > 6 && <p className="text-[11px] text-slate-500">+{items.length - 6} more products</p>}
-    </div>
-  )
-}
-
-function StatPill({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg bg-white border border-slate-200 px-3 py-2">
-      <p className="text-[11px] uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-1 text-sm font-semibold text-slate-900">{value}</p>
-    </div>
-  )
-}
-
-function hexToRgba(color: string, alpha: number) {
-  if (!color) return `rgba(37, 99, 235, ${alpha})`
-
-  const normalized = color.replace('#', '')
-  if (normalized.length === 3) {
-    const r = parseInt(normalized[0] + normalized[0], 16)
-    const g = parseInt(normalized[1] + normalized[1], 16)
-    const b = parseInt(normalized[2] + normalized[2], 16)
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`
-  }
-
-  if (normalized.length === 6) {
-    const r = parseInt(normalized.slice(0, 2), 16)
-    const g = parseInt(normalized.slice(2, 4), 16)
-    const b = parseInt(normalized.slice(4, 6), 16)
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`
-  }
-
-  return color
 }
 
 function formatRelativeTime(date: Date) {

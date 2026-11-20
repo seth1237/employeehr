@@ -60,6 +60,22 @@ export function ThemeProvider({ children, ...props }: ThemeProviderProps) {
           if (logo) {
             root.style.setProperty('--company-logo-url', `url('${logo}')`)
           }
+          const brandingSnapshot = {
+            name: (res.data as any).name,
+            logo,
+            primaryColor,
+            secondaryColor,
+            accentColor,
+            backgroundColor,
+            textColor,
+            borderRadius,
+            fontFamily,
+          }
+          try {
+            sessionStorage.setItem('elevate_branding', JSON.stringify(brandingSnapshot))
+          } catch {
+            // ignore quota / private mode
+          }
         }
       } catch (e) {
         // Silently fail - branding is optional

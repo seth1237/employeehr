@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
-import { Edit, Trash2, Plus, Package } from "lucide-react"
+import { Pencil, Trash2, Plus, Package } from "lucide-react"
 import API_URL from "@/lib/apiBase"
 import { getToken } from "@/lib/auth"
 import { stockApi } from "@/lib/api"
@@ -111,7 +111,7 @@ export function CategoriesManager({ categories, products, onRefresh }: Categorie
                   onClick={() => handleEditCategory(category)}
                   title="Edit category"
                 >
-                  <Edit className="h-4 w-4" />
+                  <Pencil className="h-4 w-4" />
                 </Button>
                 <Button
                   type="button"

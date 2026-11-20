@@ -1,4 +1,4 @@
-import { ArrowLeftRight, BarChart3, CheckCircle2, Clock, FileText, MessageSquare, Target, Users, Wallet, BookOpen, Briefcase, FileSearch, Mail, Send } from "lucide-react"
+import { navIcon } from "@/lib/nav-icons"
 import { companyApi } from "@/lib/api"
 import { getUser } from "@/lib/auth"
 
@@ -14,23 +14,23 @@ export const MANAGER_SECTION_OPTIONS = [
 ]
 
 export const MANAGER_MENU_ITEMS = [
-  { label: "Dashboard", icon: BarChart3, href: "/manager", section: "CORE" },
-  { label: "Employees", icon: Users, href: "/manager/team", section: "EMPLOYEE MANAGEMENT" },
-  { label: "Approvals", icon: CheckCircle2, href: "/manager/approvals", section: "EMPLOYEE MANAGEMENT" },
-  { label: "Leave Requests", icon: Clock, href: "/manager/leave-requests", section: "EMPLOYEE MANAGEMENT" },
-  { label: "Feedback", icon: MessageSquare, href: "/manager/feedback", section: "EMPLOYEE MANAGEMENT" },
-  { label: "Performance", icon: Target, href: "/manager/performance", section: "PERFORMANCE" },
-  { label: "Reports", icon: FileText, href: "/manager/reports", section: "PERFORMANCE" },
-  { label: "PDP Reviews", icon: FileSearch, href: "/manager/pdp-reviews", section: "PERFORMANCE" },
-  { label: "Evaluations", icon: FileText, href: "/manager/evaluations", section: "PERFORMANCE" },
-  { label: "Finance", icon: Wallet, href: "/manager/fees", section: "FINANCE" },
-  { label: "Inter-branch Transfers", icon: ArrowLeftRight, href: "/manager/transfers", section: "INVENTORY MANAGER" },
-  { label: "Resources", icon: BookOpen, href: "/manager/resources", section: "INVENTORY MANAGER" },
-  { label: "Document Library", icon: BookOpen, href: "/manager/library", section: "INVENTORY MANAGER" },
-  { label: "Documents & Exams", icon: FileText, href: "/manager/examinations", section: "INVENTORY MANAGER" },
-  { label: "Operations", icon: Briefcase, href: "/manager/supervision", section: "EMPLOYEE MANAGEMENT" },
-  { label: "Messages", icon: Mail, href: "/manager/messages", section: "COMMUNICATIONS" },
-  { label: "Send Message", icon: Send, href: "/manager/messages/send", section: "COMMUNICATIONS" },
+  { label: "Dashboard", icon: navIcon("/manager"), href: "/manager", section: "CORE" },
+  { label: "Employees", icon: navIcon("/manager/team"), href: "/manager/team", section: "EMPLOYEE MANAGEMENT" },
+  { label: "Approvals", icon: navIcon("/manager/approvals"), href: "/manager/approvals", section: "EMPLOYEE MANAGEMENT" },
+  { label: "Leave Requests", icon: navIcon("/manager/leave-requests"), href: "/manager/leave-requests", section: "EMPLOYEE MANAGEMENT" },
+  { label: "Feedback", icon: navIcon("/manager/feedback"), href: "/manager/feedback", section: "EMPLOYEE MANAGEMENT" },
+  { label: "Performance", icon: navIcon("/manager/performance"), href: "/manager/performance", section: "PERFORMANCE" },
+  { label: "Reports", icon: navIcon("/manager/reports"), href: "/manager/reports", section: "PERFORMANCE" },
+  { label: "PDP Reviews", icon: navIcon("/manager/pdp-reviews"), href: "/manager/pdp-reviews", section: "PERFORMANCE" },
+  { label: "Evaluations", icon: navIcon("/manager/evaluations"), href: "/manager/evaluations", section: "PERFORMANCE" },
+  { label: "Finance", icon: navIcon("/manager/fees"), href: "/manager/fees", section: "FINANCE" },
+  { label: "Inter-branch Transfers", icon: navIcon("/manager/transfers"), href: "/manager/transfers", section: "INVENTORY MANAGER" },
+  { label: "Resources", icon: navIcon("/manager/resources"), href: "/manager/resources", section: "INVENTORY MANAGER" },
+  { label: "Document Library", icon: navIcon("/manager/library"), href: "/manager/library", section: "INVENTORY MANAGER" },
+  { label: "Documents & Exams", icon: navIcon("/manager/examinations"), href: "/manager/examinations", section: "INVENTORY MANAGER" },
+  { label: "Operations", icon: navIcon("/manager/supervision"), href: "/manager/supervision", section: "EMPLOYEE MANAGEMENT" },
+  { label: "Messages", icon: navIcon("/manager/messages"), href: "/manager/messages", section: "COMMUNICATIONS" },
+  { label: "Send Message", icon: navIcon("/manager/messages/send"), href: "/manager/messages/send", section: "COMMUNICATIONS" },
 ]
 
 const SECTION_ALIASES: Record<string, string> = {

@@ -2,12 +2,20 @@
 
 import "@/lib/install-safe-json";
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
 import { getUser, isAdmin } from "@/lib/auth";
 import { api } from "@/lib/api";
 import Sidebar from "@/components/admin/sidebar";
 import TopNav from "@/components/admin/top-nav";
-import { AiAssistantChat } from "@/components/ai/ai-assistant-chat";
+
+const AiAssistantChat = dynamic(
+  () =>
+    import("@/components/ai/ai-assistant-chat").then(
+      (mod) => mod.AiAssistantChat,
+    ),
+  { ssr: false },
+);
 import { RecentPagesTracker } from "@/components/admin/recent-pages-tracker";
 import {
   getAdminSectionForPath,
@@ -26,7 +34,6 @@ export default function AdminLayout({
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const saved =
@@ -64,7 +71,6 @@ export default function AdminLayout({
     if (!isAdmin()) {
       if (user.role === "manager") {
         if (pathname.startsWith("/admin/stock/transfers")) {
-          setLoading(false);
           return;
         }
         router.push("/manager");
@@ -80,7 +86,10 @@ export default function AdminLayout({
       return;
     }
 
-    checkSetupStatus();
+    if (typeof window !== "undefined" && sessionStorage.getItem("elevate_setup_done") === "1") {
+      return;
+    }
+    void checkSetupStatus();
   }, [router]);
 
   const checkSetupStatus = async () => {
@@ -92,11 +101,10 @@ export default function AdminLayout({
           router.push("/setup");
           return;
         }
+        sessionStorage.setItem("elevate_setup_done", "1");
       }
     } catch (error) {
       console.error("Failed to check setup status:", error);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -143,14 +151,6 @@ export default function AdminLayout({
       setSidebarOpen(false);
     }
   }, [pathname]);
-
-  if (loading) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-      </div>
-    );
-  }
 
   return (
     <WalkthroughProvider portal="admin">

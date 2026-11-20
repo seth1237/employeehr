@@ -4,6 +4,7 @@ import { getToken, logout } from "./auth";
 import API_URL, { getApiUrl } from "./apiBase";
 import { fetchNoStore, readResponseText, withNoStoreHeaders } from "./apiFetch";
 import { parseApiJson } from "./safe-json";
+import { cachedRequest, clearCachedRequest } from "./request-cache";
 import type {
   ApiResponse,
   LoginRequest,
@@ -413,7 +414,10 @@ export const reportsApi = {
 };
 
 export const companyApi = {
-  getBranding: () => client.get<any>("/api/company/branding"),
+  getBranding: () =>
+    cachedRequest("company:branding", 60_000, () =>
+      client.get<any>("/api/company/branding"),
+    ),
   getInvoiceSettings: () => client.get<any>("/api/company/invoice-settings"),
   updateInvoiceSettings: (data: {
     invoiceEmail: string;
@@ -444,7 +448,10 @@ export const companyApi = {
       notes?: string;
     }>;
   }) => client.post<any>("/api/company/invoice-settings", data),
-  getPageAccess: () => client.get<any>("/api/company/page-access"),
+  getPageAccess: () =>
+    cachedRequest("company:page-access", 30_000, () =>
+      client.get<any>("/api/company/page-access"),
+    ),
   updatePageAccess: (data: {
     adminSectionsByRole: {
       admin: string[];
@@ -457,7 +464,10 @@ export const companyApi = {
     adminSectionsByBranch?: Record<string, string[]>;
     permissionMatrixByRole?: Record<string, string[]>;
     permissionMatrixByUser?: Record<string, string[]>;
-  }) => client.post<any>("/api/company/page-access", data),
+  }) => {
+    clearCachedRequest("company:page-access")
+    return client.post<any>("/api/company/page-access", data)
+  },
   updateBranding: async (data: {
     primaryColor?: string;
     secondaryColor?: string;
@@ -497,6 +507,7 @@ export const companyApi = {
     themePreset?: string;
     salesNightOutAmount?: number;
   }) => {
+    clearCachedRequest("company:branding")
     // If logoFile is provided, use FormData instead of JSON
     if (data.logoFile) {
       const token = getToken();
@@ -2284,7 +2295,7 @@ export const api = {
   engineering: engineeringApi,
   etims: etimsApi,
   dashboard: {
-    getStats: () => client.get<any>(`/api/dashboard/stats?_=${Date.now()}`),
+    getStats: () => client.get<any>("/api/dashboard/stats"),
   },
   projects: projectsApi,
 };

@@ -14,14 +14,17 @@ export class SetupController {
         return res.status(400).json({ success: false, message: "Organization ID required" })
       }
 
-      const company = await Company.findById(req.org_id)
+      const company = await Company.findById(req.org_id).select(
+        "setupProgress name email slug logo emailConfig.verified",
+      )
       if (!company) {
         return res.status(404).json({ success: false, message: "Company not found" })
       }
 
-      // Calculate statistics
-      const employeeCount = await User.countDocuments({ org_id: req.org_id })
-      const kpiCount = await KPI.countDocuments({ org_id: req.org_id })
+      const [employeeCount, kpiCount] = await Promise.all([
+        User.countDocuments({ org_id: req.org_id }),
+        KPI.countDocuments({ org_id: req.org_id }),
+      ])
 
       const setupProgress = company.setupProgress || {
         completed: false,

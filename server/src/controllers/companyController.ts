@@ -648,11 +648,22 @@ export class CompanyController {
         PERMISSION_OPTIONS,
       );
 
-      const user = req.user?.userId
-        ? await User.findOne({ _id: req.user.userId, org_id: req.org_id })
-            .select("department role")
-            .lean()
-        : null;
+      const [user, managedBranches] = await Promise.all([
+        req.user?.userId
+          ? User.findOne({ _id: req.user.userId, org_id: req.org_id })
+              .select("department role")
+              .lean()
+          : Promise.resolve(null),
+        req.user?.userId
+          ? Branch.find({
+              org_id: req.org_id,
+              managerId: req.user.userId,
+              isActive: true,
+            })
+              .select("_id name code")
+              .lean()
+          : Promise.resolve([]),
+      ]);
 
       const matchingDepartment = user?.department
         ? await Department.findOne({
@@ -667,16 +678,6 @@ export class CompanyController {
             .select("_id name")
             .lean()
         : null;
-
-      const managedBranches = req.user?.userId
-        ? await Branch.find({
-            org_id: req.org_id,
-            managerId: req.user.userId,
-            isActive: true,
-          })
-            .select("_id name code")
-            .lean()
-        : [];
 
       const rawRole = String(req.user?.role || user?.role || "employee");
       const role =

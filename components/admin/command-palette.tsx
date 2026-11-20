@@ -21,15 +21,11 @@ import {
   getRecentPages,
 } from "@/lib/admin-personalization"
 import {
-  FileText,
-  Package,
-  Users,
-  LayoutGrid,
-  PlusCircle,
   Search,
   Star,
   Clock3,
 } from "lucide-react"
+import { ACTION_ICONS, navIcon } from "@/lib/nav-icons"
 
 type RecordHit = {
   type: "invoice" | "quotation" | "product" | "client"
@@ -168,10 +164,15 @@ export function AdminCommandPalette() {
   }).slice(0, qLower ? 12 : 8)
 
   const iconFor = (type: RecordHit["type"]) => {
-    if (type === "invoice" || type === "quotation") return FileText
-    if (type === "product") return Package
-    return Users
+    if (type === "invoice") return navIcon("/admin/stock/invoices")
+    if (type === "quotation") return navIcon("/admin/stock/quotations")
+    if (type === "product") return navIcon("/admin/stock/status")
+    return navIcon("/admin/clients/clients-list")
   }
+  const SalesOrdersIcon = navIcon("/admin/stock/sales-orders")
+  const InvoicesIcon = navIcon("/admin/stock/invoices")
+  const AlertsIcon = navIcon("/admin/alerts")
+  const ClientsIcon = navIcon("/admin/clients/clients-list")
 
   return (
     <>
@@ -199,25 +200,25 @@ export function AdminCommandPalette() {
 
           <CommandGroup heading="Quick actions">
             <CommandItem onSelect={() => go(onTheGo ? "/admin/stock/quotations/new" : "/admin/stock/quotations?action=new")}>
-              <PlusCircle className="h-4 w-4" />
+              <ACTION_ICONS.add className="h-4 w-4" />
               Create quotation
             </CommandItem>
             <CommandItem onSelect={() => go("/admin/stock/sales-orders")}>
-              <FileText className="h-4 w-4" />
+              <SalesOrdersIcon className="h-4 w-4" />
               Open sales orders
             </CommandItem>
             <CommandItem onSelect={() => go("/admin/stock/invoices")}>
-              <FileText className="h-4 w-4" />
+              <InvoicesIcon className="h-4 w-4" />
               Open invoices
             </CommandItem>
             {!onTheGo ? (
               <CommandItem onSelect={() => go("/admin/alerts")}>
-                <LayoutGrid className="h-4 w-4" />
+                <AlertsIcon className="h-4 w-4" />
                 Notifications inbox
               </CommandItem>
             ) : (
               <CommandItem onSelect={() => go("/admin/clients/clients-list")}>
-                <Users className="h-4 w-4" />
+                <ClientsIcon className="h-4 w-4" />
                 Open clients
               </CommandItem>
             )}
@@ -284,17 +285,20 @@ export function AdminCommandPalette() {
 
           <CommandSeparator />
           <CommandGroup heading="Pages">
-            {navMatches.map((item) => (
+            {navMatches.map((item) => {
+              const PageIcon = navIcon(item.href)
+              return (
               <CommandItem
                 key={item.href}
                 value={`${item.label} ${item.section} ${(item.keywords || []).join(" ")}`}
                 onSelect={() => go(item.href)}
               >
-                <LayoutGrid className="h-4 w-4" />
+                <PageIcon className="h-4 w-4" />
                 <span>{item.label}</span>
                 <CommandShortcut>{item.section}</CommandShortcut>
               </CommandItem>
-            ))}
+              )
+            })}
           </CommandGroup>
         </CommandList>
       </CommandDialog>

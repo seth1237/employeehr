@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { useToast } from "@/hooks/use-toast"
-import { Edit, Trash2, Plus, AlertCircle, Printer } from "lucide-react"
+import { Pencil, Trash2, Plus, AlertCircle, Printer } from "lucide-react"
 import API_URL from "@/lib/apiBase"
 import { getToken } from "@/lib/auth"
 import { ProductEditDialog } from "./product-edit-dialog"
@@ -334,7 +334,7 @@ export function ProductsManager({ products, categories, onRefresh }: ProductsMan
                               onClick={() => handleEditProduct(product)}
                               title="Edit product"
                             >
-                              <Edit className="h-4 w-4" />
+                              <Pencil className="h-4 w-4" />
                             </Button>
                             <Button
                               type="button"

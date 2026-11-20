@@ -23,7 +23,7 @@ export default function AdminTopNav({ onMenuClick, onSidebarCollapseToggle, isSi
   const user = getUser()
 
   return (
-    <header className="h-16 border-b border-border bg-card flex items-center justify-between px-3 sm:px-6 gap-2">
+    <header className="flex h-14 items-center justify-between gap-2 border-b border-slate-200 bg-white px-3 sm:px-5">
       <div className="flex items-center gap-2 sm:gap-4 min-w-0">
         <Button
           variant="ghost"

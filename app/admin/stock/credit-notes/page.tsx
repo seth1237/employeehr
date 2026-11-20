@@ -1,9 +1,9 @@
 "use client"
 
-import { useEffect } from "react"
+import { Suspense, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 
-export default function StockCreditNotesRedirectPage() {
+function StockCreditNotesRedirectInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -13,4 +13,12 @@ export default function StockCreditNotesRedirectPage() {
   }, [router, searchParams])
 
   return <p className="p-6 text-sm text-muted-foreground">Opening credit notes in Accounts…</p>
+}
+
+export default function StockCreditNotesRedirectPage() {
+  return (
+    <Suspense fallback={<p className="p-6 text-sm text-muted-foreground">Opening credit notes in Accounts…</p>}>
+      <StockCreditNotesRedirectInner />
+    </Suspense>
+  )
 }

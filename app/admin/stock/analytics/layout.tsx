@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { useState, useEffect } from "react"
+import { Suspense, useState, useEffect } from "react"
 import { Input } from "@/components/ui/input"
 import { API_URL } from "@/lib/apiBase"
 import { getToken } from "@/lib/auth"
@@ -35,7 +35,7 @@ const analyticsPages = [
   { href: "/admin/stock/analytics/trends", label: "Trends", icon: "📈" },
 ]
 
-export default function AnalyticsLayout({ children }: { children: React.ReactNode }) {
+function AnalyticsLayoutInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -189,5 +189,13 @@ export default function AnalyticsLayout({ children }: { children: React.ReactNod
 
       {children}
     </div>
+  )
+}
+
+export default function AnalyticsLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading analytics…</div>}>
+      <AnalyticsLayoutInner>{children}</AnalyticsLayoutInner>
+    </Suspense>
   )
 }

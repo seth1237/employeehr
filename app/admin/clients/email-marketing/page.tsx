@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { Suspense, useEffect, useMemo, useRef, useState } from "react"
 import { finishDataLoad, startDataLoad, type SilentLoadOptions } from "@/lib/silent-load"
 import { useSearchParams } from "next/navigation"
 import API_URL from "@/lib/apiBase"
@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { History, Search, Users, ChevronDown, X } from "lucide-react"
-import { TableSkeleton } from "@/components/admin/ui/page-states"
+import { PageLoadingSkeleton, TableSkeleton } from "@/components/admin/ui/page-states"
 import {
   Popover,
   PopoverContent,
@@ -166,7 +166,7 @@ function MultiSelectFilter({
 }
 
 
-export default function BulkSmsPage() {
+function EmailMarketingInner() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const initialLoadDone = useRef(false)
@@ -888,5 +888,13 @@ export default function BulkSmsPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function BulkSmsPage() {
+  return (
+    <Suspense fallback={<PageLoadingSkeleton title="Email marketing" />}>
+      <EmailMarketingInner />
+    </Suspense>
   )
 }

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { Suspense, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import API_URL from "@/lib/apiBase"
@@ -182,7 +182,7 @@ function exportStockChecksCsv(stockChecks: StockCheck[]) {
 // Component
 // ---------------------------------------------------------------------------
 
-export default function StockChecksPage() {
+function StockChecksInner() {
   const searchParams = useSearchParams()
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -688,5 +688,13 @@ export default function StockChecksPage() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+export default function StockChecksPage() {
+  return (
+    <Suspense fallback={<PageLoadingSkeleton title="Loading stock checks" rows={8} />}>
+      <StockChecksInner />
+    </Suspense>
   )
 }

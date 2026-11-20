@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import API_URL from "@/lib/apiBase";
@@ -105,7 +105,7 @@ function hexToRgba(hex: string, alpha: number) {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-export default function EmployeeInvoicesPage() {
+function EmployeeInvoicesInner() {
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -897,5 +897,13 @@ export default function EmployeeInvoicesPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function EmployeeInvoicesPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading invoices…</div>}>
+      <EmployeeInvoicesInner />
+    </Suspense>
   );
 }

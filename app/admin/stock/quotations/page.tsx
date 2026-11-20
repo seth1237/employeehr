@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useOnTheGo } from "@/lib/on-the-go";
@@ -250,7 +250,7 @@ function exportQuotationsSummaryXlsx(quotations: Quotation[]) {
   downloadBlob(blob, "quotations-summary.xlsx");
 }
 
-export default function QuotationsPage() {
+function QuotationsPageInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { onTheGo } = useOnTheGo();
@@ -3239,5 +3239,13 @@ export default function QuotationsPage() {
       </Dialog>
 
     </div>
+  );
+}
+
+export default function QuotationsPage() {
+  return (
+    <Suspense fallback={<PageLoadingSkeleton title="Loading quotations" rows={8} />}>
+      <QuotationsPageInner />
+    </Suspense>
   );
 }

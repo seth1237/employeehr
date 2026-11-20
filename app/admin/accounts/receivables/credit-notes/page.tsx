@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { Suspense, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { Download, Plus } from "lucide-react"
@@ -29,7 +29,7 @@ const DEFAULT_REASONS: Record<string, string> = {
   other: "Other",
 }
 
-export default function AccountsCreditNotesPage() {
+function AccountsCreditNotesInner() {
   const searchParams = useSearchParams()
   const preselectedInvoiceId = searchParams.get("invoiceId") || ""
   const [loading, setLoading] = useState(true)
@@ -301,5 +301,13 @@ export default function AccountsCreditNotesPage() {
         </FinanceTableCard>
       )}
     </FinanceDocumentShell>
+  )
+}
+
+export default function AccountsCreditNotesPage() {
+  return (
+    <Suspense fallback={<PageLoadingSkeleton title="Loading credit notes" rows={8} />}>
+      <AccountsCreditNotesInner />
+    </Suspense>
   )
 }

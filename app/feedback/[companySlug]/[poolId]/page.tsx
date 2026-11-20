@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { Suspense, useEffect, useState, useMemo } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -73,7 +73,7 @@ interface PoolData {
   branding?: BrandingData
 }
 
-export default function PublicFeedbackPage() {
+function PublicFeedbackInner() {
   const params = useParams()
   const searchParams = useSearchParams()
   const poolId = params.poolId as string
@@ -528,5 +528,13 @@ export default function PublicFeedbackPage() {
         </AnimatePresence>
       </div>
     </div>
+  )
+}
+
+export default function PublicFeedbackPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading…</div>}>
+      <PublicFeedbackInner />
+    </Suspense>
   )
 }

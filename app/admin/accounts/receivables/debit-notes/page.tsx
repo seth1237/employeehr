@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { Suspense, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
@@ -36,7 +36,7 @@ const DEFAULT_REASONS: Record<string, string> = {
   other: "Other",
 }
 
-export default function DebitNotesPage() {
+function DebitNotesInner() {
   const searchParams = useSearchParams()
   const preselectedInvoiceId = searchParams.get("invoiceId") || ""
 
@@ -445,5 +445,13 @@ export default function DebitNotesPage() {
         </FinanceTableCard>
       )}
     </FinanceDocumentShell>
+  )
+}
+
+export default function DebitNotesPage() {
+  return (
+    <Suspense fallback={<PageLoadingSkeleton title="Loading debit notes" rows={8} />}>
+      <DebitNotesInner />
+    </Suspense>
   )
 }

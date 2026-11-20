@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import API_URL from "@/lib/apiBase";
 import { getToken, getUser } from "@/lib/auth";
@@ -157,7 +157,7 @@ function hexToRgba(hex: string, alpha: number) {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-export default function TendersPage() {
+function TendersPageInner() {
   const searchParams = useSearchParams();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -2689,5 +2689,13 @@ export default function TendersPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+export default function TendersPage() {
+  return (
+    <Suspense fallback={<PageLoadingSkeleton title="Loading tenders" rows={8} />}>
+      <TendersPageInner />
+    </Suspense>
   );
 }

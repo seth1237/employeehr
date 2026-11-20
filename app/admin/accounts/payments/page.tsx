@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { Suspense, useEffect, useMemo, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { stockApi } from "@/lib/api"
 import { runDataLoad, type SilentLoadOptions } from "@/lib/silent-load"
@@ -39,7 +39,7 @@ interface PaymentInvoiceRow {
 
 const PAYMENT_METHODS = ["cash", "mpesa", "bank", "cheque", "card", "other"]
 
-export default function AccountsPaymentsPage() {
+function AccountsPaymentsInner() {
   const searchParams = useSearchParams()
   const queryInvoiceId = searchParams.get("invoiceId") || ""
   const [loading, setLoading] = useState(true)
@@ -324,5 +324,13 @@ export default function AccountsPaymentsPage() {
         </FinanceTableCard>
       </div>
     </FinanceDocumentShell>
+  )
+}
+
+export default function AccountsPaymentsPage() {
+  return (
+    <Suspense fallback={<PageLoadingSkeleton title="Payment management" />}>
+      <AccountsPaymentsInner />
+    </Suspense>
   )
 }

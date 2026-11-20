@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { Suspense, useEffect, useMemo, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { api, glApi } from "@/lib/api"
 import { FinanceDocumentShell, FinanceTableCard } from "@/components/accounts/finance-document-shell"
@@ -8,8 +8,9 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { getDeductionAmountByAliases } from "@/lib/payroll-calculator"
+import { PageLoadingSkeleton } from "@/components/admin/ui/page-states"
 
-export default function PayrollJournalPage() {
+function PayrollJournalInner() {
   const searchParams = useSearchParams()
   const [month, setMonth] = useState(searchParams.get("month") || new Date().toISOString().slice(0, 7))
   const [payrolls, setPayrolls] = useState<any[]>([])
@@ -82,5 +83,13 @@ export default function PayrollJournalPage() {
         {result ? <p className="px-4 pb-4 text-sm">Posted {result.entryNumber || result.summary?.month}. Bank line is the month net of KES {(result.summary?.net ?? summary.net).toLocaleString()}.</p> : null}
       </FinanceTableCard>
     </FinanceDocumentShell>
+  )
+}
+
+export default function PayrollJournalPage() {
+  return (
+    <Suspense fallback={<PageLoadingSkeleton title="Payroll journal" />}>
+      <PayrollJournalInner />
+    </Suspense>
   )
 }

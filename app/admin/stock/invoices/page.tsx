@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import API_URL from "@/lib/apiBase";
@@ -201,7 +201,7 @@ function exportInvoiceCsv(invoices: Invoice[], selectedColumns: string[] = EXPOR
   URL.revokeObjectURL(url);
 }
 
-export default function InvoicesPage() {
+function InvoicesPageInner() {
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -1758,5 +1758,13 @@ export default function InvoicesPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+export default function InvoicesPage() {
+  return (
+    <Suspense fallback={<PageLoadingSkeleton title="Loading invoices" rows={8} />}>
+      <InvoicesPageInner />
+    </Suspense>
   );
 }

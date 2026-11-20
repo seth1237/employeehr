@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useMemo } from "react"
+import { Suspense, useEffect, useState, useMemo } from "react"
 import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -48,7 +48,7 @@ function hexToRgba(hex: string, alpha: number) {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }
 
-export default function ProductAnalyticsPage() {
+function ProductAnalyticsInner() {
   const searchParams = useSearchParams()
   const [products, setProducts] = useState<Product[]>([])
   const [sales, setSales] = useState<Sale[]>([])
@@ -457,5 +457,13 @@ export default function ProductAnalyticsPage() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+export default function ProductAnalyticsPage() {
+  return (
+    <Suspense fallback={<PageLoadingSkeleton title="Loading product analytics" rows={8} />}>
+      <ProductAnalyticsInner />
+    </Suspense>
   )
 }

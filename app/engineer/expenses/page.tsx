@@ -72,9 +72,9 @@ export default function EngineerExpensesPage() {
   return (
     <div className="space-y-4 p-4 pb-24 md:p-8">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Field expenses</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Expenses</h1>
         <p className="text-sm text-muted-foreground">
-          Submit travel and job costs against a work order. Accounts reviews the same claims list.
+          Submit a claim, then follow your expense history as accounts reviews it.
         </p>
       </div>
 
@@ -129,12 +129,16 @@ export default function EngineerExpensesPage() {
       </Card>
 
       <Card className="overflow-hidden">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Expense history</CardTitle>
+        </CardHeader>
         <CardContent className="p-0">
           <DesktopTableShell>
             <table className="w-full text-left text-sm">
               <thead className="bg-muted/50 text-[11px] uppercase tracking-wide text-muted-foreground">
                 <tr>
                   <th className="px-4 py-3">Claim</th>
+                  <th className="px-4 py-3">Date</th>
                   <th className="px-4 py-3">Amount</th>
                   <th className="px-4 py-3">Status</th>
                 </tr>
@@ -142,16 +146,24 @@ export default function EngineerExpensesPage() {
               <tbody>
                 {claims.length === 0 ? (
                   <tr>
-                    <td colSpan={3} className="px-4 py-10 text-center text-muted-foreground">
-                      No claims yet.
+                    <td colSpan={4} className="px-4 py-10 text-center text-muted-foreground">
+                      No expense history yet.
                     </td>
                   </tr>
                 ) : (
                   claims.map((claim) => (
                     <tr key={claim._id} className="border-t">
                       <td className="px-4 py-3">
-                        <p className="font-medium">{claim.claimNumber}</p>
+                        <p className="font-medium">{claim.claimNumber || claim.purpose}</p>
                         <p className="text-xs text-muted-foreground">{claim.purpose}</p>
+                        {Array.isArray(claim.items) && claim.items[0]?.description ? (
+                          <p className="text-xs text-muted-foreground">{claim.items[0].description}</p>
+                        ) : null}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground">
+                        {claim.createdAt || claim.submittedAt
+                          ? new Date(claim.createdAt || claim.submittedAt).toLocaleDateString()
+                          : "—"}
                       </td>
                       <td className="px-4 py-3">{Number(claim.totalAmount || 0).toLocaleString()}</td>
                       <td className="px-4 py-3">

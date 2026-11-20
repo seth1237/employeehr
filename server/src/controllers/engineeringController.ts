@@ -10,6 +10,7 @@ import { MaintenancePlan } from "../models/MaintenancePlan";
 import { CalibrationRecord } from "../models/CalibrationRecord";
 import { VendorContract } from "../models/VendorContract";
 import { StockExpenseClaim } from "../models/StockExpenseClaim";
+import { ToolRequest } from "../models/ToolRequest";
 import { StockClient } from "../models/StockClient";
 import { User } from "../models/User";
 import {
@@ -480,6 +481,16 @@ export class EngineeringController {
         list = list.filter((row) => row.status === status);
       }
 
+      list.sort((a, b) => {
+        const aOpen = isOpenWorkOrderStatus(a.status) ? 0 : 1;
+        const bOpen = isOpenWorkOrderStatus(b.status) ? 0 : 1;
+        if (aOpen !== bOpen) return aOpen - bOpen;
+        const aTime = a.scheduledDate ? new Date(a.scheduledDate).getTime() : Number.MAX_SAFE_INTEGER;
+        const bTime = b.scheduledDate ? new Date(b.scheduledDate).getTime() : Number.MAX_SAFE_INTEGER;
+        if (aTime !== bTime) return aTime - bTime;
+        return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+      });
+
       const data = await enrichWorkOrders(org_id, list);
       return res.status(200).json({ success: true, data });
     } catch (error: any) {
@@ -734,10 +745,10 @@ export class EngineeringController {
         if (!machine) {
           return res.status(404).json({ success: false, message: "Installed machine not found" });
         }
-        if (!photoUrl && !machine.photoUrl) {
+        if (!photoUrl && !machine.photoUrl && !(wo.attachments || []).length) {
           return res.status(400).json({
             success: false,
-            message: "Upload a photo of the job card to complete the installation",
+            message: "Upload a photo of the job card after the machine is done",
           });
         }
 
@@ -781,6 +792,13 @@ export class EngineeringController {
           done: true,
           note: byItem.get(item.toLowerCase())?.note || "",
         }));
+      }
+
+      if (!isInstallationWorkOrder(wo) && !photoUrl && !(wo.attachments || []).length) {
+        return res.status(400).json({
+          success: false,
+          message: "Upload the job card after the machine is done to complete this job",
+        });
       }
 
       if (photoUrl) {
@@ -1366,6 +1384,95 @@ export class EngineeringController {
       return res.status(200).json({ success: true, data: mine.filter((row) => String(row.employeeId) === userId) });
     } catch (error: any) {
       return res.status(500).json({ success: false, message: error.message });
+    }
+  }
+
+  static async listToolRequests(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id;
+      const userId = String(req.user?.userId || "");
+      if (!org_id || !userId) {
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+      }
+      const role = String(req.user?.role || "");
+      const canSeeAll = ["company_admin", "admin", "hr", "super_admin", "manager"].includes(role);
+      const query: Record<string, unknown> = { org_id };
+      if (!canSeeAll) query.requesterId = userId;
+      const data = await ToolRequest.find(query).sort({ createdAt: -1 }).lean();
+      return res.status(200).json({ success: true, data });
+    } catch (error: any) {
+      return res.status(500).json({ success: false, message: error.message || "Failed to list tool requests" });
+    }
+  }
+
+  static async createToolRequest(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id;
+      const userId = String(req.user?.userId || "");
+      if (!org_id || !userId) {
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+      }
+      const body = req.body || {};
+      const itemName = String(body.itemName || "").trim();
+      const reason = String(body.reason || "").trim();
+      const quantity = Math.max(1, Number(body.quantity || 1) || 1);
+      if (!itemName || !reason) {
+        return res.status(400).json({ success: false, message: "Item and reason are required" });
+      }
+      const me = await User.findById(userId).select("firstName lastName email").lean();
+      const data = await ToolRequest.create({
+        org_id,
+        requesterId: userId,
+        requesterName: displayName(me as any) || String(body.requesterName || "Engineer"),
+        itemName,
+        category: ["equipment", "tools", "ppe", "parts", "vehicle", "other"].includes(String(body.category))
+          ? body.category
+          : "tools",
+        quantity,
+        reason,
+        neededBy: body.neededBy ? new Date(body.neededBy) : undefined,
+        status: "pending",
+      });
+      return res.status(201).json({ success: true, data });
+    } catch (error: any) {
+      return res.status(500).json({ success: false, message: error.message || "Failed to request tool" });
+    }
+  }
+
+  static async updateToolRequest(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id;
+      const userId = String(req.user?.userId || "");
+      const role = String(req.user?.role || "");
+      if (!org_id || !userId) {
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+      }
+      if (!["company_admin", "admin", "hr", "super_admin", "manager"].includes(role)) {
+        return res.status(403).json({ success: false, message: "Only admins can review tool requests" });
+      }
+      const id = String(req.params.id || "").trim();
+      const status = String(req.body?.status || "").trim();
+      if (!["approved", "rejected", "issued", "pending"].includes(status)) {
+        return res.status(400).json({ success: false, message: "Invalid status" });
+      }
+      const updated = await ToolRequest.findOneAndUpdate(
+        { _id: id, org_id },
+        {
+          $set: {
+            status,
+            adminComment: String(req.body?.adminComment || "").trim() || undefined,
+            reviewedBy: userId,
+            reviewedAt: new Date(),
+          },
+        },
+        { new: true },
+      ).lean();
+      if (!updated) {
+        return res.status(404).json({ success: false, message: "Request not found" });
+      }
+      return res.status(200).json({ success: true, data: updated });
+    } catch (error: any) {
+      return res.status(500).json({ success: false, message: error.message || "Failed to update request" });
     }
   }
 }

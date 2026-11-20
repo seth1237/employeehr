@@ -97,13 +97,26 @@ function WorkOrdersInner() {
 
   const visible = useMemo(() => {
     const needle = q.trim().toLowerCase()
-    if (!needle) return rows
-    return rows.filter((row) =>
-      [row.woNumber, row.serviceType, row.status, row.machine?.productName, row.machine?.client?.name, row.machine?.serialNumber]
-        .join(" ")
-        .toLowerCase()
-        .includes(needle),
-    )
+    const filtered = needle
+      ? rows.filter((row) =>
+          [row.woNumber, row.serviceType, row.status, row.machine?.productName, row.machine?.client?.name, row.machine?.serialNumber]
+            .join(" ")
+            .toLowerCase()
+            .includes(needle),
+        )
+      : rows
+    const rank = (status?: string) => {
+      const value = String(status || "")
+      if (value === "completed" || value === "cancelled") return 1
+      return 0
+    }
+    return [...filtered].sort((a, b) => {
+      const byOpen = rank(a.status) - rank(b.status)
+      if (byOpen !== 0) return byOpen
+      const aTime = a.scheduledDate ? new Date(a.scheduledDate).getTime() : Number.MAX_SAFE_INTEGER
+      const bTime = b.scheduledDate ? new Date(b.scheduledDate).getTime() : Number.MAX_SAFE_INTEGER
+      return aTime - bTime
+    })
   }, [rows, q])
 
   const shown = visible.slice(0, visibleCount)
@@ -147,7 +160,7 @@ function WorkOrdersInner() {
     <EngineerPage>
       <EngineerHeader
         title="Work orders"
-        description="Job cards assigned to you or still open in the queue."
+        description="Pending and in-progress jobs first. Open a completed job to view and download its job card."
         actions={
           <Button
             size="sm"

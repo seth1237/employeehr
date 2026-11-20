@@ -12,7 +12,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { useToast } from "@/hooks/use-toast"
-import { Trash2 } from "lucide-react"
+import { Download, Trash2 } from "lucide-react"
+import { jsPDF } from "jspdf"
 import { useEngineerBranding } from "@/components/engineer/branding"
 import {
   EngineerHeader,
@@ -36,6 +37,50 @@ const ATTENDANT_ROLES = [
 function photoSrc(url?: string) {
   if (!url) return ""
   return url.startsWith("http") ? url : `${API_URL}${url}`
+}
+
+async function imageToJpegDataUrl(url: string) {
+  const response = await fetch(url)
+  const blob = await response.blob()
+  const bitmap = await createImageBitmap(blob)
+  const canvas = document.createElement("canvas")
+  canvas.width = bitmap.width
+  canvas.height = bitmap.height
+  const ctx = canvas.getContext("2d")
+  if (!ctx) throw new Error("Could not read image")
+  ctx.fillStyle = "#ffffff"
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  ctx.drawImage(bitmap, 0, 0)
+  return canvas.toDataURL("image/jpeg", 0.92)
+}
+
+async function downloadJobCardImage(url: string, name: string) {
+  const dataUrl = await imageToJpegDataUrl(url)
+  const link = document.createElement("a")
+  link.href = dataUrl
+  link.download = `${name}.jpg`
+  link.click()
+}
+
+async function downloadJobCardPdf(url: string, name: string) {
+  const dataUrl = await imageToJpegDataUrl(url)
+  const img = new Image()
+  await new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve()
+    img.onerror = () => reject(new Error("Could not load job card"))
+    img.src = dataUrl
+  })
+  const pdf = new jsPDF({ orientation: img.width > img.height ? "landscape" : "portrait", unit: "pt", format: "a4" })
+  const pageW = pdf.internal.pageSize.getWidth()
+  const pageH = pdf.internal.pageSize.getHeight()
+  const margin = 36
+  const maxW = pageW - margin * 2
+  const maxH = pageH - margin * 2
+  const scale = Math.min(maxW / img.width, maxH / img.height)
+  const w = img.width * scale
+  const h = img.height * scale
+  pdf.addImage(dataUrl, "JPEG", (pageW - w) / 2, (pageH - h) / 2, w, h)
+  pdf.save(`${name}.pdf`)
 }
 
 type CostLine = { purpose: string; amount: string }
@@ -280,6 +325,14 @@ export default function WorkOrderDetailPage() {
       })
       return
     }
+    if (!jobCardFile && !existingPhoto) {
+      toast({
+        title: "Job card required",
+        description: "Upload the job card after the machine work is done.",
+        variant: "destructive",
+      })
+      return
+    }
     if (isInstallation) {
       if (!serialNumber.trim()) {
         toast({ title: "Serial number required", variant: "destructive" })
@@ -287,10 +340,6 @@ export default function WorkOrderDetailPage() {
       }
       if (!attendant.trim()) {
         toast({ title: "Person in charge required", variant: "destructive" })
-        return
-      }
-      if (!jobCardFile && !existingPhoto) {
-        toast({ title: "Job card photo required", variant: "destructive" })
         return
       }
       if (machineOkay !== "yes" && machineOkay !== "no") {
@@ -468,25 +517,6 @@ export default function WorkOrderDetailPage() {
                   />
                 </div>
               </div>
-              <div>
-                <Label>Job card photo</Label>
-                {!isComplete ? (
-                  <Input
-                    className="mt-1"
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    onChange={(e) => setJobCardFile(e.target.files?.[0] || null)}
-                  />
-                ) : null}
-                {previewSrc ? (
-                  <img
-                    src={previewSrc}
-                    alt="Job card"
-                    className="mt-2 max-h-40 w-full rounded-md border bg-slate-50 object-contain sm:max-h-72"
-                  />
-                ) : null}
-              </div>
               <fieldset className="space-y-1.5" disabled={isComplete}>
                 <legend className="text-sm font-medium">Machine okay?</legend>
                 <div className="grid grid-cols-2 gap-2">
@@ -589,6 +619,69 @@ export default function WorkOrderDetailPage() {
             />
           </div>
           <CostLinesEditor lines={costLines} onChange={setCostLines} disabled={isComplete} />
+
+          {isStarted ? (
+            <div>
+              <Label>Job card</Label>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Upload after the machine work is done. Starting a job does not need a job card.
+              </p>
+              {!isComplete ? (
+                <Input
+                  className="mt-2"
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={(e) => setJobCardFile(e.target.files?.[0] || null)}
+                />
+              ) : null}
+              {previewSrc ? (
+                <img
+                  src={previewSrc}
+                  alt="Job card"
+                  className="mt-2 max-h-56 w-full rounded-md border bg-slate-50 object-contain sm:max-h-80"
+                />
+              ) : isComplete ? (
+                <p className="mt-2 text-sm text-muted-foreground">No job card on file.</p>
+              ) : null}
+              {previewSrc ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      void downloadJobCardImage(
+                        previewSrc,
+                        `${row.woNumber || "job"}-job-card`,
+                      ).catch(() => toast({ title: "Could not download image", variant: "destructive" }))
+                    }
+                  >
+                    <Download className="mr-1 h-3.5 w-3.5" />
+                    Image
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      void downloadJobCardPdf(
+                        previewSrc,
+                        `${row.woNumber || "job"}-job-card`,
+                      ).catch(() => toast({ title: "Could not download PDF", variant: "destructive" }))
+                    }
+                  >
+                    <Download className="mr-1 h-3.5 w-3.5" />
+                    PDF
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <p className="rounded-md border border-dashed border-slate-200 px-3 py-2 text-xs text-slate-500">
+              Start the job first. The job card is uploaded when the machine work is finished.
+            </p>
+          )}
         </CardContent>
       </Card>
 

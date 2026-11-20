@@ -5,7 +5,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { engineeringApi } from "@/lib/api"
 import { PageLoadingSkeleton } from "@/components/admin/ui/page-states"
-import { AlertTriangle, ChevronRight, ClipboardList, Inbox, Wrench } from "lucide-react"
+import { AlertTriangle, ChevronRight, ClipboardList, Inbox, Palmtree, CircleDollarSign, Hammer, Wrench } from "lucide-react"
 import { EngineerHeader, EngineerKpi, EngineerPage } from "@/components/engineer/engineer-ui"
 import { useEngineerBranding } from "@/components/engineer/branding"
 import { ShimmerButton } from "@/components/ui/shimmer-button"
@@ -37,6 +37,11 @@ export default function EngineerDashboard() {
     { label: "Requests", value: data?.openRequests ?? 0, href: "/engineer/requests", icon: Inbox },
     { label: "Machines", value: data?.assets ?? 0, href: "/engineer/machines", icon: Wrench },
   ]
+  const extras = [
+    { label: "Leave", href: "/engineer/leave", icon: Palmtree },
+    { label: "Expenses", href: "/engineer/expenses", icon: CircleDollarSign },
+    { label: "Tools of work", href: "/engineer/tools", icon: Hammer },
+  ]
 
   const overdue = (data?.overdueOrders || []).slice(0, 4)
   const overdueTotal = (data?.overdueOrders || []).length
@@ -55,6 +60,22 @@ export default function EngineerDashboard() {
             icon={stat.icon}
           />
         ))}
+      </div>
+
+      <div className="grid grid-cols-3 gap-2">
+        {extras.map((item) => {
+          const Icon = item.icon
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-800"
+            >
+              <Icon className="h-4 w-4 shrink-0" style={{ color: branding.primaryColor }} />
+              {item.label}
+            </Link>
+          )
+        })}
       </div>
 
       <section className="space-y-2">

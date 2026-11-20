@@ -17,6 +17,7 @@ const TABS = [
   { href: `${TS_BASE}/activity`, label: "Recent activity" },
   { href: `${TS_BASE}/installations`, label: "Pending installations" },
   { href: `${TS_BASE}/expenses`, label: "Expenses" },
+  { href: `${TS_BASE}/tools`, label: "Tool requests" },
 ]
 
 export function monthStart() {

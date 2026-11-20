@@ -2,10 +2,12 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react"
 import { useSearchParams } from "next/navigation"
-import { engineeringApi, stockApi } from "@/lib/api"
+import { api, engineeringApi, stockApi } from "@/lib/api"
 import { PageLoadingSkeleton } from "@/components/admin/ui/page-states"
 import { EngineerHeader, EngineerPage, EngineerStatusBadge, formatWhen } from "@/components/engineer/engineer-ui"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -13,7 +15,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { ArrowLeft, Clock, MapPin, Phone, Search, UserRound, Users, Wrench } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
+import { AlertTriangle, ArrowLeft, Clock, MapPin, Phone, Search, Ticket, UserRound, Users, Wrench } from "lucide-react"
 
 type Machine = {
   _id: string
@@ -179,6 +182,7 @@ function buildTimeline(machine: Machine, payload: any): TimelineEvent[] {
 
 function EngineerMachinesInner() {
   const searchParams = useSearchParams()
+  const { toast } = useToast()
   const machineIdFromUrl = searchParams.get("machineId") || ""
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
@@ -187,6 +191,9 @@ function EngineerMachinesInner() {
   const [historyMachine, setHistoryMachine] = useState<Machine | null>(null)
   const [historyEvents, setHistoryEvents] = useState<TimelineEvent[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
+  const [ticketMachine, setTicketMachine] = useState<Machine | null>(null)
+  const [ticketNotes, setTicketNotes] = useState("")
+  const [ticketSaving, setTicketSaving] = useState(false)
 
   useEffect(() => {
     stockApi
@@ -267,6 +274,61 @@ function EngineerMachinesInner() {
     setSelected(null)
     setHistoryMachine(null)
     setHistoryEvents([])
+    setTicketMachine(null)
+    setTicketNotes("")
+  }
+
+  const patchMachine = (id: string, patch: Partial<Machine>) => {
+    setMachines((prev) => prev.map((row) => (row._id === id ? { ...row, ...patch } : row)))
+    setSelected((prev) =>
+      prev
+        ? { ...prev, machines: prev.machines.map((row) => (row._id === id ? { ...row, ...patch } : row)) }
+        : prev,
+    )
+    setHistoryMachine((prev) => (prev?._id === id ? { ...prev, ...patch } : prev))
+    setTicketMachine((prev) => (prev?._id === id ? { ...prev, ...patch } : prev))
+  }
+
+  const openTicket = (machine: Machine) => {
+    setTicketMachine(machine)
+    setTicketNotes("")
+  }
+
+  const submitTicket = async () => {
+    if (!ticketMachine) return
+    const description = ticketNotes.trim()
+    if (!description) {
+      toast({ title: "Describe what is wrong with the machine", variant: "destructive" })
+      return
+    }
+    const charge = personInCharge(ticketMachine)
+    setTicketSaving(true)
+    try {
+      await api.crm.createTicket({
+        title: "Machine is not okay",
+        description,
+        callerName: charge?.name || selected?.contactPerson || selected?.name || "Engineer report",
+        callerPhone: charge?.phone || selected?.number || undefined,
+        machine_id: ticketMachine._id,
+        status: "Open",
+      })
+      await stockApi.updateInstalledMachine(ticketMachine._id, { status: "maintenance" })
+      patchMachine(ticketMachine._id, { status: "maintenance" })
+      toast({ title: "Ticket raised", description: "Machine marked as not okay." })
+      if (historyMachine?._id === ticketMachine._id) {
+        void openHistory({ ...ticketMachine, status: "maintenance" })
+      }
+      setTicketMachine(null)
+      setTicketNotes("")
+    } catch (error: any) {
+      toast({
+        title: "Could not raise ticket",
+        description: error?.message || "Try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setTicketSaving(false)
+    }
   }
 
   if (loading) return <PageLoadingSkeleton title="Machines" />
@@ -275,7 +337,7 @@ function EngineerMachinesInner() {
     <EngineerPage>
       <EngineerHeader
         title="Machines"
-        description="Search a client, then open machine history for services, installation, and breakdowns."
+        description="Search a client, open machine history, or raise a ticket if a machine is not okay."
       />
 
       <div className="relative">
@@ -335,7 +397,52 @@ function EngineerMachinesInner() {
 
       <Dialog open={!!selected} onOpenChange={closeClient}>
         <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto max-md:top-auto max-md:bottom-0 max-md:left-0 max-md:right-0 max-md:w-full max-md:max-w-none max-md:translate-x-0 max-md:translate-y-0 max-md:rounded-b-none max-md:rounded-t-2xl max-md:max-h-[88vh] max-md:pb-[max(1rem,env(safe-area-inset-bottom))]">
-          {historyMachine ? (
+          {ticketMachine ? (
+            <>
+              <DialogHeader>
+                <DialogTitle className="pr-6">
+                  <button
+                    type="button"
+                    className="mb-1 inline-flex items-center gap-1 text-sm font-medium text-slate-600"
+                    onClick={() => {
+                      setTicketMachine(null)
+                      setTicketNotes("")
+                    }}
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    Back
+                  </button>
+                  <span className="block">Raise ticket</span>
+                </DialogTitle>
+              </DialogHeader>
+              <p className="text-xs text-muted-foreground">
+                {[
+                  ticketMachine.productName,
+                  ticketMachine.serialNumber ? `SN ${ticketMachine.serialNumber}` : "",
+                  selected?.name,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                This reports the machine as not okay and marks it for maintenance.
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ticket-notes">What is wrong?</Label>
+                <Textarea
+                  id="ticket-notes"
+                  value={ticketNotes}
+                  onChange={(event) => setTicketNotes(event.target.value)}
+                  placeholder="Describe the fault, error, or why the machine is not okay"
+                  rows={5}
+                />
+              </div>
+              <Button className="w-full" onClick={() => void submitTicket()} disabled={ticketSaving}>
+                <AlertTriangle className="mr-1.5 h-4 w-4" />
+                {ticketSaving ? "Raising ticket…" : "Raise ticket · machine not okay"}
+              </Button>
+            </>
+          ) : historyMachine ? (
             <>
               <DialogHeader>
                 <DialogTitle className="pr-6">
@@ -391,6 +498,16 @@ function EngineerMachinesInner() {
                     : ""}
                 </p>
               </div>
+
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8"
+                onClick={() => openTicket(historyMachine)}
+              >
+                <Ticket className="mr-1.5 h-3.5 w-3.5" />
+                Raise ticket · not okay
+              </Button>
 
               <div>
                 <p className="flex items-center gap-1.5 text-sm font-medium">
@@ -476,15 +593,26 @@ function EngineerMachinesInner() {
                           ? `In charge: ${charge.name}${charge.role ? ` · ${charge.role}` : ""}`
                           : "No person in charge recorded"}
                       </p>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="mt-3 h-8"
-                        onClick={() => void openHistory(machine)}
-                      >
-                        <Wrench className="mr-1.5 h-3.5 w-3.5" />
-                        Machine history
-                      </Button>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8"
+                          onClick={() => void openHistory(machine)}
+                        >
+                          <Wrench className="mr-1.5 h-3.5 w-3.5" />
+                          Machine history
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8"
+                          onClick={() => openTicket(machine)}
+                        >
+                          <Ticket className="mr-1.5 h-3.5 w-3.5" />
+                          Raise ticket
+                        </Button>
+                      </div>
                     </div>
                   )
                 })}

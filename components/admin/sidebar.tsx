@@ -93,6 +93,7 @@ const adminMenuItems = [
   { label: "Bulk SMS", href: "/admin/clients/bulk-sms", section: "CLIENTS" },
   { label: "Installed Machines", href: "/admin/clients/installed-machines", section: "CLIENTS" },
   { label: "Technical Service", href: "/admin/clients/technical-service", section: "CLIENTS" },
+  { label: "Tool requests", href: "/admin/clients/technical-service/tools", section: "CLIENTS" },
   { label: "Client Complaints", href: "/admin/clients/complaints", section: "CLIENTS" },
   { label: "Delivery Feedback", href: "/admin/clients/delivery-feedback", section: "CLIENTS" },
   { label: "Exhibitions & Events", href: "/admin/clients/exhibitions", section: "CLIENTS" },

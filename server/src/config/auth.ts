@@ -3,6 +3,8 @@ import type { IJWTPayload } from "../types/interfaces"
 
 const JWT_SECRET = process.env.JWT_SECRET
 const JWT_EXPIRY = "7d"
+const FIELD_JWT_EXPIRY = "365d"
+const FIELD_ROLES = new Set(["sales_rep", "technical_service_engineer"])
 
 if (!JWT_SECRET && process.env.NODE_ENV === "production") {
   throw new Error("JWT_SECRET is required in production")
@@ -11,7 +13,8 @@ if (!JWT_SECRET && process.env.NODE_ENV === "production") {
 const resolvedSecret = JWT_SECRET || "dev-only-secret-change-me"
 
 export const generateToken = (payload: IJWTPayload): string => {
-  return jwt.sign(payload, resolvedSecret, { expiresIn: JWT_EXPIRY })
+  const expiresIn = FIELD_ROLES.has(String(payload.role || "")) ? FIELD_JWT_EXPIRY : JWT_EXPIRY
+  return jwt.sign(payload, resolvedSecret, { expiresIn })
 }
 
 export const verifyToken = (token: string): IJWTPayload => {

@@ -17,7 +17,9 @@ const navigation = [
   { name: "Requests", href: "/engineer/requests" },
   { name: "Machines", href: "/engineer/machines" },
   { name: "Calendar", href: "/engineer/calendar" },
+  { name: "Leave", href: "/engineer/leave" },
   { name: "Expenses", href: "/engineer/expenses" },
+  { name: "Tools of work", href: "/engineer/tools" },
 ]
 
 export function EngineerSidebar({ isOpen = false, onToggle }: { isOpen?: boolean; onToggle?: () => void }) {

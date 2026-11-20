@@ -4,8 +4,26 @@ const TOKEN_KEY = 'elevate_auth_token'
 const TOKEN_COOKIE = 'elevate_auth_token'
 const USER_KEY = 'elevate_user'
 
+function cookieMaxAgeFromToken(token: string): number {
+    const fallback = 7 * 24 * 60 * 60
+    try {
+        const parts = token.split('.')
+        if (parts.length !== 3) return fallback
+        const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')))
+        if (typeof payload.exp === 'number') {
+            return Math.max(60, payload.exp - Math.floor(Date.now() / 1000))
+        }
+        if (payload.role === 'sales_rep' || payload.role === 'technical_service_engineer') {
+            return 365 * 24 * 60 * 60
+        }
+    } catch {
+        // keep default
+    }
+    return fallback
+}
+
 const setAuthCookie = (token: string): void => {
-    document.cookie = `${TOKEN_COOKIE}=${encodeURIComponent(token)}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`
+    document.cookie = `${TOKEN_COOKIE}=${encodeURIComponent(token)}; path=/; max-age=${cookieMaxAgeFromToken(token)}; SameSite=Lax`
 }
 
 const clearAuthCookie = (): void => {

@@ -1,0 +1,18 @@
+{
+  "id": "/sales",
+  "name": "Field Sales",
+  "short_name": "Sales",
+  "description": "Planner, quotes, clients, and leave for field sales.",
+  "start_url": "/sales",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait",
+  "background_color": "#f8fafc",
+  "theme_color": "#0f766e",
+  "icons": [
+    { "src": "/ELEVATEERPLOGO.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/apple-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
+    { "src": "/ELEVATEERPLOGO.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

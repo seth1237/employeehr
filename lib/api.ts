@@ -2043,6 +2043,16 @@ export const engineeringApi = {
     ),
   createContract: (data: any) => client.post<any>("/api/engineering/contracts", data),
   getExpenses: () => client.get<any[]>("/api/engineering/expenses"),
+  getToolRequests: () => client.get<any[]>("/api/engineering/tools"),
+  createToolRequest: (data: {
+    itemName: string
+    reason: string
+    quantity?: number
+    category?: string
+    neededBy?: string
+  }) => client.post<any>("/api/engineering/tools", data),
+  reviewToolRequest: (id: string, data: { status: string; adminComment?: string }) =>
+    client.patch<any>(`/api/engineering/tools/${id}`, data),
   getReport: (params?: { from?: string; to?: string; engineerId?: string; limit?: number }) => {
     const search = new URLSearchParams()
     if (params?.from) search.set("from", params.from)

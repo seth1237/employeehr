@@ -54,5 +54,12 @@ router.get(
   EngineeringController.exportReport,
 );
 router.get("/expenses", EngineeringController.myExpenseClaims);
+router.get("/tools", EngineeringController.listToolRequests);
+router.post("/tools", EngineeringController.createToolRequest);
+router.patch(
+  "/tools/:id",
+  roleMiddleware("company_admin", "super_admin", "hr", "admin", "manager"),
+  EngineeringController.updateToolRequest,
+);
 
 export default router;

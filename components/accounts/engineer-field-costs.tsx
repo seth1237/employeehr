@@ -59,7 +59,7 @@ export function EngineerFieldCostsCard({
       headerRight={
         <div className="flex flex-wrap gap-2">
           <Button asChild variant="outline" size="sm">
-            <Link href="/admin/clients/technical-service/expenses">
+            <Link href="/admin/field-management/technical-service/expenses">
               <Wrench className="mr-1.5 h-3.5 w-3.5" />
               Technical Service
             </Link>

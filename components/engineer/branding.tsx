@@ -4,11 +4,16 @@ import { createContext, useContext, type ReactNode } from "react"
 import { useSalesBranding, type SalesBranding } from "@/hooks/use-sales-branding"
 
 const DEFAULT_BRANDING: SalesBranding = {
-  primaryColor: "#0f766e",
-  secondaryColor: "#0ea5e9",
-  primarySoft: "rgba(15, 118, 110, 0.08)",
-  secondarySoft: "rgba(14, 165, 233, 0.08)",
-  primaryBorder: "rgba(15, 118, 110, 0.18)",
+  primaryColor: "var(--brand-primary)",
+  secondaryColor: "var(--brand-secondary)",
+  accentColor: "var(--brand-accent)",
+  primarySoft: "var(--brand-header-bg, #ffffff)",
+  secondarySoft: "var(--brand-header-bg, #ffffff)",
+  primaryBorder: "var(--brand-header-border, #e2e8f0)",
+  selectedBg: "var(--brand-selected-bg)",
+  selectedFg: "var(--brand-selected-fg)",
+  attentionBg: "var(--brand-attention-bg)",
+  attentionFg: "var(--brand-attention-fg)",
 }
 
 const EngineerBrandContext = createContext<SalesBranding>(DEFAULT_BRANDING)

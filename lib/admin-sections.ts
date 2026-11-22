@@ -82,8 +82,20 @@ export const ADMIN_SECTION_PATHS: Array<{
     section: "IMPORTATION",
     match: (path) => path.startsWith("/admin/stock/importation"),
   },
-  { section: "CLIENTS", match: (path) => path.startsWith("/admin/clients") || path.startsWith("/admin/sales-reports") },
-  { section: "FIELD MANAGEMENT", match: (path) => path.startsWith("/admin/field-management") },
+  {
+    section: "FIELD MANAGEMENT",
+    match: (path) =>
+      path.startsWith("/admin/field-management") ||
+      path.startsWith("/admin/sales-reports") ||
+      path.startsWith("/admin/clients/installed-machines"),
+  },
+  {
+    section: "CLIENTS",
+    match: (path) =>
+      path.startsWith("/admin/clients") &&
+      !path.startsWith("/admin/clients/installed-machines") &&
+      !path.startsWith("/admin/clients/technical-service"),
+  },
   { section: "FLEET", match: (path) => path.startsWith("/admin/fleet") },
   { section: "ACCOUNTS", match: (path) => path.startsWith("/admin/accounts") },
   { section: "PROJECT MANAGEMENT", match: (path) => path.startsWith("/admin/projects") },

@@ -50,7 +50,7 @@ const SECTION_REMINDERS: SectionReminder[] = [
     id: "FIELD MANAGEMENT",
     title: "Field sales is idle",
     description: "Planner and visit reports have not been used lately. Open field management to review the team.",
-    href: "/admin/field-management/planner",
+    href: "/admin/field-management",
     target: "wt-section-FIELD MANAGEMENT",
   },
   {

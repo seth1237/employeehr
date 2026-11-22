@@ -192,13 +192,13 @@ export default function ProjectsPage() {
       <div
         className="rounded-2xl border px-4 py-3 shadow-sm"
         style={{
-          borderColor: primaryBorderColor,
-          background: `linear-gradient(to right, ${primarySoftColor}, ${secondarySoftColor})`,
+          borderColor: "var(--brand-header-border)",
+          background: "var(--brand-header-bg)",
         }}
       >
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-0.5">
-            <p className="text-sm font-medium tracking-wide" style={{ color: primaryColor }}>
+            <p className="erp-page-eyebrow text-sm font-medium tracking-wide">
               Projects
             </p>
             <h1 className="text-xl font-semibold tracking-tight text-foreground">
@@ -297,8 +297,8 @@ export default function ProjectsPage() {
 
       {/* --- Create Form (Collapsible & Branded) --- */}
       {showForm && (
-        <Card className="shadow-md border animate-in slide-in-from-top-4 duration-300" style={{ borderColor: primaryBorderColor }}>
-          <CardHeader className="border-b" style={{ backgroundColor: primarySoftColor, borderColor: primaryBorderColor }}>
+        <Card className="shadow-md border animate-in slide-in-from-top-4 duration-300" style={{ borderColor: "var(--brand-header-border)" }}>
+          <CardHeader className="border-b" style={{ backgroundColor: primarySoftColor, borderColor: "var(--brand-header-border)" }}>
             <CardTitle className="flex items-center gap-2" style={{ color: primaryColor }}>
               <Plus className="h-5 w-5" />
               Create New Project
@@ -555,7 +555,7 @@ function StatCard({
   primaryBorderColor: string;
 }) {
   return (
-    <Card className="shadow-sm border" style={{ borderColor: primaryBorderColor, background: primarySoftColor }}>
+    <Card className="shadow-sm border" style={{ borderColor: "var(--brand-header-border)", background: primarySoftColor }}>
       <CardContent className="p-3">
         <div className="flex items-center justify-between">
           <div className="text-xs uppercase tracking-wide text-muted-foreground">

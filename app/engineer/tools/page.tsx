@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { EngineerHeader, EngineerPage, EngineerStatusBadge } from "@/components/engineer/engineer-ui"
-import { useEngineerBranding } from "@/components/engineer/branding"
 
 type ToolRequest = {
   _id: string
@@ -38,7 +37,6 @@ function statusMap(status: string): { status: "completed" | "cancelled" | "assig
 }
 
 export default function EngineerToolsPage() {
-  const branding = useEngineerBranding()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [rows, setRows] = useState<ToolRequest[]>([])
@@ -192,12 +190,7 @@ export default function EngineerToolsPage() {
                 placeholder="What job this is for, and why it is needed."
               />
             </div>
-            <Button
-              className="w-full text-white"
-              disabled={saving}
-              style={{ backgroundColor: branding.primaryColor }}
-              onClick={() => void submit()}
-            >
+            <Button className="w-full" disabled={saving} onClick={() => void submit()}>
               {saving ? "Sending…" : "Submit request"}
             </Button>
           </CardContent>

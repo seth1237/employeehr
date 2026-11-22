@@ -2070,6 +2070,42 @@ export const engineeringApi = {
     const query = search.toString()
     return client.get<any>(`/api/engineering/reports/export${query ? `?${query}` : ""}`)
   },
+  listQrCodes: (q?: string) => {
+    const origin = typeof window !== "undefined" ? window.location.origin : ""
+    const search = new URLSearchParams()
+    if (q) search.set("q", q)
+    if (origin) search.set("origin", origin)
+    const query = search.toString()
+    return client.get<any[]>(`/api/engineering/qr-codes${query ? `?${query}` : ""}`)
+  },
+  listQrInvoices: (q?: string) =>
+    client.get<any[]>(
+      `/api/engineering/qr-codes/invoices${q ? `?q=${encodeURIComponent(q)}` : ""}`,
+    ),
+  ensureMachineQr: (machineId: string) =>
+    client.post<any>(`/api/engineering/qr-codes/${machineId}/ensure`, {
+      origin: typeof window !== "undefined" ? window.location.origin : "",
+    }),
+  createQrFromInvoice: (data: any) =>
+    client.post<any>("/api/engineering/qr-codes/from-invoice", {
+      ...data,
+      origin: typeof window !== "undefined" ? window.location.origin : "",
+    }),
+  createManualQrMachine: (data: any) =>
+    client.post<any>("/api/engineering/qr-codes/manual", {
+      ...data,
+      origin: typeof window !== "undefined" ? window.location.origin : "",
+    }),
+  listQrReports: (params?: { type?: string; status?: string; limit?: number }) => {
+    const search = new URLSearchParams()
+    if (params?.type) search.set("type", params.type)
+    if (params?.status) search.set("status", params.status)
+    if (params?.limit) search.set("limit", String(params.limit))
+    const query = search.toString()
+    return client.get<any[]>(`/api/engineering/qr-reports${query ? `?${query}` : ""}`)
+  },
+  updateQrReport: (id: string, status: string) =>
+    client.patch<any>(`/api/engineering/qr-reports/${id}`, { status }),
 }
 
 export const posApi = {

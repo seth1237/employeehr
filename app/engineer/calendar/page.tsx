@@ -1,14 +1,13 @@
 "use client"
 
-import { useEffect, useMemo, useState, type CSSProperties } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { api, engineeringApi } from "@/lib/api"
 import { PageLoadingSkeleton } from "@/components/admin/ui/page-states"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { EngineerHeader, EngineerPage, EngineerStatusBadge } from "@/components/engineer/engineer-ui"
-import { useEngineerBranding } from "@/components/engineer/branding"
+import { EngineerHeader, EngineerPage, EngineerStatusBadge, ResponseTrack } from "@/components/engineer/engineer-ui"
 import { cn } from "@/lib/utils"
 
 const WEEKDAYS_SHORT = ["S", "M", "T", "W", "T", "F", "S"]
@@ -66,7 +65,6 @@ type LeaveRow = {
 }
 
 export default function EngineerCalendarPage() {
-  const branding = useEngineerBranding()
   const today = useMemo(() => new Date(), [])
   const [cursor, setCursor] = useState(() => startOfMonth(new Date()))
   const [selectedDay, setSelectedDay] = useState(new Date().getDate())
@@ -202,28 +200,23 @@ export default function EngineerCalendarPage() {
                   className={cn(
                     "flex h-14 flex-col items-center justify-start rounded-xl pt-0.5 sm:h-auto sm:min-h-24 sm:items-stretch sm:rounded-lg sm:p-1.5 sm:text-left sm:pt-1.5",
                     hasLeave && !isSelected && "bg-amber-50",
-                    isSelected && "sm:text-white sm:[background-color:var(--cal-brand)]",
+                    isSelected && "erp-selected",
                   )}
-                  style={{ ["--cal-brand"]: branding.primaryColor } as CSSProperties}
                 >
                   <span
                     className={cn(
                       "flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold sm:hidden",
-                      isSelected && "text-white",
+                      isSelected && "erp-selected",
+                      isToday && !isSelected && "text-slate-900 underline decoration-slate-400 underline-offset-2",
                     )}
-                    style={
-                      isSelected
-                        ? { backgroundColor: branding.primaryColor }
-                        : isToday
-                          ? { boxShadow: `inset 0 0 0 2px ${branding.primaryColor}` }
-                          : undefined
-                    }
                   >
                     {day}
                   </span>
                   <span
-                    className={cn("hidden text-sm font-semibold sm:inline", isToday && !isSelected && "underline")}
-                    style={isSelected ? { color: "white" } : undefined}
+                    className={cn(
+                      "hidden text-sm font-semibold sm:inline",
+                      isToday && !isSelected && "underline decoration-slate-400 underline-offset-2",
+                    )}
                   >
                     {day}
                   </span>
@@ -232,12 +225,9 @@ export default function EngineerCalendarPage() {
                       <span className="h-1.5 w-1.5 rounded-full bg-transparent" />
                     ) : null}
                     {jobs.length === 1 ? (
-                      <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: branding.primaryColor }} />
+                      <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
                     ) : jobs.length > 1 ? (
-                      <span
-                        className="min-w-3 rounded-full px-1 text-[9px] font-semibold leading-3 text-white"
-                        style={{ backgroundColor: branding.primaryColor }}
-                      >
+                      <span className="min-w-3 rounded-full bg-slate-700 px-1 text-[9px] font-semibold leading-3 text-white">
                         {jobs.length}
                       </span>
                     ) : null}
@@ -245,12 +235,7 @@ export default function EngineerCalendarPage() {
                   </span>
                   <div className="mt-1 hidden space-y-1 sm:block">
                     {hasLeave ? (
-                      <span
-                        className={cn(
-                          "block truncate rounded px-1 py-0.5 text-[11px] font-medium",
-                          isSelected ? "bg-white/20 text-white" : "bg-amber-100 text-amber-800",
-                        )}
-                      >
+                      <span className="block truncate rounded bg-amber-100 px-1 py-0.5 text-[11px] font-medium text-amber-800">
                         Leave
                       </span>
                     ) : null}
@@ -258,17 +243,13 @@ export default function EngineerCalendarPage() {
                       <Link
                         key={job._id}
                         href={`/engineer/work-orders/${job._id}`}
-                        className="block truncate rounded px-1 py-0.5 text-[11px] hover:opacity-80"
-                        style={{
-                          backgroundColor: isSelected ? "rgba(255,255,255,0.18)" : branding.primarySoft,
-                          color: isSelected ? "white" : branding.primaryColor,
-                        }}
+                        className="block truncate rounded bg-slate-100 px-1 py-0.5 text-[11px] text-slate-700 hover:bg-slate-200"
                       >
                         {job.serviceType || job.woNumber}
                       </Link>
                     ))}
                     {jobs.length > (hasLeave ? 2 : 3) ? (
-                      <p className={cn("text-[10px]", isSelected ? "text-white/80" : "text-muted-foreground")}>
+                      <p className="text-[10px] text-muted-foreground">
                         +{jobs.length - (hasLeave ? 2 : 3)} more
                       </p>
                     ) : null}
@@ -279,7 +260,7 @@ export default function EngineerCalendarPage() {
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-3 px-1 text-[11px] text-muted-foreground">
             <span className="inline-flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: branding.primaryColor }} />
+              <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
               Jobs
             </span>
             <span className="inline-flex items-center gap-1.5">
@@ -291,15 +272,9 @@ export default function EngineerCalendarPage() {
       </Card>
 
       <section className="sm:hidden">
-        <div
-          className="mb-2 flex items-center justify-between rounded-xl border px-3 py-2"
-          style={{
-            borderColor: branding.primaryBorder,
-            background: branding.primarySoft,
-          }}
-        >
+        <div className="erp-page-header mb-2 flex items-center justify-between rounded-xl px-3 py-2">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: branding.primaryColor }}>
+            <p className="erp-page-eyebrow text-[11px] font-semibold uppercase tracking-wide">
               {selectedIsToday ? "Today" : selectedDate.toLocaleDateString(undefined, { weekday: "long" })}
             </p>
             <p className="text-sm font-semibold text-slate-900">
@@ -337,10 +312,7 @@ export default function EngineerCalendarPage() {
                   href={`/engineer/work-orders/${job._id}`}
                   className="flex items-center gap-3 rounded-2xl border bg-white px-3 py-3 shadow-sm"
                 >
-                  <span
-                    className="h-10 w-1 shrink-0 rounded-full"
-                    style={{ backgroundColor: branding.primaryColor }}
-                  />
+                  <span className="h-10 w-1 shrink-0 rounded-full bg-slate-300" />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2">
                       <p className="truncate font-semibold leading-tight">
@@ -354,6 +326,10 @@ export default function EngineerCalendarPage() {
                     <p className="truncate text-xs text-muted-foreground">
                       {job.machine?.client?.name || "No client"}
                     </p>
+                    <ResponseTrack
+                      raised={job.createdAt || job.scheduledDate}
+                      resolved={job.completedDate}
+                    />
                   </div>
                   <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
                 </Link>

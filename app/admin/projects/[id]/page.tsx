@@ -87,12 +87,12 @@ export default function ProjectDetailsPage() {
       <div 
         className="rounded-2xl border px-4 py-3 shadow-sm"
         style={{
-          borderColor: primaryBorderColor,
-          background: `linear-gradient(to right, ${primarySoftColor}, ${secondarySoftColor})`,
+          borderColor: "var(--brand-header-border)",
+          background: "var(--brand-header-bg)",
         }}
       >
         <div className="flex items-center gap-4">
-          <Button variant="outline" size="icon" asChild style={{ borderColor: primaryBorderColor }}>
+          <Button variant="outline" size="icon" asChild style={{ borderColor: "var(--brand-header-border)" }}>
             <Link href="/admin/projects">
               <ArrowLeft className="h-4 w-4" style={{ color: primaryColor }} />
             </Link>
@@ -122,8 +122,8 @@ export default function ProjectDetailsPage() {
 
       <div className="grid md:grid-cols-3 gap-6">
         <div className="md:col-span-2 space-y-6">
-          <Card className="shadow-sm border" style={{ borderColor: primaryBorderColor }}>
-            <CardHeader className="border-b bg-muted/20" style={{ borderColor: primaryBorderColor }}>
+          <Card className="shadow-sm border" style={{ borderColor: "var(--brand-header-border)" }}>
+            <CardHeader className="border-b bg-muted/20" style={{ borderColor: "var(--brand-header-border)" }}>
               <CardTitle className="text-lg" style={{ color: primaryColor }}>Overview</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6 pt-6">
@@ -132,7 +132,7 @@ export default function ProjectDetailsPage() {
                 <p className="text-sm leading-relaxed">{project.description || "No description provided."}</p>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 pt-4 border-t" style={{ borderColor: primaryBorderColor }}>
+              <div className="grid grid-cols-2 gap-4 pt-4 border-t" style={{ borderColor: "var(--brand-header-border)" }}>
                 <div>
                   <h4 className="text-sm font-medium text-muted-foreground mb-1 flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" style={{ color: primaryColor }} /> Start Date</h4>
                   <p className="text-sm">{project.start_date ? new Date(project.start_date).toLocaleDateString() : "Not set"}</p>
@@ -145,8 +145,8 @@ export default function ProjectDetailsPage() {
             </CardContent>
           </Card>
 
-          <Card className="shadow-sm border" style={{ borderColor: primaryBorderColor }}>
-            <CardHeader className="flex flex-row items-center justify-between border-b bg-muted/20" style={{ borderColor: primaryBorderColor }}>
+          <Card className="shadow-sm border" style={{ borderColor: "var(--brand-header-border)" }}>
+            <CardHeader className="flex flex-row items-center justify-between border-b bg-muted/20" style={{ borderColor: "var(--brand-header-border)" }}>
               <CardTitle className="text-lg" style={{ color: primaryColor }}>Project Tasks</CardTitle>
               <Badge variant="secondary" style={{ backgroundColor: primarySoftColor, color: primaryColor }}>{tasks.length} Total</Badge>
             </CardHeader>
@@ -188,8 +188,8 @@ export default function ProjectDetailsPage() {
         </div>
 
         <div className="space-y-6">
-          <Card className="shadow-sm border" style={{ borderColor: primaryBorderColor }}>
-            <CardHeader className="border-b bg-muted/20" style={{ borderColor: primaryBorderColor }}>
+          <Card className="shadow-sm border" style={{ borderColor: "var(--brand-header-border)" }}>
+            <CardHeader className="border-b bg-muted/20" style={{ borderColor: "var(--brand-header-border)" }}>
               <CardTitle className="text-lg" style={{ color: primaryColor }}>Progress</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 pt-6">
@@ -204,7 +204,7 @@ export default function ProjectDetailsPage() {
                 />
               </div>
               {project.budget > 0 && (
-                <div className="pt-4 border-t mt-4" style={{ borderColor: primaryBorderColor }}>
+                <div className="pt-4 border-t mt-4" style={{ borderColor: "var(--brand-header-border)" }}>
                   <h4 className="text-sm font-medium text-muted-foreground mb-1">Allocated Budget</h4>
                   <p className="font-semibold text-lg" style={{ color: secondaryColor }}>KES {project.budget.toLocaleString()}</p>
                 </div>
@@ -212,8 +212,8 @@ export default function ProjectDetailsPage() {
             </CardContent>
           </Card>
 
-          <Card className="shadow-sm border" style={{ borderColor: primaryBorderColor }}>
-            <CardHeader className="border-b bg-muted/20" style={{ borderColor: primaryBorderColor }}>
+          <Card className="shadow-sm border" style={{ borderColor: "var(--brand-header-border)" }}>
+            <CardHeader className="border-b bg-muted/20" style={{ borderColor: "var(--brand-header-border)" }}>
               <CardTitle className="text-lg flex items-center gap-2" style={{ color: primaryColor }}>
                 <Users className="h-4 w-4" /> Team Members
               </CardTitle>
@@ -242,8 +242,8 @@ export default function ProjectDetailsPage() {
             </CardContent>
           </Card>
           
-          <Card className="shadow-sm border" style={{ borderColor: primaryBorderColor }}>
-            <CardHeader className="border-b bg-muted/20" style={{ borderColor: primaryBorderColor }}>
+          <Card className="shadow-sm border" style={{ borderColor: "var(--brand-header-border)" }}>
+            <CardHeader className="border-b bg-muted/20" style={{ borderColor: "var(--brand-header-border)" }}>
               <CardTitle className="text-lg flex items-center gap-2" style={{ color: primaryColor }}>
                 <Clock className="h-4 w-4" /> Recent Activity
               </CardTitle>

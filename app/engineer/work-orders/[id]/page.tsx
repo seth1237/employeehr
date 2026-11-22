@@ -14,12 +14,13 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { useToast } from "@/hooks/use-toast"
 import { Download, Star, Trash2 } from "lucide-react"
 import { jsPDF } from "jspdf"
-import { useEngineerBranding } from "@/components/engineer/branding"
 import {
   EngineerHeader,
   EngineerPage,
   EngineerStatusBadge,
   formatWhen,
+  ResponseTrack,
+  withinEditWindow,
 } from "@/components/engineer/engineer-ui"
 import { cn } from "@/lib/utils"
 
@@ -278,11 +279,9 @@ function CostLinesEditor({
 function ProgressStrip({
   started,
   completed,
-  color,
 }: {
   started: boolean
   completed: boolean
-  color: string
 }) {
   const steps = ["Assigned", "Started", "Done"]
   const current = completed ? 2 : started ? 1 : 0
@@ -293,8 +292,10 @@ function ProgressStrip({
         return (
           <div key={label} className="flex min-w-0 flex-1 items-center gap-1.5">
             <span
-              className="h-1.5 flex-1 rounded-full"
-              style={{ backgroundColor: done ? color : "#e2e8f0" }}
+              className={cn(
+                "h-1.5 flex-1 rounded-full",
+                done ? (completed ? "bg-emerald-500" : "bg-slate-700") : "bg-slate-200",
+              )}
             />
             <span className={cn("hidden text-[10px] font-medium sm:inline", done ? "text-slate-800" : "text-slate-400")}>
               {label}
@@ -310,7 +311,6 @@ export default function WorkOrderDetailPage() {
   const params = useParams()
   const router = useRouter()
   const { toast } = useToast()
-  const branding = useEngineerBranding()
   const id = String(params?.id || "")
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -363,12 +363,14 @@ export default function WorkOrderDetailPage() {
   useEffect(() => {
     if (celebrate !== "in") return
     const collapse = window.setTimeout(() => setCelebrate("out"), 1600)
-    const goHome = window.setTimeout(() => router.push("/engineer"), 2050)
+    const goJobs = window.setTimeout(() => {
+      router.push(`/engineer/work-orders?filter=all&highlight=${encodeURIComponent(id)}&editWindow=1`)
+    }, 2050)
     return () => {
       window.clearTimeout(collapse)
-      window.clearTimeout(goHome)
+      window.clearTimeout(goJobs)
     }
-  }, [celebrate, router])
+  }, [celebrate, id, router])
 
   useEffect(() => {
     if (!jobCardFile) {
@@ -407,6 +409,8 @@ export default function WorkOrderDetailPage() {
   const isInstallation =
     row?.type === "installation" || /install/i.test(String(row?.serviceType || ""))
   const isComplete = row?.status === "completed"
+  const canEdit = !isComplete || withinEditWindow(row?.completedDate)
+  const locked = !canEdit
   const isStarted = Boolean(row?.startedAt) || row?.status === "in_progress" || isComplete
   const existingPhoto = row?.machine?.photoUrl || (row?.attachments || [])[0]
 
@@ -561,8 +565,7 @@ export default function WorkOrderDetailPage() {
             {primaryLabel ? (
               <Button
                 disabled={busy}
-                className="h-9 text-white"
-                style={{ backgroundColor: branding.primaryColor }}
+                className="h-9"
                 onClick={() => void onPrimary()}
               >
                 {compressing ? "Compressing…" : primaryLabel}
@@ -589,9 +592,13 @@ export default function WorkOrderDetailPage() {
             </div>
             <EngineerStatusBadge status={row.status} />
           </div>
-          <ProgressStrip started={isStarted} completed={isComplete} color={branding.primaryColor} />
+          <ProgressStrip started={isStarted} completed={isComplete} />
+          <ResponseTrack raised={row.createdAt || row.scheduledDate} resolved={row.completedDate} />
+          {isComplete && canEdit ? (
+            <p className="text-[11px] font-medium text-amber-800">You have 24 hours to edit this job.</p>
+          ) : null}
           {covered.length > 0 ? (
-            <p className="text-[11px]" style={{ color: branding.primaryColor }}>
+            <p className="text-[11px] text-slate-600">
               Covered · {covered[0].type?.toUpperCase()} {covered[0].vendorName}
               {covered[0].endDate ? ` until ${new Date(covered[0].endDate).toLocaleDateString()}` : ""}
             </p>
@@ -606,11 +613,10 @@ export default function WorkOrderDetailPage() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 px-3 py-2.5 sm:p-6 sm:pb-3">
           <CardTitle className="text-sm sm:text-base">{isInstallation ? "Installation" : "Job card"}</CardTitle>
-          {!isComplete ? (
+          {canEdit ? (
             <button
               type="button"
-              className="text-xs font-medium"
-              style={{ color: branding.primaryColor }}
+              className="text-xs font-medium text-slate-700 hover:underline"
               disabled={busy}
               onClick={() => void save()}
             >
@@ -626,7 +632,7 @@ export default function WorkOrderDetailPage() {
                 <Input
                   className="mt-1"
                   value={serialNumber}
-                  disabled={isComplete}
+                  disabled={locked}
                   onChange={(e) => setSerialNumber(e.target.value)}
                   placeholder="Serial on the machine"
                 />
@@ -636,7 +642,7 @@ export default function WorkOrderDetailPage() {
                 <Input
                   className="mt-1"
                   value={attendant}
-                  disabled={isComplete}
+                  disabled={locked}
                   onChange={(e) => setAttendant(e.target.value)}
                   placeholder="Name"
                 />
@@ -647,7 +653,7 @@ export default function WorkOrderDetailPage() {
                   <select
                     className="mt-1 h-9 w-full rounded-md border px-2 text-sm"
                     value={attendantRole}
-                    disabled={isComplete}
+                    disabled={locked}
                     onChange={(e) => setAttendantRole(e.target.value)}
                   >
                     {ATTENDANT_ROLES.map((role) => (
@@ -662,13 +668,13 @@ export default function WorkOrderDetailPage() {
                   <Input
                     className="mt-1"
                     value={attendantNumber}
-                    disabled={isComplete}
+                    disabled={locked}
                     onChange={(e) => setAttendantNumber(e.target.value)}
                     placeholder="07…"
                   />
                 </div>
               </div>
-              <fieldset className="space-y-1.5" disabled={isComplete}>
+              <fieldset className="space-y-1.5" disabled={locked}>
                 <legend className="text-sm font-medium">Machine okay?</legend>
                 <div className="grid grid-cols-2 gap-2">
                   <label className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
@@ -702,11 +708,11 @@ export default function WorkOrderDetailPage() {
                   type="number"
                   min="0"
                   value={downtime}
-                  disabled={isComplete}
+                  disabled={locked}
                   onChange={(e) => setDowntime(e.target.value)}
                 />
               </div>
-              {checklist.length > 0 || !isComplete ? (
+              {checklist.length > 0 || canEdit ? (
                 <div>
                   <Label>Checklist</Label>
                   <div className="mt-1.5 space-y-1.5">
@@ -714,7 +720,7 @@ export default function WorkOrderDetailPage() {
                       <label key={`${item.item}-${index}`} className="flex items-start gap-2 py-1 text-sm">
                         <Checkbox
                           checked={Boolean(item.done)}
-                          disabled={isComplete}
+                          disabled={locked}
                           onCheckedChange={(checked) =>
                             setChecklist((prev) =>
                               prev.map((entry, rowIndex) =>
@@ -726,7 +732,7 @@ export default function WorkOrderDetailPage() {
                         <span className={item.done ? "text-muted-foreground line-through" : ""}>{item.item}</span>
                       </label>
                     ))}
-                    {!isComplete ? (
+                    {canEdit ? (
                       <div className="flex gap-2">
                         <Input
                           placeholder="Add item"
@@ -742,8 +748,7 @@ export default function WorkOrderDetailPage() {
                         />
                         <button
                           type="button"
-                          className="shrink-0 text-xs font-medium"
-                          style={{ color: branding.primaryColor }}
+                          className="shrink-0 text-xs font-medium text-slate-700 hover:underline"
                           onClick={() => {
                             if (!newItem.trim()) return
                             setChecklist((prev) => [...prev, { item: newItem.trim(), done: false }])
@@ -765,11 +770,11 @@ export default function WorkOrderDetailPage() {
             <textarea
               className="mt-1 min-h-20 w-full rounded-md border px-3 py-2 text-sm"
               value={notes}
-              disabled={isComplete}
+              disabled={locked}
               onChange={(e) => setNotes(e.target.value)}
             />
           </div>
-          <CostLinesEditor lines={costLines} onChange={setCostLines} disabled={isComplete} />
+          <CostLinesEditor lines={costLines} onChange={setCostLines} disabled={locked} />
 
           {isStarted ? (
             <div>
@@ -777,7 +782,7 @@ export default function WorkOrderDetailPage() {
               <p className="mt-0.5 text-xs text-muted-foreground">
                 Photo is converted to a light WebP as you upload. Starting a job does not need a job card.
               </p>
-              {!isComplete ? (
+              {canEdit ? (
                 <Input
                   className="mt-2"
                   type="file"
@@ -857,8 +862,7 @@ export default function WorkOrderDetailPage() {
             {row.machine?._id ? (
               <Link
                 href={`/engineer/machines?machineId=${row.machine._id}`}
-                className="mt-2 inline-block text-xs font-medium"
-                style={{ color: branding.primaryColor }}
+                className="mt-2 inline-block text-xs font-medium text-slate-700 hover:underline"
               >
                 Open register
               </Link>
@@ -885,8 +889,7 @@ export default function WorkOrderDetailPage() {
         >
           <Button
             disabled={busy}
-            className="h-10 w-full text-white"
-            style={{ backgroundColor: branding.primaryColor }}
+            className="h-10 w-full"
             onClick={() => void onPrimary()}
           >
             {compressing ? "Compressing…" : primaryLabel}

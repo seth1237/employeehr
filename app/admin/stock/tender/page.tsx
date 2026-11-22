@@ -1300,8 +1300,8 @@ function TendersPageInner() {
       <div
         className="rounded-2xl border px-4 py-3 shadow-sm"
         style={{
-          borderColor: primaryBorderColor,
-          background: `linear-gradient(to right, ${primarySoftColor}, ${secondarySoftColor})`,
+          borderColor: "var(--brand-header-border)",
+          background: "var(--brand-header-bg)",
         }}
       >
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">

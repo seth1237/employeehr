@@ -397,6 +397,19 @@ export class EngineeringController {
         const installedBy = String(machine.installedBy || "").trim().toLowerCase();
         return !installedBy || aliasesList.includes(installedBy);
       });
+      const completedMine = shaped
+        .filter((row) => row.status === "completed" && mine(row))
+        .sort(
+          (a, b) =>
+            new Date(b.completedDate || b.updatedAt || 0).getTime() -
+            new Date(a.completedDate || a.updatedAt || 0).getTime(),
+        )
+        .slice(0, 6);
+      const [dueTodayOrders, overdueOrders, completedOrders] = await Promise.all([
+        enrichWorkOrders(org_id, dueToday.slice(0, 8)),
+        enrichWorkOrders(org_id, overdue.slice(0, 8)),
+        enrichWorkOrders(org_id, completedMine),
+      ]);
 
       return res.status(200).json({
         success: true,
@@ -413,8 +426,9 @@ export class EngineeringController {
               String(ticket.assignedTechnician_id) === userId,
           ).length,
           plansDue: plans,
-          dueTodayOrders: dueToday.slice(0, 8),
-          overdueOrders: overdue.slice(0, 8),
+          dueTodayOrders,
+          overdueOrders,
+          completedOrders,
           pendingInstallations: myPending.slice(0, 8),
           myMachines: myMachines.slice(0, 8),
         },
@@ -656,6 +670,21 @@ export class EngineeringController {
       }
       if (Object.keys(update).length === 0) {
         return res.status(400).json({ success: false, message: "No updates provided" });
+      }
+
+      const existing = await MachineService.findOne({ _id: id, org_id }).lean();
+      if (!existing) {
+        return res.status(404).json({ success: false, message: "Work order not found" });
+      }
+      const alreadyDone = String(existing.status || "") === "completed" || Boolean(existing.completedDate);
+      if (alreadyDone && existing.completedDate) {
+        const age = Date.now() - new Date(existing.completedDate).getTime();
+        if (age > 24 * 60 * 60 * 1000) {
+          return res.status(400).json({
+            success: false,
+            message: "This job can only be edited within 24 hours of completion",
+          });
+        }
       }
 
       const updated = await MachineService.findOneAndUpdate(

@@ -25,6 +25,7 @@ import {
 import {
   SidebarBrand,
   SidebarCount,
+  SidebarFolder,
   SidebarFooter,
   SidebarFrame,
   SidebarNavLink,
@@ -41,7 +42,14 @@ interface SidebarProps {
 
 const COLLAPSED_SECTIONS_KEY = "admin_sidebar_collapsed_sections_v2"
 
-const adminMenuItems = [
+type AdminMenuItem = {
+  label: string
+  href: string
+  section: string
+  folder?: string
+}
+
+const adminMenuItems: AdminMenuItem[] = [
   { label: "Dashboard", href: "/admin", section: "CORE" },
   { label: "Manage Users", href: "/admin/users", section: "CORE" },
   { label: "Projects", href: "/admin/projects", section: "PROJECT MANAGEMENT" },
@@ -88,19 +96,26 @@ const adminMenuItems = [
   { label: "Inventory History", href: "/admin/stock/history", section: "INVENTORY MANAGER" },
   { label: "Clients Hub", href: "/admin/clients", section: "CLIENTS" },
   { label: "Telesales Activity", href: "/admin/clients/telesales-activity", section: "CLIENTS" },
-  { label: "Sales Reports", href: "/admin/sales-reports", section: "CLIENTS" },
   { label: "Email Marketing", href: "/admin/clients/email-marketing", section: "CLIENTS" },
   { label: "Bulk SMS", href: "/admin/clients/bulk-sms", section: "CLIENTS" },
-  { label: "Installed Machines", href: "/admin/clients/installed-machines", section: "CLIENTS" },
-  { label: "Technical Service", href: "/admin/clients/technical-service", section: "CLIENTS" },
-  { label: "Tool requests", href: "/admin/clients/technical-service/tools", section: "CLIENTS" },
   { label: "Client Complaints", href: "/admin/clients/complaints", section: "CLIENTS" },
   { label: "Delivery Feedback", href: "/admin/clients/delivery-feedback", section: "CLIENTS" },
   { label: "Exhibitions & Events", href: "/admin/clients/exhibitions", section: "CLIENTS" },
   { label: "Clients list", href: "/admin/clients/clients-list", section: "CLIENTS" },
-  { label: "Planner", href: "/admin/field-management/planner", section: "FIELD MANAGEMENT" },
-  { label: "Reports", href: "/admin/field-management/reports", section: "FIELD MANAGEMENT" },
-  { label: "Performance", href: "/admin/field-management/performance", section: "FIELD MANAGEMENT" },
+  { label: "Field", href: "/admin/field-management", section: "FIELD MANAGEMENT" },
+  { label: "Sales", href: "/admin/field-management/sales", section: "FIELD MANAGEMENT", folder: "Sales" },
+  { label: "Planner", href: "/admin/field-management/planner", section: "FIELD MANAGEMENT", folder: "Sales" },
+  { label: "Visit reports", href: "/admin/field-management/reports", section: "FIELD MANAGEMENT", folder: "Sales" },
+  { label: "Performance", href: "/admin/field-management/performance", section: "FIELD MANAGEMENT", folder: "Sales" },
+  { label: "Sales reports", href: "/admin/sales-reports", section: "FIELD MANAGEMENT", folder: "Sales" },
+  { label: "Technical Service", href: "/admin/field-management/technical-service", section: "FIELD MANAGEMENT", folder: "Technical Service" },
+  { label: "Activity", href: "/admin/field-management/technical-service/activity", section: "FIELD MANAGEMENT", folder: "Technical Service" },
+  { label: "QR codes", href: "/admin/field-management/technical-service/qr-codes", section: "FIELD MANAGEMENT", folder: "Technical Service" },
+  { label: "Client reports", href: "/admin/field-management/technical-service/reports", section: "FIELD MANAGEMENT", folder: "Technical Service" },
+  { label: "Tool requests", href: "/admin/field-management/technical-service/tools", section: "FIELD MANAGEMENT", folder: "Technical Service" },
+  { label: "Expenses", href: "/admin/field-management/technical-service/expenses", section: "FIELD MANAGEMENT", folder: "Technical Service" },
+  { label: "Installations", href: "/admin/field-management/technical-service/installations", section: "FIELD MANAGEMENT", folder: "Technical Service" },
+  { label: "Installed machines", href: "/admin/clients/installed-machines", section: "FIELD MANAGEMENT", folder: "Technical Service" },
   { label: "Fleet Tracker", href: "/admin/fleet", section: "FLEET" },
   { label: "Resource Booking", href: "/admin/bookings", section: "EMPLOYEE MANAGEMENT" },
   { label: "Suggestions", href: "/admin/suggestions", section: "EMPLOYEE MANAGEMENT" },
@@ -306,7 +321,13 @@ export default function AdminSidebar({
       href={item.href}
       label={item.label}
       icon={navIcon(item.href)}
-      isActive={isExactOrNestedPath(pathname, item.href, ["/admin"])}
+      isActive={isExactOrNestedPath(pathname, item.href, [
+        "/admin",
+        "/admin/clients",
+        "/admin/field-management",
+        "/admin/field-management/sales",
+        "/admin/field-management/technical-service",
+      ])}
       isCollapsed={isCollapsed}
       dataTour={keyPrefix ? undefined : `wt-nav-${item.href}`}
       badge={badgeFor(item.href)}
@@ -378,6 +399,10 @@ export default function AdminSidebar({
           if (sectionName === "ACCOUNTS") return renderAccountsSection()
           const items = sections[sectionName] || []
           const collapsed = collapsedSections.has(sectionName)
+          const folders = Array.from(
+            new Set(items.map((item) => item.folder).filter((folder): folder is string => Boolean(folder))),
+          )
+          const ungrouped = items.filter((item) => !item.folder)
           return (
             <div key={sectionName} data-tour={`wt-section-${sectionName}`}>
               <SidebarSectionLabel
@@ -387,7 +412,26 @@ export default function AdminSidebar({
                 onToggle={() => toggleSection(sectionName)}
               />
               <div className={`space-y-0.5 ${!isCollapsed && collapsed ? "hidden" : ""}`}>
-                {items.map((item) => renderItem(item))}
+                {ungrouped.map((item) => renderItem(item))}
+                {folders.map((folder) => {
+                  const folderItems = items.filter((item) => item.folder === folder)
+                  const folderKey = `${sectionName}:${folder}`
+                  const folderCollapsed = collapsedSections.has(folderKey)
+                  const folderActive = folderItems.some((item) =>
+                    isExactOrNestedPath(pathname, item.href, ["/admin"]),
+                  )
+                  return (
+                    <SidebarFolder
+                      key={folderKey}
+                      label={folder}
+                      isCollapsed={isCollapsed}
+                      collapsed={folderCollapsed && !folderActive}
+                      onToggle={() => toggleSection(folderKey)}
+                    >
+                      {folderItems.map((item) => renderItem(item))}
+                    </SidebarFolder>
+                  )
+                })}
               </div>
             </div>
           )

@@ -2,7 +2,7 @@
 
 import type { LucideIcon } from "lucide-react"
 import Link from "next/link"
-import { ChevronDown, ChevronLeft, LogOut, PanelLeftClose, PanelLeftOpen } from "lucide-react"
+import { ChevronDown, ChevronLeft, FolderOpen, LogOut, PanelLeftClose, PanelLeftOpen } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ICON_STROKE, NAV_ICON_SIZE } from "@/lib/nav-icons"
 import {
@@ -141,6 +141,45 @@ export function SidebarSectionLabel({
   )
 }
 
+export function SidebarFolder({
+  label,
+  isCollapsed,
+  collapsed,
+  onToggle,
+  children,
+}: {
+  label: string
+  isCollapsed: boolean
+  collapsed?: boolean
+  onToggle?: () => void
+  children: React.ReactNode
+}) {
+  if (isCollapsed) {
+    return <div className="space-y-0.5">{children}</div>
+  }
+  return (
+    <div className="mt-1">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={!collapsed}
+        className="mb-0.5 flex h-8 w-full items-center gap-2 rounded-md px-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
+      >
+        <FolderOpen size={14} strokeWidth={ICON_STROKE} className="shrink-0 text-slate-400" />
+        <span className="min-w-0 flex-1 truncate">{label}</span>
+        <ChevronDown
+          size={14}
+          strokeWidth={ICON_STROKE}
+          className={cn("text-slate-400 transition-transform duration-150", collapsed ? "-rotate-90" : "rotate-0")}
+        />
+      </button>
+      <div className={cn("ml-2 space-y-0.5 border-l border-slate-200 pl-1.5", collapsed ? "hidden" : "")}>
+        {children}
+      </div>
+    </div>
+  )
+}
+
 export function SidebarNavLink({
   href,
   label,
@@ -172,21 +211,13 @@ export function SidebarNavLink({
       className={cn(
         "relative flex h-9 items-center rounded-md text-[13px] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-primary)]",
         isCollapsed ? "justify-center px-0" : "gap-2.5 px-2.5",
-        isActive ? "font-medium" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+        isActive ? "erp-selected font-medium" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
       )}
-      style={
-        isActive
-          ? {
-              backgroundColor: "color-mix(in srgb, var(--brand-primary) 10%, transparent)",
-              color: "var(--brand-primary)",
-            }
-          : undefined
-      }
     >
       {isActive ? (
         <span
           className="absolute left-0 top-1/2 h-4 w-[2.5px] -translate-y-1/2 rounded-full"
-          style={{ backgroundColor: "var(--brand-primary)" }}
+          style={{ backgroundColor: "var(--brand-primary-400, var(--brand-primary))" }}
           aria-hidden
         />
       ) : null}
@@ -312,7 +343,7 @@ export function SidebarFooter({
 export function SidebarCount({ value }: { value: number }) {
   if (value <= 0) return null
   return (
-    <span className="min-w-4 rounded-full bg-slate-100 px-1.5 py-0.5 text-center text-[10px] font-semibold tabular-nums text-slate-600">
+    <span className="erp-attention min-w-4 rounded-full px-1.5 py-0.5 text-center text-[10px] font-semibold tabular-nums">
       {value > 99 ? "99+" : value}
     </span>
   )

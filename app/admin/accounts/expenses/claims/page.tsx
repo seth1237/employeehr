@@ -205,7 +205,7 @@ function ExpenseClaimsInner() {
       actions={
         engineerView ? (
           <Button asChild variant="outline" size="sm">
-            <Link href="/admin/clients/technical-service/expenses">
+            <Link href="/admin/field-management/technical-service/expenses">
               <Wrench className="h-4 w-4 mr-1" />
               Technical Service
             </Link>

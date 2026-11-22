@@ -7,14 +7,15 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { DesktopTableShell, MobileCardList, MobileCard } from "@/components/admin/ui/mobile-list"
-import { useCompanyBranding } from "@/hooks/use-sales-branding"
 import { cn } from "@/lib/utils"
 
-export const TS_BASE = "/admin/clients/technical-service"
+export const TS_BASE = "/admin/field-management/technical-service"
 
 const TABS = [
   { href: TS_BASE, label: "Overview", exact: true },
   { href: `${TS_BASE}/activity`, label: "Recent activity" },
+  { href: `${TS_BASE}/qr-codes`, label: "QR codes" },
+  { href: `${TS_BASE}/reports`, label: "Client reports" },
   { href: `${TS_BASE}/installations`, label: "Pending installations" },
   { href: `${TS_BASE}/expenses`, label: "Expenses" },
   { href: `${TS_BASE}/tools`, label: "Tool requests" },
@@ -52,6 +53,7 @@ export function statusTone(status?: string) {
     return "border-emerald-200 bg-emerald-50 text-emerald-800"
   }
   if (value === "in_progress") return "border-sky-200 bg-sky-50 text-sky-800"
+  if (value === "open" || value === "new") return "border-amber-200 bg-amber-50 text-amber-800"
   if (value === "installation_pending" || value === "submitted" || value === "draft") {
     return "border-amber-200 bg-amber-50 text-amber-800"
   }
@@ -70,20 +72,13 @@ export function TechnicalServiceHeader({
   description?: string
   actions?: ReactNode
 }) {
-  const branding = useCompanyBranding()
   const pathname = usePathname()
   return (
     <div className="space-y-4">
-      <div
-        className="rounded-2xl border px-4 py-3 shadow-sm"
-        style={{
-          borderColor: branding.primaryBorder,
-          background: `linear-gradient(to right, ${branding.primarySoft}, ${branding.secondarySoft})`,
-        }}
-      >
+      <div className="erp-page-header rounded-2xl px-4 py-3">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-0.5">
-            <p className="text-sm font-medium tracking-wide" style={{ color: branding.primaryColor }}>
+            <p className="erp-page-eyebrow text-sm font-medium tracking-wide">
               Technical Service
             </p>
             <h1 className="text-xl font-semibold tracking-tight text-foreground">{title}</h1>
@@ -101,9 +96,8 @@ export function TechnicalServiceHeader({
               href={tab.href}
               className={cn(
                 "shrink-0 rounded-full px-3 py-1.5 text-sm font-medium",
-                active ? "text-white" : "text-slate-600 hover:bg-slate-100",
+                active ? "erp-selected" : "text-slate-600 hover:bg-slate-100",
               )}
-              style={active ? { backgroundColor: branding.primaryColor } : undefined}
             >
               {tab.label}
             </Link>

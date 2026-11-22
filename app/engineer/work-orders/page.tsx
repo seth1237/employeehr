@@ -16,13 +16,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { cn } from "@/lib/utils"
 import { DesktopTableShell, MobileCardList, MobileCard } from "@/components/admin/ui/mobile-list"
 import { ChevronRight, Plus } from "lucide-react"
 import {
   EngineerHeader,
   EngineerPage,
 } from "@/components/engineer/engineer-ui"
-import { useEngineerBranding } from "@/components/engineer/branding"
 
 const PAGE_SIZE = 8
 const FILTERS = [
@@ -50,10 +50,11 @@ export default function WorkOrdersPage() {
 }
 
 function WorkOrdersInner() {
-  const branding = useEngineerBranding()
   const searchParams = useSearchParams()
   const [loading, setLoading] = useState(true)
   const [rows, setRows] = useState<any[]>([])
+  const highlightId = searchParams.get("highlight") || ""
+  const [editNotice, setEditNotice] = useState(searchParams.get("editWindow") === "1")
   const [filter, setFilter] = useState(searchParams.get("filter") || "mine")
   const [status, setStatus] = useState(searchParams.get("status") || "")
   const [assetId, setAssetId] = useState(searchParams.get("assetId") || "")
@@ -111,13 +112,17 @@ function WorkOrdersInner() {
       return 0
     }
     return [...filtered].sort((a, b) => {
+      if (highlightId) {
+        if (String(a._id) === highlightId) return -1
+        if (String(b._id) === highlightId) return 1
+      }
       const byOpen = rank(a.status) - rank(b.status)
       if (byOpen !== 0) return byOpen
       const aTime = a.scheduledDate ? new Date(a.scheduledDate).getTime() : Number.MAX_SAFE_INTEGER
       const bTime = b.scheduledDate ? new Date(b.scheduledDate).getTime() : Number.MAX_SAFE_INTEGER
       return aTime - bTime
     })
-  }, [rows, q])
+  }, [rows, q, highlightId])
 
   const shown = visible.slice(0, visibleCount)
   const hasMore = visible.length > shown.length
@@ -125,6 +130,14 @@ function WorkOrdersInner() {
   useEffect(() => {
     setVisibleCount(PAGE_SIZE)
   }, [filter, status, assetId, q])
+
+  useEffect(() => {
+    if (!highlightId || loading) return
+    const el =
+      document.getElementById(`wo-mobile-${highlightId}`) ||
+      document.getElementById(`wo-desktop-${highlightId}`)
+    el?.scrollIntoView({ behavior: "smooth", block: "center" })
+  }, [highlightId, shown, loading])
 
   const create = async () => {
     if (!form.machineId || !form.serviceType.trim()) {
@@ -164,8 +177,7 @@ function WorkOrdersInner() {
         actions={
           <Button
             size="sm"
-            className="h-8 px-3 text-xs text-white sm:text-sm"
-            style={{ backgroundColor: branding.primaryColor }}
+            className="h-8 px-3 text-xs sm:text-sm"
             onClick={() => setCreateOpen(true)}
           >
             <Plus className="mr-1 h-3.5 w-3.5" />
@@ -259,7 +271,14 @@ function WorkOrdersInner() {
                   </tr>
                 ) : (
                   shown.map((row) => (
-                    <tr key={row._id} className="border-t hover:bg-muted/30">
+                    <tr
+                      id={`wo-desktop-${row._id}`}
+                      key={row._id}
+                      className={cn(
+                        "border-t hover:bg-muted/30",
+                        highlightId === String(row._id) && "bg-amber-50 ring-2 ring-inset ring-amber-400",
+                      )}
+                    >
                       <td className="px-4 py-3">
                         <Link href={`/engineer/work-orders/${row._id}`} className="font-medium hover:underline">
                           {row.woNumber || "Work order"}
@@ -297,7 +316,11 @@ function WorkOrdersInner() {
               </MobileCard>
             ) : (
               shown.map((row) => (
-                <MobileCard key={row._id} className="p-0">
+                <MobileCard
+                  key={row._id}
+                  id={`wo-mobile-${row._id}`}
+                  className={cn("p-0", highlightId === String(row._id) && "bg-amber-50 ring-2 ring-amber-400")}
+                >
                   <Link href={`/engineer/work-orders/${row._id}`} className="flex items-start gap-3 px-4 py-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-start justify-between gap-2">
@@ -416,10 +439,24 @@ function WorkOrdersInner() {
                 onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
               />
             </div>
-            <Button className="w-full text-white" disabled={saving} style={{ backgroundColor: branding.primaryColor }} onClick={() => void create()}>
+            <Button className="w-full" disabled={saving} onClick={() => void create()}>
               {saving ? "Saving…" : "Create work order"}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editNotice} onOpenChange={setEditNotice}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>You have only 24hrs to edit your work.</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            The job is done. You can still tweak notes, costs, or the job card for the next 24 hours.
+          </p>
+          <Button className="w-full" onClick={() => setEditNotice(false)}>
+            Got it
+          </Button>
         </DialogContent>
       </Dialog>
     </EngineerPage>

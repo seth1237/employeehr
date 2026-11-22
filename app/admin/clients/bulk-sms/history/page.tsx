@@ -160,8 +160,8 @@ export default function BulkSmsCampaignHistoryPage() {
       <div
         className="rounded-2xl border px-4 py-4 shadow-sm"
         style={{
-          borderColor: primaryBorderColor,
-          background: `linear-gradient(to right, ${primarySoftColor}, ${secondaryColor}14)`,
+          borderColor: "var(--brand-header-border)",
+          background: "var(--brand-header-bg)",
         }}
       >
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -173,7 +173,7 @@ export default function BulkSmsCampaignHistoryPage() {
               </Link>
             </Button>
             <div className="space-y-0.5">
-              <p className="text-sm font-medium tracking-wide" style={{ color: primaryColor }}>
+              <p className="erp-page-eyebrow text-sm font-medium tracking-wide">
                 Clients
               </p>
               <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight text-foreground">

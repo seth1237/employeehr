@@ -10,7 +10,6 @@ import {
   resolveAccountsPageFromPathname,
   type AccountsNavPage,
 } from "@/lib/accounts-nav"
-import { hexToRgba, useAccountsBranding } from "@/components/accounts/use-accounts-branding"
 
 function pageHref(page: AccountsNavPage) {
   return page.redirectTo || page.href
@@ -40,7 +39,6 @@ export function AccountsModuleNav({
   className = "",
 }: AccountsModuleNavProps) {
   const pathname = usePathname() || ""
-  const branding = useAccountsBranding()
   const resolvedPage = resolveAccountsPageFromPathname(pathname)
   const groupId = groupIdProp || resolvedPage?.groupId
 
@@ -52,8 +50,7 @@ export function AccountsModuleNav({
 
   return (
     <div
-      className={`rounded-xl border bg-background/80 p-2 shadow-sm backdrop-blur-sm ${className}`}
-      style={{ borderColor: hexToRgba(branding.primaryColor, 0.16) }}
+      className={`rounded-xl border border-border bg-white p-2 shadow-sm ${className}`}
     >
       <div className="mb-2 flex items-center justify-between gap-2 px-1">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -73,16 +70,8 @@ export function AccountsModuleNav({
               key={page.id}
               asChild
               size="sm"
-              variant={active ? "default" : "outline"}
-              className={`h-8 px-3 text-xs ${planned && !active ? "opacity-70" : ""}`}
-              style={
-                active
-                  ? {
-                      backgroundColor: branding.primaryColor,
-                      borderColor: branding.primaryColor,
-                    }
-                  : undefined
-              }
+              variant="outline"
+              className={`h-8 px-3 text-xs ${active ? "erp-selected border-transparent" : ""} ${planned && !active ? "opacity-70" : ""}`}
             >
               <Link href={href} title={page.description}>
                 {page.label}

@@ -1,15 +1,17 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { engineeringApi } from "@/lib/api"
+import { getUser } from "@/lib/auth"
 import { PageLoadingSkeleton } from "@/components/admin/ui/page-states"
-import { AlertTriangle, ChevronRight, ClipboardList, Inbox, Palmtree, CircleDollarSign, Hammer, Wrench } from "lucide-react"
+import { AlertTriangle, CheckCircle2, ChevronRight, ClipboardList, Inbox, Palmtree, CircleDollarSign, Hammer, Wrench } from "lucide-react"
 import { EngineerHeader, EngineerKpi, EngineerPage } from "@/components/engineer/engineer-ui"
 import { useEngineerBranding } from "@/components/engineer/branding"
 import { ShimmerButton } from "@/components/ui/shimmer-button"
 import { useMarkFieldHomeReady } from "@/components/field/login-splash"
+import { engineerFirstName, pickEngineerGreeting } from "@/lib/engineer-greeting"
 
 function dueLabel(value?: string) {
   if (!value) return "Unscheduled"
@@ -20,6 +22,8 @@ export default function EngineerDashboard() {
   const branding = useEngineerBranding()
   const router = useRouter()
   const markHomeReady = useMarkFieldHomeReady()
+  const user = getUser()
+  const firstName = engineerFirstName(user)
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState<any>(null)
 
@@ -34,6 +38,11 @@ export default function EngineerDashboard() {
   useEffect(() => {
     if (!loading) markHomeReady()
   }, [loading, markHomeReady])
+
+  const greeting = useMemo(() => {
+    if (loading) return "Today"
+    return pickEngineerGreeting({ firstName, pendingCount: data?.myOpen })
+  }, [firstName, data?.myOpen, loading])
 
   if (loading) return <PageLoadingSkeleton title="Today" />
 
@@ -51,10 +60,11 @@ export default function EngineerDashboard() {
 
   const overdue = (data?.overdueOrders || []).slice(0, 4)
   const overdueTotal = (data?.overdueOrders || []).length
+  const completed = (data?.completedOrders || []).slice(0, 4)
 
   return (
     <EngineerPage>
-      <EngineerHeader title="Today" description="Your open work and overdue jobs." />
+      <EngineerHeader title={greeting} description="Your open work, overdue jobs, and recent wins." />
 
       <div data-tour="wt-dashboard" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {stats.map((stat) => (
@@ -128,6 +138,54 @@ export default function EngineerDashboard() {
               </ShimmerButton>
             ))}
           </div>
+        )}
+      </section>
+
+      <section className="space-y-2">
+        <div className="flex items-end justify-between gap-2">
+          <h2 className="text-sm font-semibold sm:text-base">
+            {firstName ? `You’ve been so productive, ${firstName}!` : "You’ve been so productive!"}
+          </h2>
+          <Link
+            href="/engineer/work-orders?filter=all&status=completed"
+            className="text-xs font-medium hover:underline"
+            style={{ color: branding.primaryColor }}
+          >
+            View all
+          </Link>
+        </div>
+        {completed.length === 0 ? (
+          <p className="rounded-xl border bg-white px-4 py-6 text-center text-sm text-muted-foreground">
+            Finish a job and it will land here.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {completed.map((row: any) => (
+              <li key={row._id}>
+                <Link
+                  href={`/engineer/work-orders/${row._id}`}
+                  className="flex items-center gap-3 rounded-xl border bg-white px-3 py-3"
+                >
+                  <span
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+                    style={{ backgroundColor: "var(--brand-primary-50)", color: branding.primaryColor }}
+                  >
+                    <CheckCircle2 className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium text-slate-900">
+                      {row.serviceType || row.woNumber || "Job"}
+                    </span>
+                    <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                      {row.machine?.productName || row.machine?.client?.name || "Machine"}
+                      {row.completedDate ? ` · ${dueLabel(row.completedDate)}` : ""}
+                    </span>
+                  </span>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                </Link>
+              </li>
+            ))}
+          </ul>
         )}
       </section>
     </EngineerPage>

@@ -12,12 +12,12 @@ const buttonVariants = cva(
         default: 'eh-btn-solid',
         destructive: 'eh-btn-solid eh-btn-destructive',
         outline:
-          'border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50',
+          'border border-slate-200 bg-white text-slate-700 shadow-xs hover:bg-slate-50 hover:text-slate-900 dark:bg-input/30 dark:border-input dark:text-slate-200 dark:hover:bg-input/50',
         secondary:
-          'bg-secondary text-secondary-foreground hover:bg-secondary/80',
+          'bg-slate-100 text-slate-700 hover:bg-slate-200/80',
         ghost:
-          'hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50',
-        link: 'text-primary underline-offset-4 hover:underline',
+          'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800',
+        link: 'text-slate-700 underline-offset-4 hover:text-[color:var(--brand-primary)] hover:underline',
       },
       size: {
         default: 'h-10 px-5 py-2 has-[>svg]:px-4',

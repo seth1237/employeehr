@@ -5,7 +5,6 @@ import { CircleHelp, Menu, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { getUser } from "@/lib/auth"
 import { requestWalkthroughReplay } from "@/lib/walkthrough"
-import { useEngineerBranding } from "@/components/engineer/branding"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,7 +14,6 @@ import {
 
 export function EngineerTopNav({ onMenuClick }: { onMenuClick?: () => void }) {
   const user = getUser()
-  const branding = useEngineerBranding()
   const name = user
     ? `${user.first_name || ""} ${user.last_name || ""}`.trim() || user.email
     : "Service engineer"
@@ -45,12 +43,7 @@ export function EngineerTopNav({ onMenuClick }: { onMenuClick?: () => void }) {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <Button
-          asChild
-          size="sm"
-          className="h-8 px-2.5 text-xs text-white md:px-3 md:text-sm"
-          style={{ backgroundColor: branding.primaryColor }}
-        >
+        <Button asChild size="sm" className="h-8 px-2.5 text-xs md:px-3 md:text-sm">
           <Link href="/engineer/work-orders">
             <Plus className="mr-1 h-3.5 w-3.5" />
             New job

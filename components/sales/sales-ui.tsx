@@ -31,7 +31,7 @@ export function SalesHeader({
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
       <div className="min-w-0 space-y-1">
-        <p className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: color || "#0f766e" }}>
+        <p className="erp-page-eyebrow text-[11px] font-semibold uppercase tracking-wider">
           {eyebrow}
         </p>
         <h1 className="text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl">{title}</h1>
@@ -57,8 +57,8 @@ export function SalesKpi({
   tone?: "default" | "alert" | "success"
   color?: string
 }) {
-  const iconColor = tone === "alert" ? "#b45309" : tone === "success" ? "#047857" : color || "#0f766e"
-  const iconBg = tone === "alert" ? "#fffbeb" : tone === "success" ? "#ecfdf5" : "rgba(15,118,110,0.08)"
+  const iconColor = tone === "alert" ? "#c2410c" : tone === "success" ? "#047857" : "#475569"
+  const iconBg = tone === "alert" ? "var(--brand-attention-bg, #fff7ed)" : tone === "success" ? "#ecfdf5" : "#f8fafc"
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-3">
       <div className="flex items-start justify-between gap-2">
@@ -153,10 +153,7 @@ export function SalesQuickAction({
   return (
     <Button asChild variant="outline" className="h-auto min-h-11 justify-start border-slate-200 p-3 text-left">
       <Link href={href} className="flex w-full items-start gap-3">
-        <span
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md"
-          style={{ backgroundColor: "rgba(15,118,110,0.08)", color: color || "#0f766e" }}
-        >
+        <span className="erp-icon-well flex h-9 w-9 shrink-0 items-center justify-center rounded-md">
           <Icon className="h-4 w-4" aria-hidden />
         </span>
         <span className="min-w-0">

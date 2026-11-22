@@ -219,8 +219,8 @@ function ProductAnalyticsInner() {
       <div
         className="rounded-lg border p-8 text-center"
         style={{
-          borderColor: primaryBorderColor,
-          background: `linear-gradient(to right, ${primarySoftColor}, ${secondarySoftColor})`,
+          borderColor: "var(--brand-header-border)",
+          background: "var(--brand-header-bg)",
         }}
       >
         <p className="text-slate-600">Select a product from the search bar above to view analytics</p>
@@ -233,8 +233,8 @@ function ProductAnalyticsInner() {
       <div
         className="rounded-2xl border p-4 shadow-sm md:p-5"
         style={{
-          borderColor: primaryBorderColor,
-          background: `linear-gradient(to right, ${primarySoftColor}, ${secondarySoftColor})`,
+          borderColor: "var(--brand-header-border)",
+          background: "var(--brand-header-bg)",
         }}
       >
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -273,7 +273,7 @@ function ProductAnalyticsInner() {
             </div>
             <Button
               variant="outline"
-              style={{ borderColor: primaryBorderColor, color: primaryColor }}
+              style={{ borderColor: "var(--brand-header-border)", color: primaryColor }}
               onClick={() => {
                 const end = new Date()
                 const start = new Date()

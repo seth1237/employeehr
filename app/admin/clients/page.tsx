@@ -13,7 +13,6 @@ import {
   Users,
   MessageSquare,
   Mail,
-  Zap,
   Activity,
   RefreshCw,
   UserPlus,
@@ -291,18 +290,6 @@ export default function ClientsHubPage() {
       icon: Activity,
     },
     {
-      title: "Installed Machines",
-      description: "Track machines, services, and open tickets",
-      href: "/admin/clients/installed-machines",
-      icon: Zap,
-    },
-    {
-      title: "Technical Service",
-      description: "Engineer reports, installations, and job activity",
-      href: "/admin/clients/technical-service",
-      icon: Wrench,
-    },
-    {
       title: "Bulk SMS",
       description: "Send campaigns to selected client groups",
       href: "/admin/clients/bulk-sms",
@@ -363,13 +350,13 @@ export default function ClientsHubPage() {
       <div
         className="rounded-2xl border px-4 py-4 shadow-sm"
         style={{
-          borderColor: primaryBorderColor,
-          background: `linear-gradient(to right, ${primarySoftColor}, ${secondarySoftColor})`,
+          borderColor: "var(--brand-header-border)",
+          background: "var(--brand-header-bg)",
         }}
       >
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-0.5">
-            <p className="text-sm font-medium tracking-wide" style={{ color: primaryColor }}>
+            <p className="erp-page-eyebrow text-sm font-medium tracking-wide">
               Telesales
             </p>
             <h1 className="text-xl font-semibold tracking-tight text-foreground">

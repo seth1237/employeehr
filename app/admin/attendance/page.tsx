@@ -285,13 +285,13 @@ export default function AdminAttendancePage() {
       <div 
         className="rounded-2xl border px-4 py-3 shadow-sm" 
         style={{ 
-          borderColor: primaryBorderColor, 
-          background: `linear-gradient(to right, ${primarySoftColor}, ${secondarySoftColor})` 
+          borderColor: "var(--brand-header-border)", 
+          background: "var(--brand-header-bg)" 
         }}
       >
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="space-y-0.5">
-            <p className="text-sm font-medium tracking-wide" style={{ color: primaryColor }}>HR Management</p>
+            <p className="erp-page-eyebrow text-sm font-medium tracking-wide">HR Management</p>
             <h1 className="text-xl font-semibold tracking-tight text-foreground">Attendance Tracker</h1>
             <p className="text-sm text-muted-foreground">Monitor employee check-ins, check-outs and working hours.</p>
           </div>
@@ -299,7 +299,7 @@ export default function AdminAttendancePage() {
             onClick={() => loadAttendance({ silent: true })} 
             disabled={refreshing} 
             variant="outline"
-            style={{ borderColor: primaryBorderColor }}
+            style={{ borderColor: "var(--brand-header-border)" }}
           >
             <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
             {refreshing ? "Refreshing..." : "Refresh"}
@@ -316,7 +316,7 @@ export default function AdminAttendancePage() {
       <div className="grid gap-6 lg:grid-cols-12">
         <Card 
           className="lg:col-span-4 shadow-sm"
-          style={{ borderColor: primaryBorderColor }}
+          style={{ borderColor: "var(--brand-header-border)" }}
         >
           <CardHeader>
             <CardTitle className="flex items-center gap-2" style={{ color: primaryColor }}>
@@ -329,7 +329,7 @@ export default function AdminAttendancePage() {
               value={employeeSearch}
               onChange={(event) => setEmployeeSearch(event.target.value)}
               placeholder="Search employee by name or email"
-              style={{ borderColor: primaryBorderColor }}
+              style={{ borderColor: "var(--brand-header-border)" }}
               className="focus-visible:ring-primary"
             />
 
@@ -375,7 +375,7 @@ export default function AdminAttendancePage() {
         <div className="space-y-6 lg:col-span-8">
           <Card 
             className="shadow-sm"
-            style={{ borderColor: primaryBorderColor }}
+            style={{ borderColor: "var(--brand-header-border)" }}
           >
             <CardHeader>
               <CardTitle className="flex items-center gap-2" style={{ color: primaryColor }}>
@@ -395,7 +395,7 @@ export default function AdminAttendancePage() {
                     <Card 
                       className="shadow-sm"
                       style={{ 
-                        borderColor: primaryBorderColor,
+                        borderColor: "var(--brand-header-border)",
                         background: primaryLightColor 
                       }}
                     >
@@ -412,7 +412,7 @@ export default function AdminAttendancePage() {
                     <Card 
                       className="shadow-sm"
                       style={{ 
-                        borderColor: primaryBorderColor,
+                        borderColor: "var(--brand-header-border)",
                         background: primaryLightColor 
                       }}
                     >
@@ -429,7 +429,7 @@ export default function AdminAttendancePage() {
                     <Card 
                       className="shadow-sm"
                       style={{ 
-                        borderColor: primaryBorderColor,
+                        borderColor: "var(--brand-header-border)",
                         background: primaryLightColor 
                       }}
                     >
@@ -448,7 +448,7 @@ export default function AdminAttendancePage() {
                   <div className="mt-4 grid gap-4 md:grid-cols-4">
                     <Card 
                       className="shadow-sm"
-                      style={{ borderColor: primaryBorderColor }}
+                      style={{ borderColor: "var(--brand-header-border)" }}
                     >
                       <CardHeader className="pb-2">
                         <CardTitle className="text-sm" style={{ color: primaryColor }}>Present</CardTitle>
@@ -459,7 +459,7 @@ export default function AdminAttendancePage() {
                     </Card>
                     <Card 
                       className="shadow-sm"
-                      style={{ borderColor: primaryBorderColor }}
+                      style={{ borderColor: "var(--brand-header-border)" }}
                     >
                       <CardHeader className="pb-2">
                         <CardTitle className="text-sm" style={{ color: primaryColor }}>Late</CardTitle>
@@ -470,7 +470,7 @@ export default function AdminAttendancePage() {
                     </Card>
                     <Card 
                       className="shadow-sm"
-                      style={{ borderColor: primaryBorderColor }}
+                      style={{ borderColor: "var(--brand-header-border)" }}
                     >
                       <CardHeader className="pb-2">
                         <CardTitle className="text-sm" style={{ color: primaryColor }}>Absent</CardTitle>
@@ -481,7 +481,7 @@ export default function AdminAttendancePage() {
                     </Card>
                     <Card 
                       className="shadow-sm"
-                      style={{ borderColor: primaryBorderColor }}
+                      style={{ borderColor: "var(--brand-header-border)" }}
                     >
                       <CardHeader className="pb-2">
                         <CardTitle className="text-sm" style={{ color: primaryColor }}>Total Hours</CardTitle>
@@ -498,7 +498,7 @@ export default function AdminAttendancePage() {
 
           <Card 
             className="shadow-sm"
-            style={{ borderColor: primaryBorderColor }}
+            style={{ borderColor: "var(--brand-header-border)" }}
           >
             <CardHeader>
               <CardTitle style={{ color: primaryColor }}>Selected Employee Attendance Records</CardTitle>
@@ -507,7 +507,7 @@ export default function AdminAttendancePage() {
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
-                    <TableRow style={{ borderColor: primaryBorderColor }}>
+                    <TableRow style={{ borderColor: "var(--brand-header-border)" }}>
                       <TableHead style={{ color: primaryColor }}>Date</TableHead>
                       <TableHead style={{ color: primaryColor }}>Check In</TableHead>
                       <TableHead style={{ color: primaryColor }}>Check Out</TableHead>
@@ -526,7 +526,7 @@ export default function AdminAttendancePage() {
                       paginatedRecords.map((record) => {
                         const badgeVariant = statusVariant[record.status as keyof typeof statusVariant] || "outline"
                         return (
-                          <TableRow key={record._id} style={{ borderColor: primaryBorderColor }}>
+                          <TableRow key={record._id} style={{ borderColor: "var(--brand-header-border)" }}>
                             <TableCell>{new Date(record.date).toLocaleDateString()}</TableCell>
                             <TableCell>{record.checkIn || "N/A"}</TableCell>
                             <TableCell>{record.checkOut || "N/A"}</TableCell>
@@ -560,7 +560,7 @@ export default function AdminAttendancePage() {
                       size="sm"
                       onClick={() => setRecordsPage((prev) => Math.max(1, prev - 1))}
                       disabled={recordsPage === 1}
-                      style={{ borderColor: primaryBorderColor }}
+                      style={{ borderColor: "var(--brand-header-border)" }}
                     >
                       <ChevronLeft className="h-4 w-4" />
                       Previous
@@ -587,7 +587,7 @@ export default function AdminAttendancePage() {
                             size="sm"
                             onClick={() => setRecordsPage(pageNum)}
                             className="min-w-9"
-                            style={recordsPage === pageNum ? { backgroundColor: primaryColor } : { borderColor: primaryBorderColor }}
+                            style={recordsPage === pageNum ? { backgroundColor: primaryColor } : { borderColor: "var(--brand-header-border)" }}
                           >
                             {pageNum}
                           </Button>
@@ -602,7 +602,7 @@ export default function AdminAttendancePage() {
                             size="sm"
                             onClick={() => setRecordsPage(totalRecordPages)}
                             className="min-w-9"
-                            style={{ borderColor: primaryBorderColor }}
+                            style={{ borderColor: "var(--brand-header-border)" }}
                           >
                             {totalRecordPages}
                           </Button>
@@ -615,7 +615,7 @@ export default function AdminAttendancePage() {
                       size="sm"
                       onClick={() => setRecordsPage((prev) => Math.min(totalRecordPages, prev + 1))}
                       disabled={recordsPage === totalRecordPages}
-                      style={{ borderColor: primaryBorderColor }}
+                      style={{ borderColor: "var(--brand-header-border)" }}
                     >
                       Next
                       <ChevronRight className="h-4 w-4" />

@@ -81,6 +81,7 @@ import projectRoutes from "./routes/project.routes"
 import procurementRoutes from "./routes/procurement.routes"
 import { isProcurementEnabled } from "./lib/moduleFlags"
 import engineeringRoutes from "./routes/engineering.routes"
+import { MachineQrController } from "./controllers/machineQrController"
 import { startCftIngestScheduler } from "./services/cft/cftIngestScheduler"
 import { startMaintenanceScheduler } from "./jobs/maintenanceScheduler"
 
@@ -263,6 +264,8 @@ app.get("/api/stock/public/quotations/:quotationId/pdf", StockController.downloa
 app.get("/api/stock/public/quotations/:quotationId/state", StockController.getPublicQuotationState)
 app.get("/api/stock/public/invoices/:invoiceId/pdf", StockController.downloadPublicInvoicePdf)
 app.post("/api/stock/public/quotations/:quotationId/request-invoice", StockController.requestWebsiteInvoice)
+app.get("/api/public/machine-qr/:token", MachineQrController.publicGetMachine)
+app.post("/api/public/machine-qr/:token/report", MachineQrController.publicCreateReport)
 app.use("/api/stock", stockRoutes)
 app.use("/api/stock/credit-notes", creditNoteRoutes)
 app.use("/api/stock/debit-notes", debitNoteRoutes)

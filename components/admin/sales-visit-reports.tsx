@@ -134,8 +134,8 @@ export function AdminSalesVisitReports({ title = "Visit reports" }: { title?: st
       <div
         className="rounded-2xl border px-4 py-3 shadow-sm"
         style={{
-          borderColor: primaryBorderColor,
-          background: `linear-gradient(to right, ${primarySoftColor}, ${secondarySoftColor})`,
+          borderColor: "var(--brand-header-border)",
+          background: "var(--brand-header-bg)",
         }}
       >
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -309,11 +309,11 @@ export function AdminSalesVisitReports({ title = "Visit reports" }: { title?: st
                       <div 
                         className="rounded-lg border px-3 py-2.5"
                         style={{ 
-                          borderColor: primaryBorderColor, 
+                          borderColor: "var(--brand-header-border)", 
                           backgroundColor: primarySoftColor 
                         }}
                       >
-                        <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: primaryColor }}>
+                        <p className="erp-page-eyebrow text-[11px] font-semibold uppercase tracking-wide mb-1.5">
                           Product of interest
                         </p>
                         <ul className="space-y-1">

@@ -47,6 +47,10 @@ interface IInstalledMachine {
   serviceContractName?: string;
   serviceContractUploadedAt?: Date;
   visitId?: string;
+  qrToken?: string;
+  qrGeneratedAt?: Date;
+  qrScanCount?: number;
+  lastQrScanAt?: Date;
   createdBy?: string;
   createdAt?: Date;
   updatedAt?: Date;
@@ -113,6 +117,10 @@ const installedMachineSchema = new Schema<IInstalledMachine>(
     serviceContractName: { type: String },
     serviceContractUploadedAt: { type: Date },
     visitId: { type: String, index: true },
+    qrToken: { type: String, unique: true, sparse: true, index: true },
+    qrGeneratedAt: { type: Date },
+    qrScanCount: { type: Number, default: 0 },
+    lastQrScanAt: { type: Date },
     createdBy: { type: String },
   },
   { timestamps: true },

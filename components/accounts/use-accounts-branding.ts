@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { companyApi } from "@/lib/api"
+import { hexToRgba as tokenHexToRgba, parseHex, PRODUCT_DEFAULTS } from "@/lib/brand-tokens"
 
 export type AccountsBranding = {
   primaryColor: string
@@ -10,24 +11,19 @@ export type AccountsBranding = {
 }
 
 const DEFAULT_BRANDING: AccountsBranding = {
-  primaryColor: "#0f766e",
-  secondaryColor: "#0ea5e9",
-  textColor: "#0f172a",
+  primaryColor: PRODUCT_DEFAULTS.primary,
+  secondaryColor: PRODUCT_DEFAULTS.secondary,
+  textColor: PRODUCT_DEFAULTS.text,
 }
 
 export function hexToRgb(hex: string) {
-  const normalized = hex.replace("#", "")
-  if (normalized.length !== 6) return { r: 15, g: 118, b: 110 }
-  return {
-    r: Number.parseInt(normalized.slice(0, 2), 16),
-    g: Number.parseInt(normalized.slice(2, 4), 16),
-    b: Number.parseInt(normalized.slice(4, 6), 16),
-  }
+  return parseHex(hex) || { r: 41, g: 111, b: 240 }
 }
 
-export function hexToRgba(hex: string, alpha: number) {
-  const { r, g, b } = hexToRgb(hex)
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+export function hexToRgba(hex: string, _alpha: number) {
+  if (_alpha <= 0.08) return "var(--brand-header-bg, #ffffff)"
+  if (_alpha <= 0.22) return "var(--brand-header-border, #e2e8f0)"
+  return tokenHexToRgba(hex, _alpha)
 }
 
 export function useAccountsBranding() {

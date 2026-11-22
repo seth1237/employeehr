@@ -280,10 +280,10 @@ export default function EmployeeDashboard() {
   return (
     <div className="space-y-5 pb-6">
       {/* Header Section */}
-      <div className="rounded-2xl border px-4 py-3 shadow-sm" style={{ borderColor: primaryBorderColor, background: `linear-gradient(to right, ${primarySoftColor}, ${secondarySoftColor})` }}>
+      <div className="rounded-2xl border px-4 py-3 shadow-sm" style={{ borderColor: "var(--brand-header-border)", background: "var(--brand-header-bg)" }}>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-0.5">
-            <p className="text-sm font-medium tracking-wide" style={{ color: primaryColor }}>Dashboard</p>
+            <p className="erp-page-eyebrow text-sm font-medium tracking-wide">Dashboard</p>
             <h1 className="text-xl font-semibold tracking-tight text-foreground">
               Welcome, {user?.first_name || user?.firstName || "Employee"}
             </h1>

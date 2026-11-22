@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
+import { applyBrandTokens } from "@/lib/brand-tokens";
 import {
   Loader2,
   Image as ImageIcon,
@@ -196,31 +197,7 @@ export default function CompanySettingsPage() {
 
   const applyCssVarsFromApi = (brandingData: any) => {
     const root = document.documentElement;
-    const pc = brandingData.primaryColor || "#2563eb";
-    const sc = brandingData.secondaryColor || "#059669";
-    const ac = brandingData.accentColor || "#f59e0b";
-    const bgc = brandingData.backgroundColor || "#ffffff";
-    const tc = brandingData.textColor || "#1f2937";
-    const br = brandingData.borderRadius || "0.5rem";
-    const ff = brandingData.fontFamily || "system-ui";
-    const logo = brandingData.logo;
-
-    // Core colors and styles
-    root.style.setProperty("--brand-primary", pc);
-    root.style.setProperty("--primary", pc);
-    root.style.setProperty("--brand-secondary", sc);
-    root.style.setProperty("--brand-accent", ac);
-    root.style.setProperty("--accent", ac);
-    root.style.setProperty("--brand-background", bgc);
-    root.style.setProperty("--brand-text", tc);
-    root.style.setProperty("--background", bgc);
-    root.style.setProperty("--foreground", tc);
-    root.style.setProperty("--brand-radius", br);
-    root.style.setProperty("--radius", br);
-    root.style.setProperty("--brand-font", ff);
-    root.style.fontFamily = ff;
-    root.style.backgroundColor = bgc;
-    if (logo) root.style.setProperty("--company-logo-url", `url('${logo}')`);
+    applyBrandTokens(root, brandingData);
 
     // Apply advanced branding vars
     const glassEnabledVal = brandingData.glassEnabled ?? true;
@@ -287,23 +264,16 @@ export default function CompanySettingsPage() {
 
   const applyCssVars = () => {
     const root = document.documentElement;
-    root.style.setProperty("--brand-primary", primaryColor);
-    root.style.setProperty("--primary", primaryColor);
-    root.style.setProperty("--brand-secondary", secondaryColor);
-    root.style.setProperty("--brand-accent", accentColor);
-    root.style.setProperty("--accent", accentColor);
-    root.style.setProperty("--brand-background", backgroundColor);
-    root.style.setProperty("--brand-text", textColor);
-    root.style.setProperty("--background", backgroundColor);
-    root.style.setProperty("--foreground", textColor);
-    root.style.setProperty("--brand-radius", borderRadius);
-    root.style.setProperty("--radius", borderRadius);
-    root.style.setProperty("--brand-font", fontFamily);
-    // Actually apply the font family to the entire document
-    root.style.fontFamily = fontFamily;
-    // Apply to actual page background
-    root.style.backgroundColor = backgroundColor;
-    if (logo) root.style.setProperty("--company-logo-url", `url('${logo}')`);
+    applyBrandTokens(root, {
+      primaryColor,
+      secondaryColor,
+      accentColor,
+      backgroundColor,
+      textColor,
+      borderRadius,
+      fontFamily,
+      logo,
+    });
     // Apply advanced branding vars
     root.style.setProperty("--glass-enabled", glassEnabled ? "1" : "0");
     root.style.setProperty("--glass-opacity", `${glassOpacity}%`);

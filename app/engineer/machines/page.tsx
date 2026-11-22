@@ -4,7 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { api, engineeringApi, stockApi } from "@/lib/api"
 import { PageLoadingSkeleton } from "@/components/admin/ui/page-states"
-import { EngineerHeader, EngineerPage, EngineerStatusBadge, formatWhen } from "@/components/engineer/engineer-ui"
+import { EngineerHeader, EngineerPage, EngineerStatusBadge, formatWhen, ResponseTrack } from "@/components/engineer/engineer-ui"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -56,6 +56,8 @@ type TimelineEvent = {
   when?: string
   person?: string
   detail?: string
+  raisedAt?: string
+  resolvedAt?: string
 }
 
 function clientKey(machine: Machine) {
@@ -103,6 +105,8 @@ function buildTimeline(machine: Machine, payload: any): TimelineEvent[] {
       when: machine.installationDate,
       person: machine.installedBy,
       detail: machine.installationLocation || machine.notes,
+      raisedAt: machine.installationDate,
+      resolvedAt: machine.installationDate,
     })
   }
 
@@ -142,6 +146,8 @@ function buildTimeline(machine: Machine, payload: any): TimelineEvent[] {
       when: row.completedDate || row.startedAt || row.scheduledDate || row.createdAt,
       person: row.technician,
       detail: extra,
+      raisedAt: row.createdAt || row.scheduledDate,
+      resolvedAt: row.completedDate,
     })
   }
 
@@ -154,6 +160,8 @@ function buildTimeline(machine: Machine, payload: any): TimelineEvent[] {
       when: row.createdAt || row.updatedAt,
       person: row.callerName || row.assignedTechnicianName,
       detail: row.description || row.resolutionNote,
+      raisedAt: row.createdAt,
+      resolvedAt: row.resolvedDate || (["Closed", "Resolved", "Dismissed"].includes(String(row.status || "")) ? row.updatedAt : undefined),
     })
   }
 
@@ -166,6 +174,8 @@ function buildTimeline(machine: Machine, payload: any): TimelineEvent[] {
       when: row.performedAt || row.createdAt,
       person: row.performedBy,
       detail: row.notes || row.certificateNumber,
+      raisedAt: row.createdAt || row.performedAt,
+      resolvedAt: row.performedAt,
     })
   }
 
@@ -539,6 +549,7 @@ function EngineerMachinesInner() {
                         {event.detail ? (
                           <p className="mt-1 text-xs text-slate-600">{event.detail}</p>
                         ) : null}
+                        <ResponseTrack raised={event.raisedAt} resolved={event.resolvedAt} />
                       </li>
                     ))}
                   </ul>
@@ -573,7 +584,19 @@ function EngineerMachinesInner() {
                 {selected.machines.map((machine) => {
                   const charge = personInCharge(machine)
                   return (
-                    <div key={machine._id} className="rounded-lg border p-3 text-sm">
+                    <div
+                      key={machine._id}
+                      className="rounded-lg border p-3 text-sm"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => void openHistory(machine)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault()
+                          void openHistory(machine)
+                        }
+                      }}
+                    >
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <p className="font-medium">{machine.productName}</p>
@@ -593,7 +616,7 @@ function EngineerMachinesInner() {
                           ? `In charge: ${charge.name}${charge.role ? ` · ${charge.role}` : ""}`
                           : "No person in charge recorded"}
                       </p>
-                      <div className="mt-3 flex flex-wrap gap-2">
+                      <div className="mt-3 flex flex-wrap gap-2" onClick={(event) => event.stopPropagation()}>
                         <Button
                           size="sm"
                           variant="outline"

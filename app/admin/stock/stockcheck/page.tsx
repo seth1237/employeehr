@@ -359,7 +359,7 @@ function StockChecksInner() {
 
   return (
     <div className="space-y-5">
-      <div className="rounded-2xl border px-4 py-3 shadow-sm" style={{ borderColor: "rgba(15,118,110,0.18)", background: "linear-gradient(to right, rgba(15,118,110,0.08), rgba(14,165,233,0.08))" }}>
+      <div className="erp-page-header rounded-2xl px-4 py-3">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-0.5">
             <p className="text-sm font-medium tracking-wide text-teal-700">Inventory</p>

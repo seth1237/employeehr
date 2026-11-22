@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { shouldOfferPwaInstall } from "@/lib/engineer-greeting"
 
 type Props = {
   manifest: string
@@ -14,6 +15,7 @@ export function FieldPwa({ manifest, appName, themeColor = "#0f766e" }: Props) {
   const [installEvent, setInstallEvent] = useState<any>(null)
   const [installed, setInstalled] = useState(false)
   const [iosHint, setIosHint] = useState(false)
+  const [offerInstall, setOfferInstall] = useState(false)
 
   useEffect(() => {
     const existing = document.querySelector(`link[rel="manifest"][href="${manifest}"]`)
@@ -63,7 +65,11 @@ export function FieldPwa({ manifest, appName, themeColor = "#0f766e" }: Props) {
     return () => window.removeEventListener("beforeinstallprompt", onPrompt)
   }, [appName, manifest, themeColor])
 
-  if (installed) return null
+  useEffect(() => {
+    setOfferInstall(shouldOfferPwaInstall())
+  }, [])
+
+  if (installed || !offerInstall) return null
 
   const install = async () => {
     if (!installEvent?.prompt) return

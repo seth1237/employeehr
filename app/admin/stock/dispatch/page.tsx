@@ -483,10 +483,10 @@ export default function AdminDispatchManagementPage() {
 
   return (
     <div className="space-y-5">
-      <div className="rounded-2xl border px-4 py-3 shadow-sm" style={{ borderColor: primaryBorderColor, background: `linear-gradient(to right, ${primarySoftColor}, ${secondaryColor}14)` }}>
+      <div className="rounded-2xl border px-4 py-3 shadow-sm" style={{ borderColor: "var(--brand-header-border)", background: "var(--brand-header-bg)" }}>
         <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-0.5">
-            <p className="text-xs sm:text-sm font-medium tracking-wide" style={{ color: primaryColor }}>Dispatch</p>
+            <p className="erp-page-eyebrow text-xs sm:text-sm font-medium tracking-wide">Dispatch</p>
             <h1 className="text-lg sm:text-xl font-semibold tracking-tight text-foreground">Dispatch dashboard</h1>
             <p className="text-xs sm:text-sm text-muted-foreground hidden sm:block">Track courier movement, delivery quality, and client notifications from one screen.</p>
           </div>

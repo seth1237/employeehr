@@ -351,10 +351,10 @@ export default function EmployeeTasksPage() {
   return (
     <div className="space-y-5">
       {/* Header Section */}
-      <div className="rounded-2xl border px-4 py-3 shadow-sm" style={{ borderColor: primaryBorderColor, background: `linear-gradient(to right, ${primarySoftColor}, ${secondarySoftColor})` }}>
+      <div className="rounded-2xl border px-4 py-3 shadow-sm" style={{ borderColor: "var(--brand-header-border)", background: "var(--brand-header-bg)" }}>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-0.5">
-            <p className="text-sm font-medium tracking-wide" style={{ color: primaryColor }}>Tasks</p>
+            <p className="erp-page-eyebrow text-sm font-medium tracking-wide">Tasks</p>
             <h1 className="text-xl font-semibold tracking-tight text-foreground">My Tasks</h1>
             <p className="text-sm text-muted-foreground">Manage your assigned duties and track your progress</p>
             {error && (
@@ -539,7 +539,7 @@ export default function EmployeeTasksPage() {
 
       {/* Task Detail Panel - Fixed Position */}
       {selectedTask && (
-        <div className="fixed right-4 top-20 w-96 max-h-[calc(100vh-120px)] overflow-y-auto bg-white dark:bg-gray-900 border rounded-lg shadow-2xl z-50 p-5" style={{ borderColor: primaryBorderColor }}>
+        <div className="fixed right-4 top-20 w-96 max-h-[calc(100vh-120px)] overflow-y-auto bg-white dark:bg-gray-900 border rounded-lg shadow-2xl z-50 p-5" style={{ borderColor: "var(--brand-header-border)" }}>
           <div className="flex justify-between items-start mb-4">
             <div>
               <h3 className="text-lg font-bold text-foreground">{selectedTask.title}</h3>

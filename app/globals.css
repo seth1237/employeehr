@@ -4,59 +4,90 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-    /* Dynamic branding variables (overridden by ThemeProvider) */
+    /* Tenant brand (full strength). Tints are derived at runtime from company colours. */
     --brand-primary: #296ff0;
+    --brand-primary-50: #e8eefc;
+    --brand-primary-100: #c5d4f8;
+    --brand-primary-200: #8aa6f1;
+    --brand-primary-300: #5278e8;
+    --brand-primary-400: #2f5fe3;
+    --brand-primary-500: #296ff0;
+    --brand-primary-600: #245fd0;
+    --brand-primary-700: #1d4aa4;
+    --brand-secondary: #059669;
+    --brand-secondary-50: #e7f6f1;
+    --brand-secondary-100: #c4e9db;
+    --brand-secondary-200: #88d3b6;
+    --brand-secondary-300: #4cbd91;
+    --brand-secondary-400: #1fa875;
+    --brand-secondary-500: #059669;
+    --brand-secondary-600: #04805a;
+    --brand-secondary-700: #036348;
+    --brand-accent: #f59e0b;
+    --brand-accent-50: #fef6e6;
+    --brand-accent-100: #fde9c2;
+    --brand-accent-200: #fbd285;
+    --brand-accent-300: #f9bc49;
+    --brand-accent-400: #f7ab22;
+    --brand-accent-500: #f59e0b;
+    --brand-accent-600: #d18709;
+    --brand-accent-700: #a36907;
     --eh-btn-fill: var(--brand-primary);
     --eh-btn-label: #ffffff;
-    --brand-secondary: #059669;
-    --brand-accent: #f59e0b;
-    --brand-background: #ffffff;
+    --brand-background: #f6f7f9;
     --brand-text: #1f2937;
     --brand-radius: 0.5rem;
     --brand-font: system-ui;
     --company-logo-url: none;
-  /* Updated color scheme for professional HR SaaS: blue primary, slate neutrals, emerald accent */
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
+    --brand-header-bg: #ffffff;
+    --brand-header-border: #e2e8f0;
+    --brand-selected-bg: var(--brand-primary-50);
+    --brand-selected-fg: var(--brand-primary-700);
+    --brand-attention-bg: var(--brand-secondary-50);
+    --brand-attention-fg: var(--brand-secondary-700);
+    --brand-highlight-bg: var(--brand-accent-50);
+    --brand-highlight-fg: var(--brand-accent-700);
+    --brand-soft: var(--brand-primary-50);
+    --brand-soft-border: var(--brand-primary-100);
 
-  /* Blue primary (#296FF0) */
-  --primary: #296ff0;
-  --primary-foreground: oklch(1 0 0);
+  --background: #f6f7f9;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
 
-  /* Light slate secondary */
-  --secondary: oklch(0.96 0.02 265);
-  --secondary-foreground: oklch(0.52 0.19 260);
+  --primary: var(--brand-primary);
+  --primary-foreground: #ffffff;
 
-  --muted: oklch(0.92 0.01 265);
-  --muted-foreground: oklch(0.45 0.02 265);
+  --secondary: #f1f5f9;
+  --secondary-foreground: #334155;
 
-  /* Emerald accent (#059669) */
-  --accent: oklch(0.55 0.15 160);
-  --accent-foreground: oklch(1 0 0);
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+
+  --accent: #f1f5f9;
+  --accent-foreground: #0f172a;
 
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.92 0.01 265);
-  --input: oklch(0.96 0.01 265);
-  --ring: oklch(0.52 0.19 260);
-  --chart-1: oklch(0.52 0.19 260);
-  --chart-2: oklch(0.55 0.15 160);
+  --border: #e2e8f0;
+  --input: #e2e8f0;
+  --ring: var(--brand-primary-300);
+  --chart-1: var(--brand-primary);
+  --chart-2: var(--brand-secondary);
   --chart-3: oklch(0.6 0.118 184.704);
   --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
+  --chart-5: var(--brand-accent);
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.52 0.19 260);
-  --sidebar-primary-foreground: oklch(1 0 0);
-  --sidebar-accent: oklch(0.55 0.15 160);
-  --sidebar-accent-foreground: oklch(1 0 0);
-  --sidebar-border: oklch(0.92 0.01 265);
-  --sidebar-ring: oklch(0.52 0.19 260);
+  --sidebar: #ffffff;
+  --sidebar-foreground: #0f172a;
+  --sidebar-primary: var(--brand-primary);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: var(--brand-primary-50);
+  --sidebar-accent-foreground: var(--brand-primary-700);
+  --sidebar-border: #e2e8f0;
+  --sidebar-ring: var(--brand-primary-300);
 }
 
 .dark {
@@ -541,7 +572,37 @@
   background-size: 1000px 100%;
 }
 
-/* Glossy filled CTA — inner highlight, white inner stroke, colored ring, drop shadow */
+.erp-page-header {
+  background: var(--brand-header-bg, #ffffff);
+  border: 1px solid var(--brand-header-border, #e2e8f0);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+}
+
+.erp-page-eyebrow {
+  color: var(--muted-foreground);
+}
+
+.erp-selected {
+  background: var(--brand-selected-bg);
+  color: var(--brand-selected-fg);
+}
+
+.erp-attention {
+  background: var(--brand-attention-bg);
+  color: var(--brand-attention-fg);
+}
+
+.erp-highlight {
+  background: var(--brand-highlight-bg);
+  color: var(--brand-highlight-fg);
+}
+
+.erp-icon-well {
+  background: #f8fafc;
+  color: #475569;
+}
+
+/* Key CTA — fill/label from tenant palette; inner stroke, inner glow, brand ring, drop shadow */
 .eh-btn-solid {
   --eh-btn-fill: var(--brand-primary, #296ff0);
   color: var(--eh-btn-label, #ffffff);

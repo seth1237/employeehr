@@ -11,12 +11,10 @@ import {
   EngineerPage,
   EngineerStatusBadge,
 } from "@/components/engineer/engineer-ui"
-import { useEngineerBranding } from "@/components/engineer/branding"
 import { ChevronRight } from "lucide-react"
 
 export default function EngineerRequestsPage() {
   const router = useRouter()
-  const branding = useEngineerBranding()
   const [loading, setLoading] = useState(true)
   const [rows, setRows] = useState<any[]>([])
   const [converting, setConverting] = useState<string | null>(null)
@@ -93,8 +91,7 @@ export default function EngineerRequestsPage() {
                     <td className="px-4 py-3">
                       <Button
                         size="sm"
-                        className="h-8 text-xs text-white"
-                        style={{ backgroundColor: branding.primaryColor }}
+                        className="h-8 text-xs"
                         disabled={converting === row._id}
                         onClick={() => void convert(row._id, row.machine?._id || row.machine_id)}
                       >
@@ -131,8 +128,7 @@ export default function EngineerRequestsPage() {
                 ) : null}
                 <Button
                   size="sm"
-                  className="h-8 w-full text-xs text-white"
-                  style={{ backgroundColor: branding.primaryColor }}
+                  className="h-8 w-full text-xs"
                   disabled={converting === row._id}
                   onClick={() => void convert(row._id, row.machine?._id || row.machine_id)}
                 >

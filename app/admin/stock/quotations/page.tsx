@@ -1578,8 +1578,8 @@ function QuotationsPageInner() {
       <div
         className="rounded-2xl border px-4 py-3 shadow-sm"
         style={{
-          borderColor: primaryBorderColor,
-          background: `linear-gradient(to right, ${primarySoftColor}, ${secondarySoftColor})`,
+          borderColor: "var(--brand-header-border)",
+          background: "var(--brand-header-bg)",
         }}
       >
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -1777,30 +1777,25 @@ function QuotationsPageInner() {
 
       {showCreate && !onTheGo && (
         <Card className="overflow-hidden border-0 shadow-md ring-1 ring-black/5">
-          <div
-            className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
-            style={{
-              background: `linear-gradient(to right, ${primaryColor}, ${secondaryColor})`,
-            }}
-          >
+          <div className="erp-page-header flex flex-col gap-3 border-x-0 border-t-0 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/15 backdrop-blur-sm">
-                <FileText className="h-5 w-5 text-white" />
+              <div className="erp-icon-well flex h-10 w-10 shrink-0 items-center justify-center rounded-xl">
+                <FileText className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-[11px] font-medium uppercase tracking-wider text-white/80">
+                <p className="erp-page-eyebrow text-[11px] font-medium uppercase tracking-wider">
                   {editingQuotationId ? "Editing draft" : "New document"}
                 </p>
-                <h2 className="text-lg font-semibold leading-tight text-white">
+                <h2 className="text-lg font-semibold leading-tight text-slate-900">
                   {editingQuotationId ? "Edit Quotation" : "Create Quotation"}
                 </h2>
               </div>
             </div>
             <Button
-              variant="secondary"
+              variant="outline"
               size="sm"
               onClick={resetForm}
-              className="w-fit border-0 bg-white/15 text-white hover:bg-white/25"
+              className="w-fit"
             >
               <X className="mr-1.5 h-4 w-4" />
               Close
@@ -1877,7 +1872,7 @@ function QuotationsPageInner() {
                       <div
                         className="flex items-start justify-between gap-3 rounded-lg border px-3 py-2.5"
                         style={{
-                          borderColor: primaryBorderColor,
+                          borderColor: "var(--brand-header-border)",
                           backgroundColor: primarySoftColor,
                         }}
                       >
@@ -2197,7 +2192,7 @@ function QuotationsPageInner() {
                 {(quickCreateOpen || isQuickCreateCode(productSearch)) && (
                   <div
                     className="rounded-lg border-2 bg-background p-4 space-y-3 shadow-sm"
-                    style={{ borderColor: primaryBorderColor }}
+                    style={{ borderColor: "var(--brand-header-border)" }}
                   >
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div>

@@ -121,8 +121,8 @@ function AnalyticsLayoutInner({ children }: { children: React.ReactNode }) {
       <div
         className="rounded-3xl border p-5 shadow-sm md:p-6"
         style={{
-          borderColor: primaryBorderColor,
-          background: `linear-gradient(to right, ${primarySoftColor}, ${secondarySoftColor})`,
+          borderColor: "var(--brand-header-border)",
+          background: "var(--brand-header-bg)",
         }}
       >
         <div className="space-y-4">
@@ -167,7 +167,7 @@ function AnalyticsLayoutInner({ children }: { children: React.ReactNode }) {
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2 border-t pt-4" style={{ borderColor: primaryBorderColor }}>
+          <div className="flex flex-wrap gap-2 border-t pt-4" style={{ borderColor: "var(--brand-header-border)" }}>
             {analyticsPages.map((page) => (
               <Link
                 key={page.href}

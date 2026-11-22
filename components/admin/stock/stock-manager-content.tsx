@@ -3354,8 +3354,8 @@ export function StockManagerContent({ view }: { view: StockView }) {
           <div
             className="rounded-2xl border px-4 py-3 shadow-sm"
             style={{
-              borderColor: primaryBorderColor,
-              background: `linear-gradient(to right, ${primarySoftColor}, ${secondarySoftColor})`,
+              borderColor: "var(--brand-header-border)",
+              background: "var(--brand-header-bg)",
             }}
           >
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -4252,8 +4252,8 @@ export function StockManagerContent({ view }: { view: StockView }) {
           <div
             className="mb-6 rounded-2xl border px-4 py-4 shadow-sm"
             style={{
-              borderColor: primaryBorderColor,
-              background: `linear-gradient(to right, ${primarySoftColor}, ${secondarySoftColor})`,
+              borderColor: "var(--brand-header-border)",
+              background: "var(--brand-header-bg)",
             }}
           >
             <p
@@ -4280,7 +4280,7 @@ export function StockManagerContent({ view }: { view: StockView }) {
           >
             <div
               className="rounded-xl border bg-card p-2 shadow-sm"
-              style={{ borderColor: primaryBorderColor }}
+              style={{ borderColor: "var(--brand-header-border)" }}
             >
               <TabsList className="grid h-auto w-full grid-cols-3 gap-2 bg-transparent p-0">
                 <TabsTrigger
@@ -5261,8 +5261,8 @@ export function StockManagerContent({ view }: { view: StockView }) {
             <div
               className="rounded-2xl border px-4 py-3 shadow-sm"
               style={{
-                borderColor: primaryBorderColor,
-                background: `linear-gradient(to right, ${primarySoftColor}, ${secondarySoftColor})`,
+                borderColor: "var(--brand-header-border)",
+                background: "var(--brand-header-bg)",
               }}
             >
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -5684,8 +5684,8 @@ export function StockManagerContent({ view }: { view: StockView }) {
             <div
               className="rounded-2xl border px-4 py-3 shadow-sm"
               style={{
-                borderColor: primaryBorderColor,
-                background: `linear-gradient(to right, ${primarySoftColor}, ${secondarySoftColor})`,
+                borderColor: "var(--brand-header-border)",
+                background: "var(--brand-header-bg)",
               }}
             >
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">

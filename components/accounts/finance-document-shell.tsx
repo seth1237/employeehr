@@ -6,7 +6,7 @@ import { ArrowLeft, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { AccountsModuleNav } from "@/components/accounts/accounts-module-nav"
-import { hexToRgba, useAccountsBranding } from "@/components/accounts/use-accounts-branding"
+import { useAccountsBranding } from "@/components/accounts/use-accounts-branding"
 import { getAccountsNestedBackTarget } from "@/lib/accounts-nav"
 
 export type FinanceKpi = {
@@ -53,9 +53,6 @@ export function FinanceDocumentShell({
 }: FinanceDocumentShellProps) {
   const pathname = usePathname() || ""
   const branding = useAccountsBranding()
-  const primarySoftColor = hexToRgba(branding.primaryColor, 0.08)
-  const secondarySoftColor = hexToRgba(branding.secondaryColor, 0.08)
-  const primaryBorderColor = hexToRgba(branding.primaryColor, 0.18)
 
   const autoBack = backHref === undefined ? getAccountsNestedBackTarget(pathname) : null
   const resolvedBackHref =
@@ -70,7 +67,7 @@ export function FinanceDocumentShell({
     if (accent === "success") return "#059669"
     if (accent === "danger") return "#dc2626"
     if (accent === "secondary") return branding.secondaryColor
-    return branding.primaryColor
+    return "#0f172a"
   }
 
   return (
@@ -79,13 +76,7 @@ export function FinanceDocumentShell({
         <AccountsModuleNav groupId={moduleNavGroupId} />
       ) : null}
 
-      <div
-        className="rounded-2xl border px-4 py-3 shadow-sm"
-        style={{
-          borderColor: primaryBorderColor,
-          background: `linear-gradient(to right, ${primarySoftColor}, ${secondarySoftColor})`,
-        }}
-      >
+      <div className="erp-page-header rounded-2xl px-4 py-3">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-1">
             {resolvedBackHref ? (
@@ -101,7 +92,7 @@ export function FinanceDocumentShell({
                 </Link>
               </Button>
             ) : null}
-            <p className="text-sm font-medium tracking-wide" style={{ color: branding.primaryColor }}>
+            <p className="erp-page-eyebrow text-sm font-medium tracking-wide">
               {eyebrow}
             </p>
             <h1 className="text-xl font-semibold tracking-tight text-foreground">{title}</h1>

@@ -8,6 +8,20 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  async redirects() {
+    return [
+      {
+        source: "/admin/clients/technical-service",
+        destination: "/admin/field-management/technical-service",
+        permanent: true,
+      },
+      {
+        source: "/admin/clients/technical-service/:path*",
+        destination: "/admin/field-management/technical-service/:path*",
+        permanent: true,
+      },
+    ]
+  },
   async headers() {
     return [
       {

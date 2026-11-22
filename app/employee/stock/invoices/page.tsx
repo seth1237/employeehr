@@ -445,10 +445,10 @@ function EmployeeInvoicesInner() {
 
   return (
     <div className="space-y-5">
-      <div className="rounded-2xl border px-4 py-3 shadow-sm" style={{ borderColor: primaryBorderColor, background: `linear-gradient(to right, ${primarySoftColor}, ${secondarySoftColor})` }}>
+      <div className="rounded-2xl border px-4 py-3 shadow-sm" style={{ borderColor: "var(--brand-header-border)", background: "var(--brand-header-bg)" }}>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-0.5">
-            <p className="text-sm font-medium tracking-wide" style={{ color: primaryColor }}>Invoices</p>
+            <p className="erp-page-eyebrow text-sm font-medium tracking-wide">Invoices</p>
             <h1 className="text-xl font-semibold tracking-tight text-foreground">Employee invoice workspace</h1>
             <p className="text-sm text-muted-foreground">View, search, sort, and download invoices and delivery notes.</p>
           </div>

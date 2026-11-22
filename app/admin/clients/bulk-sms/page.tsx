@@ -506,10 +506,10 @@ function BulkSmsInner() {
 
   return (
     <div className="space-y-5">
-      <div className="rounded-2xl border px-4 py-3 shadow-sm" style={{ borderColor: primaryBorderColor, background: `linear-gradient(to right, ${primarySoftColor}, ${secondaryColor}14)` }}>
+      <div className="rounded-2xl border px-4 py-3 shadow-sm" style={{ borderColor: "var(--brand-header-border)", background: "var(--brand-header-bg)" }}>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-0.5">
-            <p className="text-sm font-medium tracking-wide" style={{ color: primaryColor }}>Clients</p>
+            <p className="erp-page-eyebrow text-sm font-medium tracking-wide">Clients</p>
             <h1 className="text-xl font-semibold tracking-tight text-foreground">Bulk SMS campaigns</h1>
             <p className="text-sm text-muted-foreground">
               Only clients and contacts with phone numbers are listed. Messages are sent to those numbers, with optional name personalization.

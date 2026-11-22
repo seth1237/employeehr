@@ -25,10 +25,8 @@ import {
   todayIso,
   whenLabel,
 } from "@/components/admin/technical-service-ui"
-import { useCompanyBranding } from "@/hooks/use-sales-branding"
 
 function TechnicalServiceHub() {
-  const branding = useCompanyBranding()
   const searchParams = useSearchParams()
   const machineIdFromUrl = searchParams.get("machineId") || ""
   const [loading, setLoading] = useState(true)
@@ -38,12 +36,18 @@ function TechnicalServiceHub() {
   const [engineerId, setEngineerId] = useState("")
   const [data, setData] = useState<any>(null)
   const [assetHistory, setAssetHistory] = useState<any>(null)
+  const [qrReports, setQrReports] = useState<any[]>([])
 
   const load = () => {
     setLoading(true)
-    engineeringApi
-      .getReport({ from, to, engineerId: engineerId || undefined, limit: 40 })
-      .then((res) => setData(res.data || res))
+    Promise.all([
+      engineeringApi.getReport({ from, to, engineerId: engineerId || undefined, limit: 40 }),
+      engineeringApi.listQrReports({ status: "open", limit: 6 }).catch(() => ({ data: [] })),
+    ])
+      .then(([res, reports]) => {
+        setData(res.data || res)
+        setQrReports((reports as any).data || [])
+      })
       .catch((error) => console.error(error))
       .finally(() => setLoading(false))
   }
@@ -141,6 +145,11 @@ function TechnicalServiceHub() {
         actions={
           <>
             <Button asChild variant="outline" size="sm">
+              <Link href={`${TS_BASE}/qr-codes`}>
+                QR codes
+              </Link>
+            </Button>
+            <Button asChild variant="outline" size="sm">
               <Link href="/admin/clients/installed-machines">
                 <Wrench className="mr-1.5 h-4 w-4" />
                 Machines
@@ -157,10 +166,10 @@ function TechnicalServiceHub() {
       />
 
       {focusedAsset ? (
-        <Card style={{ borderColor: branding.primaryBorder, backgroundColor: branding.primarySoft }}>
+        <Card className="erp-selected border-[color:var(--brand-soft-border)]">
           <CardContent className="flex flex-col gap-3 pt-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-xs uppercase tracking-wide" style={{ color: branding.primaryColor }}>
+              <p className="erp-page-eyebrow text-xs uppercase tracking-wide">
                 Focused machine
               </p>
               <p className="font-semibold">{focusedAsset.productName}</p>
@@ -172,6 +181,9 @@ function TechnicalServiceHub() {
             <div className="flex flex-wrap gap-2">
               <Button asChild size="sm">
                 <Link href={`/admin/clients/installed-machines?machineId=${focusedAsset._id}`}>Open machine</Link>
+              </Button>
+              <Button asChild size="sm" variant="outline">
+                <Link href={`${TS_BASE}/qr-codes?machineId=${focusedAsset._id}`}>Machine QR</Link>
               </Button>
               <Button asChild size="sm" variant="outline">
                 <Link href={TS_BASE}>
@@ -293,6 +305,50 @@ function TechnicalServiceHub() {
           </MobileCardList>
         </CardContent>
       </Card>
+
+      <PreviewCard title="Open client QR reports" href={`${TS_BASE}/reports`}>
+        <DesktopTableShell>
+          <table className="w-full text-left text-sm">
+            <thead className="bg-muted/50 text-[11px] uppercase tracking-wide text-muted-foreground">
+              <tr>
+                <th className="px-4 py-2">Request</th>
+                <th className="px-4 py-2">From</th>
+              </tr>
+            </thead>
+            <tbody>
+              {qrReports.length === 0 ? (
+                <tr>
+                  <td colSpan={2} className="px-4 py-8 text-center text-muted-foreground">
+                    No open reports from machine QR scans.
+                  </td>
+                </tr>
+              ) : (
+                qrReports.map((row: any) => (
+                  <tr key={row._id} className="border-t">
+                    <td className="px-4 py-2">
+                      <p className="font-medium capitalize">{String(row.type || "service").replace("_", " ")}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {row.machineSnapshot?.productName || row.productName || "Machine"}
+                      </p>
+                    </td>
+                    <td className="px-4 py-2">{row.contactName}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </DesktopTableShell>
+        <MobileCardList label="Client QR reports">
+          {qrReports.map((row: any) => (
+            <MobileCard key={row._id}>
+              <p className="font-medium capitalize">{String(row.type || "service").replace("_", " ")}</p>
+              <p className="text-xs text-muted-foreground">
+                {row.contactName} · {row.machineSnapshot?.productName || row.productName}
+              </p>
+            </MobileCard>
+          ))}
+        </MobileCardList>
+      </PreviewCard>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <PreviewCard title="Pending installations" href={`${TS_BASE}/installations`}>

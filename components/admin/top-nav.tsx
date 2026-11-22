@@ -88,8 +88,8 @@ export default function AdminTopNav({ onMenuClick, onSidebarCollapseToggle, isSi
             </p>
             <p className="text-xs text-muted-foreground capitalize">{user?.role?.replace("_", " ")}</p>
           </div>
-          <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
-            <span className="text-primary font-semibold">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100">
+            <span className="font-semibold text-slate-700">
               {user?.first_name?.charAt(0)}
               {user?.last_name?.charAt(0)}
             </span>

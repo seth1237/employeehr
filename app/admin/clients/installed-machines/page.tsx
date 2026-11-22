@@ -40,6 +40,7 @@ import {
   Inbox,
   Search,
   Trash2,
+  QrCode,
 } from "lucide-react";
 import {
   Dialog,
@@ -3011,8 +3012,8 @@ export default function InstalledMachinesPage({ isEngineerView = false }: { isEn
       <div
         className="rounded-2xl border px-4 py-3 shadow-sm"
         style={{
-          borderColor: PRIMARY_BORDER,
-          background: `linear-gradient(to right, ${PRIMARY_SOFT}, ${SECONDARY_SOFT})`,
+          borderColor: "var(--brand-header-border)",
+          background: "var(--brand-header-bg)",
         }}
       >
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -3035,9 +3036,15 @@ export default function InstalledMachinesPage({ isEngineerView = false }: { isEn
             {!isEngineerView && (
               <>
                 <Button asChild variant="outline" size="sm" className="h-8">
-                  <Link href="/admin/clients/technical-service">
+                  <Link href="/admin/field-management/technical-service">
                     <FileText className="h-4 w-4" />
                     Technical Service
+                  </Link>
+                </Button>
+                <Button asChild variant="outline" size="sm" className="h-8">
+                  <Link href="/admin/field-management/technical-service/qr-codes">
+                    <QrCode className="h-4 w-4" />
+                    Machine QR
                   </Link>
                 </Button>
                 <Button
@@ -4198,12 +4205,20 @@ export default function InstalledMachinesPage({ isEngineerView = false }: { isEn
 
                     <div className="flex flex-wrap gap-2 pt-2">
                       {!isEngineerView ? (
-                        <Button asChild size="sm" variant="outline">
-                          <Link href={`/admin/clients/technical-service?machineId=${selectedMachine._id}`}>
-                            <FileText className="mr-1.5 h-3.5 w-3.5" />
-                            Service activity
-                          </Link>
-                        </Button>
+                        <>
+                          <Button asChild size="sm" variant="outline">
+                            <Link href={`/admin/field-management/technical-service?machineId=${selectedMachine._id}`}>
+                              <FileText className="mr-1.5 h-3.5 w-3.5" />
+                              Service activity
+                            </Link>
+                          </Button>
+                          <Button asChild size="sm" variant="outline">
+                            <Link href={`/admin/field-management/technical-service/qr-codes?machineId=${selectedMachine._id}`}>
+                              <QrCode className="mr-1.5 h-3.5 w-3.5" />
+                              Machine QR
+                            </Link>
+                          </Button>
+                        </>
                       ) : (
                         <Button asChild size="sm" variant="outline">
                           <Link href={`/engineer/work-orders?assetId=${selectedMachine._id}`}>

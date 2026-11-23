@@ -29,12 +29,15 @@ export function SalesMobileNav() {
               <Link
                 href={item.href}
                 className={cn(
-                  "flex min-h-14 flex-col items-center justify-center gap-0.5 text-[11px] font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700",
+                  "flex min-h-14 flex-col items-center justify-center gap-0.5 text-[11px] font-medium transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700",
                   active ? "text-teal-800" : "text-slate-500",
                 )}
                 aria-current={active ? "page" : undefined}
               >
-                <Icon className="h-5 w-5" aria-hidden />
+                <Icon
+                  className={cn("h-5 w-5 transition-transform duration-200 ease-out", active ? "scale-110" : "scale-100")}
+                  aria-hidden
+                />
                 {item.label}
               </Link>
             </li>

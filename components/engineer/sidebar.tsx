@@ -18,6 +18,7 @@ const navigation = [
   { name: "Machines", href: "/engineer/machines" },
   { name: "Calendar", href: "/engineer/calendar" },
   { name: "Leave", href: "/engineer/leave" },
+  { name: "Payroll", href: "/engineer/payroll" },
   { name: "Expenses", href: "/engineer/expenses" },
   { name: "Tools of work", href: "/engineer/tools" },
 ]

@@ -29,6 +29,7 @@ import {
   SidebarFooter,
   SidebarFrame,
   SidebarNavLink,
+  SidebarReveal,
   SidebarSectionLabel,
   isExactOrNestedPath,
 } from "@/components/nav/sidebar-chrome"
@@ -347,7 +348,7 @@ export default function AdminSidebar({
           collapsed={collapsed}
           onToggle={() => toggleSection("ACCOUNTS")}
         />
-        <div className={`space-y-0.5 ${!isCollapsed && collapsed ? "hidden" : ""}`}>
+        <SidebarReveal open={isCollapsed || !collapsed} className="space-y-0.5">
           {modules.map((mod) => {
             const isActive =
               activeAccountsPage?.groupId === mod.groupId ||
@@ -365,7 +366,7 @@ export default function AdminSidebar({
               />
             )
           })}
-        </div>
+        </SidebarReveal>
       </div>
     )
   }
@@ -411,7 +412,7 @@ export default function AdminSidebar({
                 collapsed={collapsed}
                 onToggle={() => toggleSection(sectionName)}
               />
-              <div className={`space-y-0.5 ${!isCollapsed && collapsed ? "hidden" : ""}`}>
+              <SidebarReveal open={isCollapsed || !collapsed} className="space-y-0.5">
                 {ungrouped.map((item) => renderItem(item))}
                 {folders.map((folder) => {
                   const folderItems = items.filter((item) => item.folder === folder)
@@ -432,7 +433,7 @@ export default function AdminSidebar({
                     </SidebarFolder>
                   )
                 })}
-              </div>
+              </SidebarReveal>
             </div>
           )
         })}

@@ -1,5 +1,4 @@
 const SESSION_KEY = "engineer_home_line_v1"
-const LONG_AWAY_HOURS = 8
 
 function hourNow() {
   return new Date().getHours()
@@ -57,17 +56,3 @@ export function pickEngineerGreeting(input: {
   return line
 }
 
-export function shouldOfferPwaInstall() {
-  if (typeof window === "undefined") return false
-  const sessionKey = "engineer_pwa_banner_v1"
-  const cached = sessionStorage.getItem(sessionKey)
-  if (cached === "show") return true
-  if (cached === "hide") return false
-
-  const last = Number(localStorage.getItem("engineer_pwa_last_prompt") || 0)
-  const aged = !last || Date.now() - last > LONG_AWAY_HOURS * 60 * 60 * 1000
-  const show = aged && Math.random() < 0.28
-  sessionStorage.setItem(sessionKey, show ? "show" : "hide")
-  if (show) localStorage.setItem("engineer_pwa_last_prompt", String(Date.now()))
-  return show
-}

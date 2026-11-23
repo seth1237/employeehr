@@ -1,9 +1,15 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Download } from "lucide-react"
+import { Download, Monitor } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { shouldOfferPwaInstall } from "@/lib/engineer-greeting"
+import {
+  capturePwaInstallPrompt,
+  getDeferredPwaPrompt,
+  isDesktopViewport,
+  isStandalonePwa,
+  subscribePwaInstall,
+} from "@/lib/pwa-install"
 
 type Props = {
   manifest: string
@@ -12,12 +18,15 @@ type Props = {
 }
 
 export function FieldPwa({ manifest, appName, themeColor = "#0f766e" }: Props) {
-  const [installEvent, setInstallEvent] = useState<any>(null)
+  const [installEvent, setInstallEvent] = useState<ReturnType<typeof getDeferredPwaPrompt>>(null)
   const [installed, setInstalled] = useState(false)
   const [iosHint, setIosHint] = useState(false)
-  const [offerInstall, setOfferInstall] = useState(false)
+  const [desktop, setDesktop] = useState(false)
+  const [busy, setBusy] = useState(false)
 
   useEffect(() => {
+    capturePwaInstallPrompt()
+
     const existing = document.querySelector(`link[rel="manifest"][href="${manifest}"]`)
     if (!existing) {
       const link = document.createElement("link")
@@ -41,61 +50,61 @@ export function FieldPwa({ manifest, appName, themeColor = "#0f766e" }: Props) {
       document.head.appendChild(meta)
     })
 
+    if (!document.querySelector('link[rel="apple-touch-icon"]')) {
+      const apple = document.createElement("link")
+      apple.rel = "apple-touch-icon"
+      apple.href = "/pwa-icon-192.png"
+      document.head.appendChild(apple)
+    }
+
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {})
     }
 
-    const standalone =
-      window.matchMedia("(display-mode: standalone)").matches ||
-      (window.navigator as Navigator & { standalone?: boolean }).standalone === true
-    setInstalled(standalone)
-
-    const isIos = /iphone|ipad|ipod/i.test(window.navigator.userAgent)
-    setIosHint(isIos && !standalone)
-
-    const onPrompt = (event: Event) => {
-      event.preventDefault()
-      setInstallEvent(event)
+    const sync = () => {
+      setInstalled(isStandalonePwa())
+      setInstallEvent(getDeferredPwaPrompt())
+      setDesktop(isDesktopViewport())
+      const isIos = /iphone|ipad|ipod/i.test(window.navigator.userAgent)
+      setIosHint(isIos && !isStandalonePwa())
     }
-    window.addEventListener("beforeinstallprompt", onPrompt)
-    window.addEventListener("appinstalled", () => {
-      setInstalled(true)
-      setInstallEvent(null)
-    })
-    return () => window.removeEventListener("beforeinstallprompt", onPrompt)
+
+    sync()
+    return subscribePwaInstall(sync)
   }, [appName, manifest, themeColor])
 
-  useEffect(() => {
-    setOfferInstall(shouldOfferPwaInstall())
-  }, [])
-
-  if (installed || !offerInstall) return null
+  if (installed) return null
 
   const install = async () => {
-    if (!installEvent?.prompt) return
-    installEvent.prompt()
+    const prompt = installEvent || getDeferredPwaPrompt()
+    if (!prompt?.prompt) return
+    setBusy(true)
     try {
-      await installEvent.userChoice
+      await prompt.prompt()
+      await prompt.userChoice
     } catch {
-      // ignore
+      // ignore cancelled prompts
+    } finally {
+      setBusy(false)
+      setInstallEvent(getDeferredPwaPrompt())
     }
-    setInstallEvent(null)
   }
 
-  if (!installEvent && !iosHint) return null
+  const actionLabel = desktop ? "Download to desktop" : "Install app"
+  const copy = iosHint
+    ? `Add ${appName} to your Home Screen: Share → Add to Home Screen.`
+    : desktop
+      ? `Keep ${appName} on this computer. Chrome: menu → Cast, save, and share → Install ${appName}.`
+      : `Install ${appName} on this device so it opens like an app.`
 
   return (
     <div className="border-b border-slate-200 bg-white px-3 py-2">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-xs text-slate-600 sm:text-sm">
-          {iosHint
-            ? `Add ${appName} to your Home Screen: Share → Add to Home Screen.`
-            : `Install ${appName} to keep it on your phone.`}
-        </p>
+        <p className="text-xs text-slate-600 sm:text-sm">{copy}</p>
         {installEvent ? (
-          <Button size="sm" className="h-8 shrink-0 gap-1.5" onClick={() => void install()}>
-            <Download className="h-3.5 w-3.5" />
-            Install
+          <Button size="sm" className="h-8 shrink-0 gap-1.5" onClick={() => void install()} disabled={busy}>
+            {desktop ? <Monitor className="h-3.5 w-3.5" /> : <Download className="h-3.5 w-3.5" />}
+            {busy ? "Opening…" : actionLabel}
           </Button>
         ) : null}
       </div>

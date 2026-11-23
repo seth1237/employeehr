@@ -1,29 +1,20 @@
 // Authentication utilities for token management
 
+import { decodeJwtPayload, isFieldAuthRole, jwtSecondsRemaining } from './jwt-payload'
+
 const TOKEN_KEY = 'elevate_auth_token'
 const TOKEN_COOKIE = 'elevate_auth_token'
 const USER_KEY = 'elevate_user'
 
 function cookieMaxAgeFromToken(token: string): number {
-    const fallback = 7 * 24 * 60 * 60
-    try {
-        const parts = token.split('.')
-        if (parts.length !== 3) return fallback
-        const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')))
-        if (typeof payload.exp === 'number') {
-            return Math.max(60, payload.exp - Math.floor(Date.now() / 1000))
-        }
-        if (payload.role === 'sales_rep' || payload.role === 'technical_service_engineer') {
-            return 365 * 24 * 60 * 60
-        }
-    } catch {
-        // keep default
-    }
-    return fallback
+    const payload = decodeJwtPayload(token)
+    const fallback = isFieldAuthRole(payload?.role) ? 365 * 24 * 60 * 60 : 7 * 24 * 60 * 60
+    return jwtSecondsRemaining(token, fallback)
 }
 
 const setAuthCookie = (token: string): void => {
-    document.cookie = `${TOKEN_COOKIE}=${encodeURIComponent(token)}; path=/; max-age=${cookieMaxAgeFromToken(token)}; SameSite=Lax`
+    const secure = window.location.protocol === 'https:' ? '; Secure' : ''
+    document.cookie = `${TOKEN_COOKIE}=${encodeURIComponent(token)}; path=/; max-age=${cookieMaxAgeFromToken(token)}; SameSite=Lax${secure}`
 }
 
 const clearAuthCookie = (): void => {
@@ -45,20 +36,10 @@ export interface AuthUser {
 export const setToken = (token: string): void => {
     if (typeof window !== 'undefined') {
         // Validate token before storing - check if it's a valid MongoDB ObjectId in payload
-        try {
-            const parts = token.split('.')
-            if (parts.length === 3) {
-                // Use atob for browser compatibility
-                const payload = JSON.parse(atob(parts[1]))
-                const userId = payload.userId || payload.sub
-                // MongoDB ObjectId: 24 hex characters
-                if (!userId || !/^[0-9a-f]{24}$/i.test(userId)) {
-                    console.error('Rejected invalid token: userId is not a valid ObjectId', { userId })
-                    return
-                }
-            }
-        } catch (e) {
-            console.error('Failed to validate token structure', e)
+        const payload = decodeJwtPayload(token)
+        const userId = payload?.userId || payload?.sub
+        if (!userId || !/^[0-9a-f]{24}$/i.test(String(userId))) {
+            console.error('Rejected invalid token: userId is not a valid ObjectId', { userId })
             return
         }
         localStorage.setItem(TOKEN_KEY, token)
@@ -72,23 +53,13 @@ export const getToken = (): string | null => {
         
         // If token exists but looks invalid, remove it
         if (token) {
-            try {
-                const parts = token.split('.')
-                if (parts.length === 3) {
-                    // Use atob for browser compatibility
-                    const payload = JSON.parse(atob(parts[1]))
-                    const userId = payload.userId || payload.sub
-                    if (!userId || !/^[0-9a-f]{24}$/i.test(userId)) {
-                        console.warn('Stored token has invalid userId format, clearing it', { userId })
-                        localStorage.removeItem(TOKEN_KEY)
-                        localStorage.removeItem(USER_KEY)
-                        return null
-                    }
-                }
-            } catch (e) {
-                console.warn('Failed to validate stored token, clearing it', e)
+            const payload = decodeJwtPayload(token)
+            const userId = payload?.userId || payload?.sub
+            if (!payload || !userId || !/^[0-9a-f]{24}$/i.test(String(userId))) {
+                console.warn('Stored token has invalid userId format, clearing it', { userId })
                 localStorage.removeItem(TOKEN_KEY)
                 localStorage.removeItem(USER_KEY)
+                clearAuthCookie()
                 return null
             }
         }

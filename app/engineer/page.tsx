@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation"
 import { engineeringApi } from "@/lib/api"
 import { getUser } from "@/lib/auth"
 import { PageLoadingSkeleton } from "@/components/admin/ui/page-states"
-import { AlertTriangle, CheckCircle2, ChevronRight, ClipboardList, Inbox, Palmtree, CircleDollarSign, Hammer, Wrench } from "lucide-react"
+import { AlertTriangle, CheckCircle2, ChevronRight, ClipboardList, Inbox, Palmtree, CircleDollarSign, Hammer, Wrench, Banknote } from "lucide-react"
 import { EngineerHeader, EngineerKpi, EngineerPage } from "@/components/engineer/engineer-ui"
 import { useEngineerBranding } from "@/components/engineer/branding"
 import { ShimmerButton } from "@/components/ui/shimmer-button"
@@ -54,6 +54,7 @@ export default function EngineerDashboard() {
   ]
   const extras = [
     { label: "Leave", href: "/engineer/leave", icon: Palmtree },
+    { label: "Payroll", href: "/engineer/payroll", icon: Banknote },
     { label: "Expenses", href: "/engineer/expenses", icon: CircleDollarSign },
     { label: "Tools of work", href: "/engineer/tools", icon: Hammer },
   ]
@@ -78,7 +79,7 @@ export default function EngineerDashboard() {
         ))}
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {extras.map((item) => {
           const Icon = item.icon
           return (

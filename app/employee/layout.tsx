@@ -13,7 +13,7 @@ const EMPLOYEE_SECTION_PATHS: Array<{ section: string; match: (path: string) => 
   { section: "EMPLOYEE MANAGEMENT", match: (path) => ["/employee/meetings", "/employee/attendance", "/employee/bookings", "/employee/suggestions"].some((prefix) => path.startsWith(prefix)) },
   { section: "INVENTORY MANAGER", match: (path) => ["/employee/stock", "/employee/dispatch"].some((prefix) => path.startsWith(prefix)) },
   { section: "PERFORMANCE", match: (path) => ["/employee/feedback", "/employee/pdp", "/employee/awards", "/employee/badges", "/employee/polls", "/employee/reports"].some((prefix) => path.startsWith(prefix)) },
-  { section: "ACCOUNTS", match: (path) => path.startsWith("/employee/payslip") },
+  { section: "ACCOUNTS", match: (path) => path.startsWith("/employee/payslip") || path.startsWith("/employee/payroll") },
   { section: "SYSTEM", match: (path) => ["/employee/contracts", "/employee/alerts", "/employee/company", "/employee/notifications", "/employee/settings"].some((prefix) => path.startsWith(prefix)) },
 ]
 

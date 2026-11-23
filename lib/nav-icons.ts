@@ -229,6 +229,7 @@ export const NAV_ICONS: Record<string, LucideIcon> = {
   "/engineer/calendar": CalendarDays,
   "/engineer/expenses": CircleDollarSign,
   "/engineer/leave": Palmtree,
+  "/engineer/payroll": Banknote,
   "/engineer/tools": Hammer,
   "/admin/clients/technical-service/tools": Hammer,
   "/admin/clients/technical-service/qr-codes": QrCode,

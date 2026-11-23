@@ -29,12 +29,15 @@ export function EngineerMobileNav() {
               <Link
                 href={item.href}
                 className={cn(
-                  "flex min-h-12 flex-col items-center justify-center gap-0.5 text-[10px] font-medium",
+                  "flex min-h-12 flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition-colors duration-200",
                   active ? "text-slate-900" : "text-slate-500",
                 )}
                 aria-current={active ? "page" : undefined}
               >
-                <Icon className="h-4 w-4" aria-hidden />
+                <Icon
+                  className={cn("h-4 w-4 transition-transform duration-200 ease-out", active ? "scale-110" : "scale-100")}
+                  aria-hidden
+                />
                 {item.label}
               </Link>
             </li>

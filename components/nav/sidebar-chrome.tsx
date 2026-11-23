@@ -2,6 +2,7 @@
 
 import type { LucideIcon } from "lucide-react"
 import Link from "next/link"
+import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from "framer-motion"
 import { ChevronDown, ChevronLeft, FolderOpen, LogOut, PanelLeftClose, PanelLeftOpen } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ICON_STROKE, NAV_ICON_SIZE } from "@/lib/nav-icons"
@@ -15,12 +16,35 @@ import {
 export const SIDEBAR_EXPANDED = "lg:w-[256px]"
 export const SIDEBAR_COLLAPSED = "lg:w-[72px]"
 
+const springSoft = { type: "spring" as const, stiffness: 420, damping: 34, mass: 0.7 }
+
 export function isExactOrNestedPath(pathname: string, href: string, exactRoots: string[] = []) {
   const clean = href.split("?")[0]
   if (exactRoots.includes(clean) || clean.split("/").filter(Boolean).length === 1) {
     return pathname === clean
   }
   return pathname === clean || pathname.startsWith(`${clean}/`)
+}
+
+export function SidebarReveal({
+  open,
+  children,
+  className,
+}: {
+  open: boolean
+  children: React.ReactNode
+  className?: string
+}) {
+  return (
+    <div
+      className={cn(
+        "grid transition-[grid-template-rows] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none",
+        open ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+      )}
+    >
+      <div className={cn("overflow-hidden", className)}>{children}</div>
+    </div>
+  )
 }
 
 export function SidebarFrame({
@@ -34,26 +58,36 @@ export function SidebarFrame({
   onToggle: () => void
   children: React.ReactNode
 }) {
+  const reduce = useReducedMotion()
+
   return (
     <TooltipProvider delayDuration={200}>
-      {isOpen ? (
-        <button
-          type="button"
-          className="fixed inset-0 z-40 bg-slate-900/30 lg:hidden"
-          aria-label="Close navigation"
-          onClick={onToggle}
-        />
-      ) : null}
-      <aside
-        data-tour="wt-sidebar"
-        className={cn(
-          "fixed left-0 top-0 z-50 flex h-screen w-[256px] flex-col border-r border-slate-200 bg-white transition-[width,transform] duration-200 lg:static",
-          isCollapsed ? SIDEBAR_COLLAPSED : SIDEBAR_EXPANDED,
-          isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
-        )}
-      >
-        {children}
-      </aside>
+      <AnimatePresence>
+        {isOpen ? (
+          <motion.button
+            type="button"
+            className="fixed inset-0 z-40 bg-slate-900/30 lg:hidden"
+            aria-label="Close navigation"
+            onClick={onToggle}
+            initial={reduce ? { opacity: 1 } : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={reduce ? { opacity: 1 } : { opacity: 0 }}
+            transition={{ duration: 0.22 }}
+          />
+        ) : null}
+      </AnimatePresence>
+      <LayoutGroup id="app-sidebar">
+        <aside
+          data-tour="wt-sidebar"
+          className={cn(
+            "sidebar-shell fixed left-0 top-0 z-50 flex h-screen w-[256px] flex-col overflow-x-hidden border-r border-slate-200 bg-white transition-[width,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none lg:static",
+            isCollapsed ? SIDEBAR_COLLAPSED : SIDEBAR_EXPANDED,
+            isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
+          )}
+        >
+          {children}
+        </aside>
+      </LayoutGroup>
     </TooltipProvider>
   )
 }
@@ -78,9 +112,9 @@ export function SidebarBrand({
         isCollapsed ? "justify-center px-2" : "justify-between px-3",
       )}
     >
-      <Link href={href} className={cn("flex min-w-0 items-center", isCollapsed ? "justify-center" : "gap-2.5")}>
+      <Link href={href} className={cn("group flex min-w-0 items-center", isCollapsed ? "justify-center" : "gap-2.5")}>
         <div
-          className="h-8 w-8 shrink-0 bg-contain bg-center bg-no-repeat"
+          className="h-8 w-8 shrink-0 bg-contain bg-center bg-no-repeat transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-110 group-hover:-rotate-3"
           style={{ backgroundImage: "var(--company-logo-url)" }}
           aria-hidden
         />
@@ -95,7 +129,7 @@ export function SidebarBrand({
         <button
           type="button"
           onClick={onMobileClose}
-          className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900 lg:hidden"
+          className="rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 lg:hidden"
           aria-label="Close navigation"
         >
           <ChevronLeft size={18} strokeWidth={ICON_STROKE} />
@@ -129,13 +163,16 @@ export function SidebarSectionLabel({
       type="button"
       onClick={onToggle}
       aria-expanded={!collapsed}
-      className="mb-0.5 flex h-8 w-full items-center justify-between rounded-md px-2.5 text-left text-[13px] font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
+      className="mb-0.5 flex h-8 w-full items-center justify-between rounded-md px-2.5 text-left text-[13px] font-medium text-slate-600 transition-colors duration-200 hover:bg-slate-100 hover:text-slate-900"
     >
       <span>{label}</span>
       <ChevronDown
         size={14}
         strokeWidth={ICON_STROKE}
-        className={cn("text-slate-400 transition-transform duration-150", collapsed ? "-rotate-90" : "rotate-0")}
+        className={cn(
+          "text-slate-400 transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+          collapsed ? "-rotate-90" : "rotate-0",
+        )}
       />
     </button>
   )
@@ -163,19 +200,22 @@ export function SidebarFolder({
         type="button"
         onClick={onToggle}
         aria-expanded={!collapsed}
-        className="mb-0.5 flex h-8 w-full items-center gap-2 rounded-md px-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
+        className="mb-0.5 flex h-8 w-full items-center gap-2 rounded-md px-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500 transition-colors duration-200 hover:bg-slate-100 hover:text-slate-800"
       >
         <FolderOpen size={14} strokeWidth={ICON_STROKE} className="shrink-0 text-slate-400" />
         <span className="min-w-0 flex-1 truncate">{label}</span>
         <ChevronDown
           size={14}
           strokeWidth={ICON_STROKE}
-          className={cn("text-slate-400 transition-transform duration-150", collapsed ? "-rotate-90" : "rotate-0")}
+          className={cn(
+            "text-slate-400 transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+            collapsed ? "-rotate-90" : "rotate-0",
+          )}
         />
       </button>
-      <div className={cn("ml-2 space-y-0.5 border-l border-slate-200 pl-1.5", collapsed ? "hidden" : "")}>
+      <SidebarReveal open={!collapsed} className="ml-2 space-y-0.5 border-l border-slate-200 pl-1.5">
         {children}
-      </div>
+      </SidebarReveal>
     </div>
   )
 }
@@ -201,6 +241,8 @@ export function SidebarNavLink({
   title?: string
   onClick?: () => void
 }) {
+  const reduce = useReducedMotion()
+
   const link = (
     <Link
       href={href}
@@ -209,19 +251,50 @@ export function SidebarNavLink({
       onClick={onClick}
       aria-current={isActive ? "page" : undefined}
       className={cn(
-        "relative flex h-9 items-center rounded-md text-[13px] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-primary)]",
+        "sidebar-link group relative flex h-9 items-center rounded-md text-[13px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-primary)]",
         isCollapsed ? "justify-center px-0" : "gap-2.5 px-2.5",
-        isActive ? "erp-selected font-medium" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+        isActive ? "font-medium" : "text-slate-600 hover:text-slate-900",
       )}
+      style={isActive ? { color: "var(--brand-selected-fg)" } : undefined}
     >
       {isActive ? (
-        <span
+        reduce ? (
+          <span
+            className="absolute inset-0 rounded-md"
+            style={{ backgroundColor: "var(--brand-selected-bg)" }}
+            aria-hidden
+          />
+        ) : (
+          <motion.span
+            layoutId="sidebar-active-fill"
+            className="absolute inset-0 rounded-md"
+            style={{ backgroundColor: "var(--brand-selected-bg)" }}
+            transition={springSoft}
+            aria-hidden
+          />
+        )
+      ) : (
+        <span className="absolute inset-0 rounded-md bg-slate-100 opacity-0 transition-opacity duration-200 group-hover:opacity-100" aria-hidden />
+      )}
+      {isActive && !reduce ? (
+        <motion.span
+          layoutId="sidebar-active-bar"
           className="absolute left-0 top-1/2 h-4 w-[2.5px] -translate-y-1/2 rounded-full"
           style={{ backgroundColor: "var(--brand-primary-400, var(--brand-primary))" }}
+          transition={springSoft}
           aria-hidden
         />
-      ) : null}
-      <span className="relative shrink-0">
+      ) : (
+        <span
+          className="absolute left-0 top-1/2 h-4 w-[2.5px] -translate-y-1/2 rounded-full"
+          style={{
+            backgroundColor: "var(--brand-primary-400, var(--brand-primary))",
+            opacity: isActive ? 1 : 0,
+          }}
+          aria-hidden
+        />
+      )}
+      <span className="sidebar-link-icon relative z-[1] shrink-0">
         <Icon size={NAV_ICON_SIZE} strokeWidth={ICON_STROKE} />
         {isCollapsed && badge ? (
           <span className="absolute -right-1.5 -top-1.5">{badge}</span>
@@ -229,8 +302,8 @@ export function SidebarNavLink({
       </span>
       {!isCollapsed ? (
         <>
-          <span className="min-w-0 flex-1 truncate">{label}</span>
-          {badge}
+          <span className="relative z-[1] min-w-0 flex-1 truncate">{label}</span>
+          {badge ? <span className="relative z-[1]">{badge}</span> : null}
         </>
       ) : null}
     </Link>
@@ -275,7 +348,7 @@ export function SidebarFooter({
     <div className="shrink-0 border-t border-slate-200 p-2">
       {!isCollapsed && userName ? (
         <div className="mb-1 flex items-center gap-2.5 px-1.5 py-1.5">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[11px] font-semibold text-slate-700">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[11px] font-semibold text-slate-700 transition-transform duration-300 hover:scale-105">
             {initials}
           </div>
           <div className="min-w-0">
@@ -293,7 +366,7 @@ export function SidebarFooter({
               type="button"
               onClick={onCollapseToggle}
               className={cn(
-                "hidden h-9 w-full items-center rounded-md text-[13px] text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 lg:flex",
+                "hidden h-9 w-full items-center rounded-md text-[13px] text-slate-500 transition-colors duration-200 hover:bg-slate-100 hover:text-slate-900 lg:flex",
                 isCollapsed ? "justify-center" : "gap-2.5 px-2.5",
               )}
               aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -321,7 +394,7 @@ export function SidebarFooter({
             type="button"
             onClick={onLogout}
             className={cn(
-              "flex h-9 w-full items-center rounded-md text-[13px] text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900",
+              "flex h-9 w-full items-center rounded-md text-[13px] text-slate-500 transition-colors duration-200 hover:bg-slate-100 hover:text-slate-900",
               isCollapsed ? "justify-center" : "gap-2.5 px-2.5",
             )}
             aria-label="Log out"

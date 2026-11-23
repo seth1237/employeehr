@@ -11,6 +11,9 @@ import { AiAssistantChat } from "@/components/ai/ai-assistant-chat"
 import { WalkthroughProvider } from "@/components/walkthrough"
 import { FieldPwa } from "@/components/pwa/field-pwa"
 import { FieldSplashProvider } from "@/components/field/login-splash"
+import { capturePwaInstallPrompt } from "@/lib/pwa-install"
+
+capturePwaInstallPrompt()
 
 function EngineerShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)

@@ -2,7 +2,8 @@
 
 import { useEffect, useRef } from 'react'
 import { usePathname } from 'next/navigation'
-import { getToken, logout } from '@/lib/auth'
+import { getToken, getUser, logout } from '@/lib/auth'
+import { isFieldAuthRole } from '@/lib/jwt-payload'
 import API_URL from '@/lib/apiBase'
 
 /**
@@ -59,6 +60,10 @@ export function UserActivityTracker() {
     }
 
     if (!getToken()) {
+      return
+    }
+
+    if (isFieldAuthRole(getUser()?.role)) {
       return
     }
 

@@ -34,6 +34,7 @@ export const metadata: Metadata = {
 };
 
 import { UserActivityTracker } from "@/components/UserActivityTracker";
+import { DownloadFxProvider } from "@/components/download/download-fx";
 
 export default function RootLayout({
   children,
@@ -48,7 +49,7 @@ export default function RootLayout({
           <AppInitializer />
           <UserActivityTracker />
           <Toaster />
-          {children}
+          <DownloadFxProvider>{children}</DownloadFxProvider>
         </ThemeProvider>
         <Analytics />
       </body>

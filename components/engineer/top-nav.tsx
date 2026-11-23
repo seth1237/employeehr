@@ -1,16 +1,61 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import Link from "next/link"
-import { CircleHelp, Menu, Plus } from "lucide-react"
+import { CircleHelp, Download, Menu, Monitor, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { getUser } from "@/lib/auth"
 import { requestWalkthroughReplay } from "@/lib/walkthrough"
+import {
+  capturePwaInstallPrompt,
+  getDeferredPwaPrompt,
+  isDesktopViewport,
+  isStandalonePwa,
+  subscribePwaInstall,
+} from "@/lib/pwa-install"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+
+function EngineerInstallButton() {
+  const [canInstall, setCanInstall] = useState(false)
+  const [installed, setInstalled] = useState(false)
+  const [desktop, setDesktop] = useState(false)
+
+  useEffect(() => {
+    capturePwaInstallPrompt()
+    const sync = () => {
+      setInstalled(isStandalonePwa())
+      setCanInstall(Boolean(getDeferredPwaPrompt()))
+      setDesktop(isDesktopViewport())
+    }
+    sync()
+    return subscribePwaInstall(sync)
+  }, [])
+
+  if (installed || !canInstall) return null
+
+  const install = async () => {
+    const prompt = getDeferredPwaPrompt()
+    if (!prompt?.prompt) return
+    try {
+      await prompt.prompt()
+      await prompt.userChoice
+    } catch {
+      // ignore
+    }
+  }
+
+  return (
+    <Button size="sm" variant="outline" className="h-8 px-2.5 text-xs md:px-3 md:text-sm" onClick={() => void install()}>
+      {desktop ? <Monitor className="mr-1 h-3.5 w-3.5" /> : <Download className="mr-1 h-3.5 w-3.5" />}
+      {desktop ? "Download to desktop" : "Install app"}
+    </Button>
+  )
+}
 
 export function EngineerTopNav({ onMenuClick }: { onMenuClick?: () => void }) {
   const user = getUser()
@@ -30,6 +75,7 @@ export function EngineerTopNav({ onMenuClick }: { onMenuClick?: () => void }) {
         </div>
       </div>
       <div className="flex items-center gap-2">
+        <EngineerInstallButton />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="sm" className="hidden lg:inline-flex" aria-label="Help">

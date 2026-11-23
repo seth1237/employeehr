@@ -363,6 +363,82 @@
   animation: field-splash-out 0.42s ease forwards;
 }
 
+.app-page-enter {
+  min-height: 100%;
+  animation: app-page-enter 0.36s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.sidebar-shell nav > * {
+  animation: sidebar-item-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.sidebar-shell nav > *:nth-child(1) { animation-delay: 0.03s; }
+.sidebar-shell nav > *:nth-child(2) { animation-delay: 0.06s; }
+.sidebar-shell nav > *:nth-child(3) { animation-delay: 0.09s; }
+.sidebar-shell nav > *:nth-child(4) { animation-delay: 0.12s; }
+.sidebar-shell nav > *:nth-child(5) { animation-delay: 0.15s; }
+.sidebar-shell nav > *:nth-child(6) { animation-delay: 0.18s; }
+.sidebar-shell nav > *:nth-child(7) { animation-delay: 0.21s; }
+.sidebar-shell nav > *:nth-child(8) { animation-delay: 0.24s; }
+.sidebar-shell nav > *:nth-child(9) { animation-delay: 0.27s; }
+.sidebar-shell nav > *:nth-child(10) { animation-delay: 0.3s; }
+.sidebar-shell nav > *:nth-child(n + 11) { animation-delay: 0.32s; }
+
+.sidebar-link {
+  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.sidebar-link:hover {
+  transform: translateX(4px);
+}
+
+.sidebar-link:active {
+  transform: translateX(1px) scale(0.98);
+}
+
+.sidebar-link[aria-current="page"]:hover {
+  transform: translateX(2px);
+}
+
+.sidebar-link-icon {
+  display: inline-flex;
+  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.sidebar-link:hover .sidebar-link-icon {
+  transform: scale(1.12) rotate(-8deg);
+}
+
+.sidebar-link[aria-current="page"] .sidebar-link-icon {
+  transform: scale(1.08);
+}
+
+.sidebar-link[aria-current="page"]:hover .sidebar-link-icon {
+  transform: scale(1.14) rotate(-8deg);
+}
+
+@keyframes sidebar-item-in {
+  from {
+    opacity: 0;
+    transform: translate3d(-10px, 6px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes app-page-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   @keyframes field-char-in {
     from,
@@ -398,6 +474,28 @@
     to {
       opacity: 0;
     }
+  }
+  @keyframes app-page-enter {
+    from,
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes sidebar-item-in {
+    from,
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  .sidebar-link,
+  .sidebar-link:hover,
+  .sidebar-link:active,
+  .sidebar-link[aria-current="page"]:hover,
+  .sidebar-link:hover .sidebar-link-icon {
+    transform: none;
+    transition: none;
   }
 }
 
@@ -585,6 +683,7 @@
 .erp-selected {
   background: var(--brand-selected-bg);
   color: var(--brand-selected-fg);
+  transition: background-color 180ms ease, color 180ms ease;
 }
 
 .erp-attention {
@@ -670,6 +769,205 @@
 
 .eh-btn-destructive {
   --eh-btn-fill: #dc2626;
+}
+
+.download-fx {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+}
+
+.download-fx-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.28);
+  animation: download-fx-fade 0.28s ease both;
+}
+
+.download-fx[data-phase="out"] .download-fx-backdrop {
+  animation: download-fx-fade-out 0.28s ease both;
+}
+
+.download-fx-stage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 16px calc(5.5rem + env(safe-area-inset-bottom));
+}
+
+.download-fx-paper {
+  position: relative;
+  display: flex;
+  height: 72px;
+  width: 58px;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 18px;
+  border-radius: 10px;
+  background: linear-gradient(180deg, var(--brand-primary-400), var(--brand-primary-700));
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.28);
+  animation: download-fx-paper 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.download-fx-fold {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 16px;
+  height: 16px;
+  background: linear-gradient(135deg, transparent 50%, rgba(255, 255, 255, 0.55) 50%);
+  border-top-right-radius: 10px;
+}
+
+.download-fx-dock {
+  display: flex;
+  width: min(100%, 360px);
+  align-items: center;
+  gap: 12px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.96);
+  padding: 12px 14px;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.22);
+  animation: download-fx-dock 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.download-fx-mark {
+  display: flex;
+  height: 32px;
+  width: 32px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--brand-primary-50);
+  color: var(--brand-primary-700);
+}
+
+.download-fx-mark[data-done="true"] {
+  background: #ecfdf3;
+  color: #047857;
+  animation: download-fx-check 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.download-fx-spinner {
+  height: 14px;
+  width: 14px;
+  border-radius: 999px;
+  border: 2px solid var(--brand-primary-100);
+  border-top-color: var(--brand-primary);
+  animation: download-fx-spin 0.7s linear infinite;
+}
+
+.download-fx[data-phase="out"] .download-fx-stage {
+  animation: download-fx-fade-out 0.28s ease both;
+}
+
+@media (min-width: 1024px) {
+  .download-fx-backdrop {
+    background: transparent;
+  }
+
+  .download-fx-stage {
+    align-items: flex-end;
+    justify-content: flex-end;
+    padding: 0 24px 24px;
+  }
+
+  .download-fx-paper {
+    height: 52px;
+    width: 42px;
+    margin-bottom: 10px;
+  }
+
+  .download-fx-dock {
+    width: 280px;
+  }
+}
+
+@keyframes download-fx-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes download-fx-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes download-fx-paper {
+  0% {
+    opacity: 0;
+    transform: translateY(18px) scale(0.86);
+  }
+  32% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(88px) scale(0.28);
+  }
+}
+
+.download-fx[data-phase="saved"] .download-fx-paper,
+.download-fx[data-phase="out"] .download-fx-paper {
+  opacity: 0;
+}
+
+@keyframes download-fx-dock {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes download-fx-check {
+  0% {
+    transform: scale(0.7);
+  }
+  60% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes download-fx-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .download-fx-backdrop,
+  .download-fx-paper,
+  .download-fx-dock,
+  .download-fx-mark,
+  .download-fx[data-phase="out"] .download-fx-stage,
+  .download-fx[data-phase="out"] .download-fx-backdrop {
+    animation: none;
+  }
+
+  .download-fx-paper {
+    display: none;
+  }
 }
 
 @media print {

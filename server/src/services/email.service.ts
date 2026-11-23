@@ -14,10 +14,12 @@ import {
 
 interface EmailOptions {
   to: string;
+  cc?: string | string[];
   subject: string;
   html: string;
   text?: string;
   companyId?: string; // Optional: specify which company is sending
+  mailKey?: string;
   attachments?: Array<{
     filename: string;
     content: Buffer;
@@ -63,13 +65,15 @@ class EmailService {
         company = await Company.findById(options.companyId);
       }
 
-      // Resolve appropriate transporter
       const { transporter, fromAddress, fromName } =
-        emailTransportResolver.resolveTransporter(company);
+        emailTransportResolver.resolveTransporter(company, {
+          mailKey: options.mailKey,
+        });
 
       const info = await transporter.sendMail({
         from: `"${fromName}" <${fromAddress}>`,
         to: options.to,
+        cc: options.cc,
         subject: options.subject,
         html: options.html,
         text: options.text || "",
@@ -95,6 +99,7 @@ class EmailService {
           await transporter.sendMail({
             from: `"${fromName}" <${fromAddress}>`,
             to: options.to,
+            cc: options.cc,
             subject: options.subject,
             html: options.html,
             text: options.text || "",
@@ -175,6 +180,7 @@ class EmailService {
       subject: `Application received — ${jobTitle} at ${companyName}`,
       html,
       companyId,
+      mailKey: "recruitment",
     });
   }
 
@@ -211,6 +217,7 @@ class EmailService {
       subject: `New application: ${jobTitle} — ${applicantName}`,
       html,
       companyId,
+      mailKey: "recruitment",
     });
   }
 
@@ -220,6 +227,7 @@ class EmailService {
     jobTitle: string,
     status: string,
     message?: string,
+    companyId?: string,
   ): Promise<boolean> {
     const statusMessages: Record<string, string> = {
       reviewing: "Your application is currently under review by our recruitment team.",
@@ -255,6 +263,8 @@ class EmailService {
       to: applicantEmail,
       subject: `Application update: ${jobTitle}`,
       html,
+      companyId,
+      mailKey: "recruitment",
     });
   }
 
@@ -286,6 +296,7 @@ class EmailService {
       subject,
       html,
       companyId,
+      mailKey: "recruitment",
     });
   }
 
@@ -310,6 +321,7 @@ class EmailService {
       subject: `${invitedByName} invited you to join ${companyName} on ElevateHub`,
       html,
       companyId,
+      mailKey: "hr",
     });
   }
 }

@@ -2,6 +2,7 @@
 
 import { getToken, logout } from "./auth";
 import API_URL, { getApiUrl } from "./apiBase";
+import { machineQrPublicOrigin } from "./machine-qr";
 import { fetchNoStore, readResponseText, withNoStoreHeaders } from "./apiFetch";
 import { parseApiJson } from "./safe-json";
 import { cachedRequest, clearCachedRequest } from "./request-cache";
@@ -649,6 +650,7 @@ export const companyApi = {
     fromEmail?: string;
     fromName?: string;
     enabled?: boolean;
+    senders?: Array<{ key: string; fromName?: string; fromEmail?: string }>;
     smtp?: {
       host?: string;
       port?: number;
@@ -661,6 +663,7 @@ export const companyApi = {
       enabled: data.enabled,
       fromName: data.fromName,
       fromEmail: data.fromEmail,
+      senders: data.senders,
       smtp: {
         host: data.smtp?.host ?? data.smtpHost,
         port: data.smtp?.port ?? data.smtpPort,
@@ -673,8 +676,19 @@ export const companyApi = {
     return client.post<any>("/api/company/email-config", payload);
   },
 
-  verifyEmailConfig: () =>
-    client.post<any>("/api/company/email-config/verify", {}),
+  verifyEmailConfig: (data: {
+    testEmail: string;
+    fromName?: string;
+    fromEmail?: string;
+    enabled?: boolean;
+    smtp?: {
+      host?: string;
+      port?: number;
+      secure?: boolean;
+      username?: string;
+      password?: string;
+    };
+  }) => client.post<any>("/api/company/email-config/verify", data),
 
   disableEmailConfig: () =>
     client.post<any>("/api/company/email-config/disable", {}),
@@ -2071,7 +2085,7 @@ export const engineeringApi = {
     return client.get<any>(`/api/engineering/reports/export${query ? `?${query}` : ""}`)
   },
   listQrCodes: (q?: string) => {
-    const origin = typeof window !== "undefined" ? window.location.origin : ""
+    const origin = machineQrPublicOrigin()
     const search = new URLSearchParams()
     if (q) search.set("q", q)
     if (origin) search.set("origin", origin)
@@ -2084,18 +2098,21 @@ export const engineeringApi = {
     ),
   ensureMachineQr: (machineId: string) =>
     client.post<any>(`/api/engineering/qr-codes/${machineId}/ensure`, {
-      origin: typeof window !== "undefined" ? window.location.origin : "",
+      origin: machineQrPublicOrigin(),
     }),
   createQrFromInvoice: (data: any) =>
     client.post<any>("/api/engineering/qr-codes/from-invoice", {
       ...data,
-      origin: typeof window !== "undefined" ? window.location.origin : "",
+      origin: machineQrPublicOrigin(),
     }),
   createManualQrMachine: (data: any) =>
     client.post<any>("/api/engineering/qr-codes/manual", {
       ...data,
-      origin: typeof window !== "undefined" ? window.location.origin : "",
+      origin: machineQrPublicOrigin(),
     }),
+  getQrNotifyEmails: () => client.get<any>("/api/engineering/qr-codes/notify-emails"),
+  saveQrNotifyEmails: (data: { to: string[]; cc: string[] }) =>
+    client.put<any>("/api/engineering/qr-codes/notify-emails", data),
   listQrReports: (params?: { type?: string; status?: string; limit?: number }) => {
     const search = new URLSearchParams()
     if (params?.type) search.set("type", params.type)

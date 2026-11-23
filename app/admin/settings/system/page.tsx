@@ -71,8 +71,8 @@ export default function SystemSettingsPage() {
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-muted-foreground">
             <p>
-              Configure your company domain email for notifications and invites.
-              If unset or unverified, the platform system email is used.
+              Connect the organisation mailbox used for invitations, invoices, leave, and service requests.
+              ElevateHub sends only until this SMTP is saved.
             </p>
             <Button onClick={() => router.push("/admin/settings/system/email")} className="gap-2">
               <Mail className="w-4 h-4" />

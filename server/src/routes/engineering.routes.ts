@@ -66,6 +66,8 @@ router.patch(
 const qrAdmin = roleMiddleware("company_admin", "super_admin", "hr", "admin", "manager")
 router.get("/qr-codes", qrAdmin, MachineQrController.listCodes);
 router.get("/qr-codes/invoices", qrAdmin, MachineQrController.listInvoices);
+router.get("/qr-codes/notify-emails", qrAdmin, MachineQrController.getNotifyEmails);
+router.put("/qr-codes/notify-emails", qrAdmin, MachineQrController.saveNotifyEmails);
 router.post("/qr-codes/from-invoice", qrAdmin, MachineQrController.createFromInvoice);
 router.post("/qr-codes/manual", qrAdmin, MachineQrController.createManual);
 router.post("/qr-codes/:machineId/ensure", qrAdmin, MachineQrController.ensureCode);

@@ -4,13 +4,22 @@ import type { AuthenticatedRequest } from "../middleware/auth";
 import { Company } from "../models/Company";
 import { InstalledMachine } from "../models/InstalledMachine";
 import { MachineQrReport } from "../models/MachineQrReport";
+import { StockClient } from "../models/StockClient";
 import { StockInvoice } from "../models/StockInvoice";
 import { StockProduct } from "../models/StockProduct";
 import { Ticket } from "../models/Ticket";
+import emailService from "../services/email.service";
+import {
+  renderCalloutBox,
+  renderCompanyBrandedEmail,
+  renderInfoPanel,
+} from "../lib/email-templates";
 
 const REPORT_TYPES = ["service", "breakdown", "product_order"] as const;
 const REPORT_STATUSES = ["open", "in_progress", "closed"] as const;
 const URGENCY = ["low", "normal", "high", "critical"] as const;
+
+const DEPLOYED_QR_ORIGIN = "https://elevatehub.co.ke";
 
 function publicOrigin(req: Request) {
   const forwarded = String(req.headers["x-forwarded-host"] || "").split(",")[0].trim();
@@ -20,6 +29,22 @@ function publicOrigin(req: Request) {
     (String(req.protocol || "https").includes("https") ? "https" : "http");
   if (!host) return "";
   return `${proto}://${host}`;
+}
+
+function isLocalHost(host: string) {
+  const value = String(host || "").toLowerCase();
+  return value === "localhost" || value === "127.0.0.1";
+}
+
+function resolveQrPublicOrigin(requested: string, req: Request) {
+  const raw = String(requested || "").trim() || publicOrigin(req);
+  try {
+    const url = new URL(raw);
+    if (isLocalHost(url.hostname)) return raw.replace(/\/$/, "");
+  } catch {
+    // fall through to deployed origin
+  }
+  return DEPLOYED_QR_ORIGIN;
 }
 
 async function uniqueQrToken() {
@@ -62,6 +87,122 @@ function machineCard(machine: any, origin = "") {
   };
 }
 
+function escapeHtml(value: string) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function normalizeEmails(values: unknown): string[] {
+  const raw = Array.isArray(values) ? values : String(values || "").split(/[,;\n]+/);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of raw) {
+    const email = String(item || "").trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || seen.has(email)) continue;
+    seen.add(email);
+    out.push(email);
+  }
+  return out;
+}
+
+async function clientEmailsForMachine(machine: any) {
+  const name = String(machine?.client?.name || "").trim();
+  const number = String(machine?.client?.number || "").trim();
+  if (!name && !number) return [];
+  const filter: Record<string, unknown> = { org_id: machine.org_id };
+  const or: Record<string, unknown>[] = [];
+  if (name) {
+    or.push({ sourceName: name }, { legalName: name });
+  }
+  if (number) or.push({ sourceNumber: number });
+  if (or.length) filter.$or = or;
+  const client = await StockClient.findOne(filter).select("email contacts.email").lean();
+  if (!client) return [];
+  return normalizeEmails([
+    client.email,
+    ...(client.contacts || []).map((contact) => contact.email),
+  ]);
+}
+
+async function notifyQrRequest(params: {
+  orgId: string;
+  type: string;
+  machine: any;
+  contactName: string;
+  contactPhone: string;
+  contactEmail: string;
+  message: string;
+  preferredDate: string;
+  urgency: string;
+  productName: string;
+  quantity: number;
+}) {
+  const company = await Company.findById(params.orgId)
+    .select("name email logo primaryColor technicalServiceQrMail")
+    .lean();
+  if (!company) return;
+
+  const configuredTo = normalizeEmails(company.technicalServiceQrMail?.to);
+  const configuredCc = normalizeEmails(company.technicalServiceQrMail?.cc);
+  const to = configuredTo.length ? configuredTo : normalizeEmails(company.email);
+  if (!to.length) return;
+
+  const clientMails = await clientEmailsForMachine(params.machine);
+  const cc = normalizeEmails([
+    ...configuredCc,
+    ...clientMails,
+    params.contactEmail,
+  ]).filter((email) => !to.includes(email));
+
+  const typeLabel =
+    params.type === "breakdown"
+      ? "Breakdown report"
+      : params.type === "product_order"
+        ? "Product order"
+        : "Service request";
+  const html = renderCompanyBrandedEmail({
+    title: `${typeLabel} · ${params.machine.productName || "Machine"}`,
+    preheader: `${params.contactName} submitted a ${typeLabel.toLowerCase()} from a machine QR`,
+    headline: typeLabel,
+    subtitle: params.machine.productName || "Machine QR",
+    companyName: company.name,
+    logoUrl: company.logo || undefined,
+    accentColor: company.primaryColor || undefined,
+    bodyHtml: `
+      ${renderCalloutBox(
+        `<p style="margin:0;font-size:14px;">A public QR request was submitted for <strong>${escapeHtml(params.machine.productName || "this machine")}</strong>.</p>`,
+        params.type === "breakdown" ? "warn" : "info",
+        company.primaryColor || undefined,
+      )}
+      ${renderInfoPanel("Request", [
+        { label: "Type", value: typeLabel },
+        { label: "Machine", value: params.machine.productName || "—" },
+        { label: "Client", value: params.machine.client?.name || "—" },
+        { label: "Location", value: params.machine.installationLocation || params.machine.client?.location || "—" },
+        { label: "Contact", value: `${params.contactName} · ${params.contactPhone}` },
+        ...(params.contactEmail ? [{ label: "Contact email", value: params.contactEmail }] : []),
+        { label: "Urgency", value: params.urgency },
+        ...(params.preferredDate ? [{ label: "Preferred date", value: params.preferredDate }] : []),
+        ...(params.type === "product_order"
+          ? [{ label: "Product", value: `${params.quantity} × ${params.productName}` }]
+          : []),
+      ])}
+      <p style="margin:16px 0 0;white-space:pre-wrap;">${escapeHtml(params.message || "No extra notes.")}</p>`,
+  });
+
+  await emailService.sendEmail({
+    to: to.join(", "),
+    cc: cc.length ? cc : undefined,
+    subject: `${typeLabel}: ${params.machine.productName || "machine"} · ${params.machine.client?.name || "client"}`,
+    html,
+    companyId: params.orgId,
+    mailKey: "technical_service",
+  });
+}
+
 function titleForType(type: string, machine: any) {
   const name = machine.productName || "machine";
   if (type === "breakdown") return `Breakdown reported · ${name}`;
@@ -91,7 +232,7 @@ export class MachineQrController {
 
       const [company, products] = await Promise.all([
         Company.findById(machine.org_id)
-          .select("name logo primaryColor secondaryColor phone")
+          .select("name logo primaryColor secondaryColor accentColor phone email invoiceSettings")
           .lean(),
         StockProduct.find({
           org_id: machine.org_id,
@@ -109,7 +250,6 @@ export class MachineQrController {
         data: {
           machine: {
             productName: machine.productName,
-            serialNumber: machine.serialNumber || "",
             clientName: machine.client?.name || "",
             location: machine.installationLocation || machine.client?.location || "",
             attendant: machine.attendant || "",
@@ -120,7 +260,10 @@ export class MachineQrController {
                 logo: company.logo || "",
                 primaryColor: company.primaryColor || "#0f766e",
                 secondaryColor: company.secondaryColor || "#0ea5e9",
-                phone: company.phone || "",
+                accentColor: company.accentColor || "",
+                phone: company.invoiceSettings?.contactPhone || company.phone || "",
+                email: company.invoiceSettings?.contactEmail || company.email || "",
+                officeLocation: company.invoiceSettings?.officeLocation || "",
               }
             : null,
           catalog: (products || []).map((item: any) => ({
@@ -219,6 +362,22 @@ export class MachineQrController {
         await machine.save();
       }
 
+      void notifyQrRequest({
+        orgId: String(machine.org_id),
+        type,
+        machine,
+        contactName,
+        contactPhone,
+        contactEmail,
+        message: message || (type === "product_order" ? `Order ${quantity} × ${productName}` : ""),
+        preferredDate,
+        urgency,
+        productName: type === "product_order" ? productName : machine.productName,
+        quantity,
+      }).catch((error) => {
+        console.error("QR request email failed:", error);
+      });
+
       return res.status(201).json({
         success: true,
         message:
@@ -258,7 +417,7 @@ export class MachineQrController {
         .limit(200)
         .lean();
 
-      const origin = String(req.query.origin || "").trim() || publicOrigin(req);
+      const origin = resolveQrPublicOrigin(String(req.query.origin || ""), req);
       return res.status(200).json({
         success: true,
         data: machines.map((machine) => machineCard(machine, origin)),
@@ -267,6 +426,45 @@ export class MachineQrController {
       return res.status(500).json({
         success: false,
         message: error.message || "Failed to list QR codes",
+      });
+    }
+  }
+
+  static async getNotifyEmails(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id;
+      if (!org_id) return res.status(401).json({ success: false, message: "Unauthorized" });
+      const company = await Company.findById(org_id).select("email technicalServiceQrMail").lean();
+      return res.status(200).json({
+        success: true,
+        data: {
+          to: normalizeEmails(company?.technicalServiceQrMail?.to),
+          cc: normalizeEmails(company?.technicalServiceQrMail?.cc),
+          companyEmail: company?.email || "",
+        },
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to load notification emails",
+      });
+    }
+  }
+
+  static async saveNotifyEmails(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id;
+      if (!org_id) return res.status(401).json({ success: false, message: "Unauthorized" });
+      const to = normalizeEmails(req.body?.to);
+      const cc = normalizeEmails(req.body?.cc).filter((email) => !to.includes(email));
+      await Company.findByIdAndUpdate(org_id, {
+        $set: { "technicalServiceQrMail.to": to, "technicalServiceQrMail.cc": cc },
+      });
+      return res.status(200).json({ success: true, data: { to, cc } });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to save notification emails",
       });
     }
   }
@@ -360,7 +558,7 @@ export class MachineQrController {
       }
 
       await ensureMachineToken(machine);
-      const origin = String(req.body?.origin || req.query.origin || "").trim() || publicOrigin(req);
+      const origin = resolveQrPublicOrigin(String(req.body?.origin || req.query.origin || ""), req);
       return res.status(200).json({ success: true, data: machineCard(machine, origin) });
     } catch (error: any) {
       return res.status(500).json({
@@ -447,7 +645,7 @@ export class MachineQrController {
       }
 
       await ensureMachineToken(machine);
-      const publicBase = String(origin || "").trim() || publicOrigin(req);
+      const publicBase = resolveQrPublicOrigin(String(origin || ""), req);
       return res.status(201).json({ success: true, data: machineCard(machine, publicBase) });
     } catch (error: any) {
       return res.status(500).json({
@@ -507,7 +705,7 @@ export class MachineQrController {
       });
 
       await ensureMachineToken(machine);
-      const publicBase = String(origin || "").trim() || publicOrigin(req);
+      const publicBase = resolveQrPublicOrigin(String(origin || ""), req);
       return res.status(201).json({ success: true, data: machineCard(machine, publicBase) });
     } catch (error: any) {
       return res.status(500).json({

@@ -9,6 +9,7 @@ interface EmailOptions {
   subject: string
   html: string
   companyId?: string
+  mailKey?: string
 }
 
 class EmailService {
@@ -53,7 +54,10 @@ class EmailService {
         company = await Company.findById(options.companyId)
       }
 
-      const { transporter, fromAddress, fromName } = emailTransportResolver.resolveTransporter(company)
+      const { transporter, fromAddress, fromName } = emailTransportResolver.resolveTransporter(
+        company,
+        { mailKey: options.mailKey },
+      )
 
       const info = await transporter.sendMail({
         from: `"${fromName}" <${fromAddress}>`,
@@ -118,6 +122,7 @@ class EmailService {
       subject: `Welcome to ElevateHub — invited by ${data.inviterName}`,
       html,
       companyId: data.companyId,
+      mailKey: "hr",
     })
   }
 }

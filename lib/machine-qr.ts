@@ -1,3 +1,12 @@
+export const MACHINE_QR_PUBLIC_ORIGIN = "https://elevatehub.co.ke"
+
+export function machineQrPublicOrigin() {
+  if (typeof window === "undefined") return MACHINE_QR_PUBLIC_ORIGIN
+  const host = window.location.hostname
+  if (host === "localhost" || host === "127.0.0.1") return window.location.origin
+  return MACHINE_QR_PUBLIC_ORIGIN
+}
+
 export function qrImageUrl(data: string, size = 360) {
   return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&margin=10&ecc=M&data=${encodeURIComponent(data)}`
 }
@@ -40,7 +49,7 @@ export function printMachineQr(machine: {
       <p style="letter-spacing:.12em;text-transform:uppercase;font-size:11px;color:#0f766e;font-weight:700;">Technical Service</p>
       <h1>${escapeHtml(machine.productName || "Machine")}</h1>
       <p>${escapeHtml(machine.client?.name || "")}</p>
-      <p>${machine.serialNumber ? `SN ${escapeHtml(machine.serialNumber)}` : ""} ${machine.installationLocation ? `· ${escapeHtml(machine.installationLocation)}` : ""}</p>
+      <p>${machine.installationLocation ? escapeHtml(machine.installationLocation) : ""}</p>
       <img src="${escapeHtml(qr)}" alt="Machine QR code" />
       <p><strong>Scan to request service, report a breakdown, or order a product.</strong></p>
       <p class="url">${escapeHtml(url)}</p>

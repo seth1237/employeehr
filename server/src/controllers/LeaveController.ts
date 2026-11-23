@@ -202,6 +202,7 @@ export class LeaveController {
                         to: employee.email,
                         subject: title,
                         companyId: String(request.org_id),
+                        mailKey: "hr",
                         html: `<p>Hello ${employee.firstName},</p><p>${message}</p>`,
                     })
                 } catch {

@@ -263,6 +263,7 @@ export class EmailMarketingController {
         subject: `[TEST] ${personalizedSubject}`,
         html,
         companyId: org_id,
+        mailKey: "sales",
       })
       if (!sent) {
         return res.status(500).json({ success: false, message: "SMTP did not accept the test email" })

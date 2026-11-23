@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Copy, Printer, QrCode, RefreshCw, Search } from "lucide-react"
+import { ChevronDown, Copy, Mail, Printer, QrCode, RefreshCw, Search, X } from "lucide-react"
 import {
   DesktopTableShell,
   MobileCard,
@@ -50,6 +50,77 @@ const MODES = [
   { id: "manual", label: "New machine" },
 ] as const
 
+function parseEmails(value: string) {
+  return value
+    .split(/[,;\n]+/)
+    .map((item) => item.trim().toLowerCase())
+    .filter((item) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(item))
+}
+
+function EmailListField({
+  label,
+  hint,
+  emails,
+  onChange,
+}: {
+  label: string
+  hint: string
+  emails: string[]
+  onChange: (emails: string[]) => void
+}) {
+  const [draft, setDraft] = useState("")
+
+  const add = () => {
+    const next = Array.from(new Set([...emails, ...parseEmails(draft)]))
+    onChange(next)
+    setDraft("")
+  }
+
+  return (
+    <div>
+      <Label>{label}</Label>
+      <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {emails.map((email) => (
+          <span
+            key={email}
+            className="inline-flex items-center gap-1 rounded-full border bg-white px-2.5 py-1 text-xs"
+          >
+            {email}
+            <button
+              type="button"
+              className="text-slate-400 hover:text-slate-700"
+              onClick={() => onChange(emails.filter((item) => item !== email))}
+              aria-label={`Remove ${email}`}
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </span>
+        ))}
+        {emails.length === 0 ? (
+          <span className="text-xs text-muted-foreground">None added yet.</span>
+        ) : null}
+      </div>
+      <div className="mt-2 flex gap-2">
+        <Input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="name@company.com"
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault()
+              add()
+            }
+          }}
+        />
+        <Button type="button" variant="outline" onClick={add}>
+          Add
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 function TechnicalServiceQrCodesPage() {
   const searchParams = useSearchParams()
   const machineIdFromUrl = searchParams.get("machineId") || ""
@@ -82,6 +153,10 @@ function TechnicalServiceQrCodesPage() {
   })
   const [preview, setPreview] = useState<QrMachine | null>(null)
   const [message, setMessage] = useState("")
+  const [mailTo, setMailTo] = useState<string[]>([])
+  const [mailCc, setMailCc] = useState<string[]>([])
+  const [savingMail, setSavingMail] = useState(false)
+  const [mailOpen, setMailOpen] = useState(false)
 
   const loadCodes = (query = q) => {
     setLoading(true)
@@ -102,6 +177,14 @@ function TechnicalServiceQrCodesPage() {
   useEffect(() => {
     loadCodes()
     loadInvoices()
+    engineeringApi
+      .getQrNotifyEmails()
+      .then((res) => {
+        const data = res.data || res
+        setMailTo(Array.isArray(data.to) ? data.to : [])
+        setMailCc(Array.isArray(data.cc) ? data.cc : [])
+      })
+      .catch((error) => console.error(error))
   }, [])
 
   useEffect(() => {
@@ -117,6 +200,21 @@ function TechnicalServiceQrCodesPage() {
   const showPreview = (machine: QrMachine) => {
     setPreview(machine)
     setMessage("QR code ready. Print this label and attach it to the machine.")
+  }
+
+  const saveNotifyEmails = async () => {
+    setSavingMail(true)
+    try {
+      const res = await engineeringApi.saveQrNotifyEmails({ to: mailTo, cc: mailCc })
+      const data = res.data || res
+      setMailTo(Array.isArray(data.to) ? data.to : mailTo)
+      setMailCc(Array.isArray(data.cc) ? data.cc : mailCc)
+      setMessage("Notification emails saved. New QR requests will go to these addresses.")
+    } catch (error: any) {
+      window.alert(error?.message || "Could not save notification emails.")
+    } finally {
+      setSavingMail(false)
+    }
   }
 
   const copyUrl = async (url?: string) => {
@@ -210,12 +308,48 @@ function TechnicalServiceQrCodesPage() {
         title="Machine QR codes"
         description="Generate a unique public QR for each machine. Attendants scan it to request service, report a breakdown, or order a product."
         actions={
-          <Button variant="outline" size="sm" onClick={() => loadCodes()}>
-            <RefreshCw className="mr-1.5 h-4 w-4" />
-            Refresh
-          </Button>
+          <>
+            <Button
+              variant={mailOpen ? "default" : "outline"}
+              size="sm"
+              onClick={() => setMailOpen((open) => !open)}
+              aria-expanded={mailOpen}
+            >
+              <Mail className="mr-1.5 h-4 w-4" />
+              Request emails
+              <ChevronDown className={`ml-1.5 h-4 w-4 transition-transform ${mailOpen ? "rotate-180" : ""}`} />
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => loadCodes()}>
+              <RefreshCw className="mr-1.5 h-4 w-4" />
+              Refresh
+            </Button>
+          </>
         }
       />
+
+      {mailOpen ? (
+        <Card>
+          <CardContent className="grid gap-5 px-4 py-4 sm:grid-cols-2">
+            <EmailListField
+              label="Company emails"
+              hint="These receive each QR request as the main To addresses."
+              emails={mailTo}
+              onChange={setMailTo}
+            />
+            <EmailListField
+              label="CC emails"
+              hint="Extra addresses copied on every request. The client record and the attendant who submits are CC’d automatically."
+              emails={mailCc}
+              onChange={setMailCc}
+            />
+            <div className="sm:col-span-2">
+              <Button onClick={() => void saveNotifyEmails()} disabled={savingMail}>
+                {savingMail ? "Saving…" : "Save emails"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="flex flex-wrap gap-2">
         {MODES.map((item) => (

@@ -176,6 +176,13 @@ const companySchema = new Schema<ICompany>(
         username: { type: String },
         password: { type: String }, // Should be encrypted
       },
+      senders: [
+        {
+          key: { type: String, required: true },
+          fromName: { type: String, default: "" },
+          fromEmail: { type: String, default: "" },
+        },
+      ],
     },
     invoiceSettings: {
       invoiceEmail: { type: String },
@@ -320,6 +327,10 @@ const companySchema = new Schema<ICompany>(
       type: Number,
       default: 3000,
       min: 0,
+    },
+    technicalServiceQrMail: {
+      to: { type: [String], default: [] },
+      cc: { type: [String], default: [] },
     },
   },
   { timestamps: true },

@@ -115,6 +115,10 @@ export interface ICompany {
   navigationAnimation?: string;
   themePreset?: string;
   salesNightOutAmount?: number;
+  technicalServiceQrMail?: {
+    to?: string[];
+    cc?: string[];
+  };
   stockSettings?: {
     bypassWebsiteQuotationApproval?: boolean;
     inventoryCostingMethod?: "average" | "fifo";
@@ -141,6 +145,11 @@ export interface ICompany {
       username: string;
       password: string; // Encrypted
     };
+    senders?: Array<{
+      key: string;
+      fromName?: string;
+      fromEmail?: string;
+    }>;
   };
   dispatchSmsSettings?: {
     officePhone?: string;

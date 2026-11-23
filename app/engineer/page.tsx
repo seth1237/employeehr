@@ -144,15 +144,21 @@ export default function EngineerDashboard() {
       <section className="space-y-2">
         <div className="flex items-end justify-between gap-2">
           <h2 className="text-sm font-semibold sm:text-base">
-            {firstName ? `You’ve been so productive, ${firstName}!` : "You’ve been so productive!"}
+            {completed.length === 0
+              ? "Your record shall appear here"
+              : firstName
+                ? `You’ve been so productive, ${firstName}!`
+                : "You’ve been so productive!"}
           </h2>
-          <Link
-            href="/engineer/work-orders?filter=all&status=completed"
-            className="text-xs font-medium hover:underline"
-            style={{ color: branding.primaryColor }}
-          >
-            View all
-          </Link>
+          {completed.length > 0 ? (
+            <Link
+              href="/engineer/work-orders?filter=all&status=completed"
+              className="text-xs font-medium hover:underline"
+              style={{ color: branding.primaryColor }}
+            >
+              View all
+            </Link>
+          ) : null}
         </div>
         {completed.length === 0 ? (
           <p className="rounded-xl border bg-white px-4 py-6 text-center text-sm text-muted-foreground">

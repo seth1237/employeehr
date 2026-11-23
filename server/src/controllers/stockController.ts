@@ -351,6 +351,7 @@ async function ensureWebsitePortalUser(orgId: string, payload: any) {
       to: email,
       subject: "Your client portal login",
       companyId: orgId,
+      mailKey: "stock",
       html: `<p>Hello ${firstName},</p><p>Your client portal account is ready. Use this one-time password and change it after you sign in:</p><p><strong>${tempPassword}</strong></p>`,
     });
   } catch {
@@ -1115,6 +1116,7 @@ async function sendLowStockAlert(product: any, orgId: string) {
         subject,
         html,
         companyId: orgId,
+        mailKey: "stock",
       }),
     ),
   );
@@ -1608,6 +1610,7 @@ async function sendExpiryReminderEmail(product: any, orgId: string) {
         subject,
         html,
         companyId: orgId,
+        mailKey: "stock",
       }),
     ),
   );
@@ -2770,6 +2773,7 @@ export class StockController {
         html,
         text: `Invoice ${invoice.invoiceNumber} from ${companyName}`,
         companyId: org_id,
+        mailKey: "stock",
         attachments: [
           {
             filename: `${invoice.invoiceNumber || "invoice"}.pdf`,
@@ -2843,6 +2847,7 @@ export class StockController {
         html,
         text: `Quotation ${quotation.quotationNumber} from ${companyName}`,
         companyId: org_id,
+        mailKey: "stock",
         attachments: [
           {
             filename: `${quotation.quotationNumber || "quotation"}.pdf`,
@@ -5035,6 +5040,7 @@ export class StockController {
                 subject: personalizedSubject,
                 html,
                 companyId: org_id,
+                mailKey: "sales",
               });
 
               if (isSent) {

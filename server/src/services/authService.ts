@@ -87,11 +87,11 @@ export class AuthService {
 
     const html = loginOtpEmail(otp)
 
-    // Login codes must go out even if the company's own SMTP is broken.
     const sent = await emailService.sendEmail({
       to: params.user.email,
       subject: "Your ElevateHub login code",
       html,
+      companyId: params.user.org_id,
     })
 
     if (!sent) {

@@ -42,10 +42,10 @@ router.get("/stock-settings", roleMiddleware("company_admin", "hr"), CompanyCont
 router.post("/stock-settings", roleMiddleware("company_admin"), CompanyController.updateStockSettings)
 
 // Email Configuration (Admin only)
-router.get("/email-config", roleMiddleware("company_admin", "hr"), CompanyEmailController.getEmailConfig)
-router.post("/email-config", roleMiddleware("company_admin", "hr"), CompanyEmailController.updateEmailConfig)
-router.post("/email-config/verify", roleMiddleware("company_admin", "hr"), CompanyEmailController.verifyEmailConfig)
-router.post("/email-config/disable", roleMiddleware("company_admin", "hr"), CompanyEmailController.disableEmailConfig)
+router.get("/email-config", roleMiddleware("company_admin", "admin", "hr"), CompanyEmailController.getEmailConfig)
+router.post("/email-config", roleMiddleware("company_admin", "admin", "hr"), CompanyEmailController.updateEmailConfig)
+router.post("/email-config/verify", roleMiddleware("company_admin", "admin", "hr"), CompanyEmailController.verifyEmailConfig)
+router.post("/email-config/disable", roleMiddleware("company_admin", "admin", "hr"), CompanyEmailController.disableEmailConfig)
 
 // Departments
 router.get('/departments', roleMiddleware('company_admin', 'hr', 'manager'), DepartmentController.list)

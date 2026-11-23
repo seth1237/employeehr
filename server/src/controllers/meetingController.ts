@@ -162,6 +162,7 @@ export class MeetingController {
                 to: user.email,
                 subject: `Meeting invitation: ${title}`,
                 companyId: org_id,
+                mailKey: "hr",
                 html: meetingInvitationEmail({
                   title,
                   scheduledAt: new Date(scheduled_at).toLocaleString(),
@@ -605,6 +606,7 @@ export class MeetingController {
             subject: `Meeting Summary: ${meeting.title}`,
             html: summaryHtml,
             companyId: org_id,
+            mailKey: "hr",
           })
         }
       }
@@ -815,7 +817,7 @@ export class MeetingController {
         reportHtml,
         analysis,
         async (email: string, subject: string, html: string) => {
-          await emailService.sendEmail({ to: email, subject, html, companyId: org_id })
+          await emailService.sendEmail({ to: email, subject, html, companyId: org_id, mailKey: "hr" })
         },
       )
 

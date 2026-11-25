@@ -4,6 +4,7 @@ import type { AuthenticatedRequest } from "../middleware/auth";
 import { Company } from "../models/Company";
 import { InstalledMachine } from "../models/InstalledMachine";
 import { MachineQrReport } from "../models/MachineQrReport";
+import { MachineService } from "../models/MachineService";
 import { StockClient } from "../models/StockClient";
 import { StockInvoice } from "../models/StockInvoice";
 import { StockProduct } from "../models/StockProduct";
@@ -181,6 +182,56 @@ async function notifyQrRequest(params: {
   });
 }
 
+function machineStatusLabel(status?: string) {
+  switch (String(status || "active")) {
+    case "maintenance":
+      return "Under service";
+    case "installation_pending":
+      return "Installation pending";
+    case "in_workshop":
+      return "In workshop";
+    case "decommissioned":
+      return "Out of service";
+    case "ended":
+      return "Ended";
+    default:
+      return "Working";
+  }
+}
+
+function jobTitle(row: any) {
+  const named = String(row?.serviceType || "").trim();
+  if (named) return named;
+  switch (String(row?.type || "")) {
+    case "installation":
+      return "Installation";
+    case "preventive":
+      return "Preventive service";
+    case "calibration":
+      return "Calibration";
+    case "inspection":
+      return "Inspection";
+    case "vendor":
+      return "Vendor visit";
+    default:
+      return "Service visit";
+  }
+}
+
+function publicJob(row: any) {
+  const okay = row?.machineOkay;
+  return {
+    id: String(row._id),
+    date: row.completedDate || row.startedAt || row.scheduledDate || row.createdAt || null,
+    type: row.type || "corrective",
+    title: jobTitle(row),
+    status: row.status || "open",
+    engineer: String(row.technician || "").trim(),
+    note: String(row.notes || "").trim().slice(0, 240),
+    machineOkay: typeof okay === "boolean" ? okay : null,
+  };
+}
+
 function titleForType(type: string, machine: any) {
   const name = machine.productName || "machine";
   if (type === "breakdown") return `Breakdown reported · ${name}`;
@@ -208,7 +259,10 @@ export class MachineQrController {
       machine.lastQrScanAt = new Date();
       await machine.save();
 
-      const [company, products] = await Promise.all([
+      const machineId = String(machine._id);
+      const jobSelect =
+        "type status serviceType scheduledDate startedAt completedDate technician notes machineOkay createdAt";
+      const [company, products, completedJobs, liveJob] = await Promise.all([
         Company.findById(machine.org_id)
           .select("name logo primaryColor secondaryColor accentColor phone email invoiceSettings")
           .lean(),
@@ -221,17 +275,45 @@ export class MachineQrController {
           .sort({ name: 1 })
           .limit(40)
           .lean(),
+        MachineService.find({
+          org_id: machine.org_id,
+          machineId,
+          status: "completed",
+        })
+          .select(jobSelect)
+          .sort({ completedDate: -1, createdAt: -1 })
+          .limit(12)
+          .lean(),
+        MachineService.findOne({
+          org_id: machine.org_id,
+          machineId,
+          status: { $in: ["in_progress", "assigned", "open", "on_hold", "waiting_parts"] },
+        })
+          .select(jobSelect)
+          .sort({ updatedAt: -1, createdAt: -1 })
+          .lean(),
       ]);
+
+      const history = (completedJobs || []).map(publicJob);
+      const currentJob = liveJob ? publicJob(liveJob) : null;
+      const engineerUpdate = history[0] || null;
 
       return res.status(200).json({
         success: true,
         data: {
           machine: {
             productName: machine.productName,
+            serialNumber: machine.serialNumber || "",
             clientName: machine.client?.name || "",
             location: machine.installationLocation || machine.client?.location || "",
             attendant: machine.attendant || "",
+            status: machine.status || "active",
+            statusLabel: machineStatusLabel(machine.status),
+            nextServiceDate: machine.nextServiceDate || null,
           },
+          engineerUpdate,
+          currentJob,
+          history,
           company: company
             ? {
                 name: company.name,

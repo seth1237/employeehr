@@ -50,11 +50,15 @@ export function FieldPwa({ manifest, appName, themeColor = "#0f766e" }: Props) {
       document.head.appendChild(meta)
     })
 
-    if (!document.querySelector('link[rel="apple-touch-icon"]')) {
-      const apple = document.createElement("link")
-      apple.rel = "apple-touch-icon"
-      apple.href = "/pwa-icon-192.png"
-      document.head.appendChild(apple)
+    const appleHref = "/apple-touch-icon.png?v=elevate"
+    const apple = document.querySelector('link[rel="apple-touch-icon"]') as HTMLLinkElement | null
+    if (apple) {
+      apple.href = appleHref
+    } else {
+      const link = document.createElement("link")
+      link.rel = "apple-touch-icon"
+      link.href = appleHref
+      document.head.appendChild(link)
     }
 
     if ("serviceWorker" in navigator) {

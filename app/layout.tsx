@@ -19,17 +19,18 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       {
-        url: "/ELEVATEERPLOGO.png",
+        url: "/pwa-icon-192.png",
         type: "image/png",
+        sizes: "192x192",
       },
       {
-        url: "/ELEVATEERPLOGO.png",
+        url: "/pwa-icon-512.png",
         type: "image/png",
-        sizes: "32x32",
+        sizes: "512x512",
       },
     ],
-    apple: "/ELEVATEERPLOGO.png",
-    shortcut: "/ELEVATEERPLOGO.png",
+    apple: "/apple-touch-icon.png",
+    shortcut: "/pwa-icon-192.png",
   },
 };
 

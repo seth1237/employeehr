@@ -12,10 +12,21 @@ import { ArrowLeft, CheckCircle2, Loader2, Package, TriangleAlert, Wrench } from
 
 type RequestType = "service" | "breakdown" | "product_order"
 
-const ACTIONS: Array<{ id: RequestType; title: string; hint: string; documentTitle: string; icon: typeof Wrench }> = [
-  { id: "service", title: "Request service", hint: "Book a visit or routine support", documentTitle: "SERVICE REQUEST", icon: Wrench },
-  { id: "breakdown", title: "Report a breakdown", hint: "The machine is not working", documentTitle: "BREAKDOWN REPORT", icon: TriangleAlert },
-  { id: "product_order", title: "Order a product", hint: "Request consumables or a replacement", documentTitle: "PRODUCT ORDER", icon: Package },
+type PublicJob = {
+  id: string
+  date?: string | null
+  type?: string
+  title?: string
+  status?: string
+  engineer?: string
+  note?: string
+  machineOkay?: boolean | null
+}
+
+const ACTIONS: Array<{ id: RequestType; title: string; hint: string; icon: typeof Wrench }> = [
+  { id: "service", title: "Request service", hint: "Book a visit or routine support", icon: Wrench },
+  { id: "breakdown", title: "Report a breakdown", hint: "The machine is not working", icon: TriangleAlert },
+  { id: "product_order", title: "Order a product", hint: "Consumables or a replacement", icon: Package },
 ]
 
 function logoSrc(logo?: string) {
@@ -25,12 +36,30 @@ function logoSrc(logo?: string) {
   return `${API_URL}${path}`
 }
 
-function todayLabel() {
-  return new Date().toLocaleDateString("en-KE", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  })
+function formatWhen(value?: string | null) {
+  if (!value) return ""
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ""
+  return date.toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" })
+}
+
+function statusTone(status?: string) {
+  const value = String(status || "active")
+  if (value === "active") return "bg-emerald-50 text-emerald-800"
+  if (value === "maintenance" || value === "in_workshop") return "bg-amber-50 text-amber-800"
+  if (value === "installation_pending") return "bg-sky-50 text-sky-800"
+  return "bg-slate-100 text-slate-700"
+}
+
+function jobStatusLabel(status?: string) {
+  const value = String(status || "")
+  if (value === "in_progress") return "In progress"
+  if (value === "waiting_parts") return "Waiting for parts"
+  if (value === "on_hold") return "On hold"
+  if (value === "assigned") return "Assigned"
+  if (value === "completed") return "Completed"
+  if (value === "open") return "Open"
+  return value.replaceAll("_", " ")
 }
 
 export default function PublicMachineQrPage() {
@@ -77,8 +106,10 @@ export default function PublicMachineQrPage() {
 
   const catalog = payload?.catalog || []
   const machine = payload?.machine
+  const history: PublicJob[] = payload?.history || []
+  const engineerUpdate: PublicJob | null = payload?.engineerUpdate || null
+  const currentJob: PublicJob | null = payload?.currentJob || null
   const selectedAction = useMemo(() => ACTIONS.find((item) => item.id === type), [type])
-  const documentTitle = selectedAction?.documentTitle || "SERVICE REQUEST"
   const logo = logoSrc(branding.logo)
 
   const submit = async (event: FormEvent) => {
@@ -109,7 +140,7 @@ export default function PublicMachineQrPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#f6f7f9]">
+      <div className="flex min-h-[100dvh] items-center justify-center bg-[#f6f7f9]">
         <Loader2 className="h-6 w-6 animate-spin text-slate-500" />
       </div>
     )
@@ -117,8 +148,8 @@ export default function PublicMachineQrPage() {
 
   if (!machine) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#f6f7f9] px-4">
-        <div className="w-full max-w-[520px] rounded-lg border bg-white px-8 py-10 text-center shadow-sm">
+      <div className="flex min-h-[100dvh] items-center justify-center bg-[#f6f7f9] px-4">
+        <div className="w-full max-w-[400px] rounded-2xl border bg-white px-6 py-8 text-center">
           <p className="text-lg font-semibold tracking-tight">This QR code is not valid</p>
           <p className="mt-2 text-sm text-slate-500">{error || "Ask technical service for a new label."}</p>
         </div>
@@ -127,81 +158,138 @@ export default function PublicMachineQrPage() {
   }
 
   return (
-    <div ref={rootRef} className="min-h-screen bg-[#f6f7f9] px-3 py-6 sm:px-6 sm:py-10">
-      <article className="relative mx-auto max-w-[820px] overflow-hidden rounded-lg border bg-white text-slate-800 shadow-sm">
-        {done ? (
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden">
-            <span className="rotate-[-28deg] text-6xl font-bold uppercase tracking-widest text-emerald-200/80">
-              Received
-            </span>
-          </div>
-        ) : null}
-
-        <header
-          className="border-b px-5 py-5 sm:px-8 sm:py-6"
-          style={{ borderColor: "color-mix(in srgb, var(--brand-primary) 20%, transparent)" }}
-        >
-          <div className="flex items-start justify-between gap-6">
-            <div className="min-w-0 space-y-2">
-              {logo ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={logo}
-                  alt={branding.name || "Company"}
-                  className="h-12 w-auto max-w-[180px] object-contain"
-                />
-              ) : (
-                <p className="text-lg font-semibold" style={{ color: "var(--brand-primary)" }}>
-                  {branding.name || "Technical service"}
-                </p>
-              )}
-              <div className="space-y-0.5 text-xs text-slate-500">
-                {branding.officeLocation ? <p>{branding.officeLocation}</p> : null}
-                {branding.phone ? <p>{branding.phone}</p> : null}
-                {branding.email ? <p>{branding.email}</p> : null}
-              </div>
-            </div>
-            <div className="shrink-0 text-right">
-              <p
-                className="text-xl font-bold tracking-tight sm:text-3xl"
-                style={{ color: "var(--brand-primary)" }}
-              >
-                {documentTitle}
-              </p>
-              <p className="mt-2 text-sm">
-                <span className="text-slate-500">Date:</span> {todayLabel()}
-              </p>
-              {reference ? (
-                <p className="text-sm">
-                  <span className="text-slate-500">Ref:</span> {reference}
-                </p>
-              ) : null}
-            </div>
-          </div>
+    <div
+      ref={rootRef}
+      className="min-h-[100dvh] bg-[#f6f7f9] px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))]"
+    >
+      <div className="mx-auto w-full max-w-[430px] space-y-3">
+        <header className="flex items-center gap-3">
+          {logo ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={logo} alt="" className="h-9 w-auto max-w-[140px] object-contain" />
+          ) : (
+            <p className="text-sm font-semibold" style={{ color: "var(--brand-primary)" }}>
+              {branding.name || "Technical service"}
+            </p>
+          )}
         </header>
 
-        <section className="grid gap-6 px-5 py-5 sm:grid-cols-2 sm:px-8 sm:py-6">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Client</p>
-            <p className="mt-1 font-medium">{machine.clientName || "—"}</p>
-            {machine.location ? <p className="text-sm text-slate-600">{machine.location}</p> : null}
-            {machine.attendant ? <p className="text-sm text-slate-600">Attendant {machine.attendant}</p> : null}
+        <section className="rounded-2xl border bg-white p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Machine</p>
+              <h1 className="mt-0.5 text-lg font-semibold leading-tight text-slate-900">{machine.productName}</h1>
+              {machine.serialNumber ? (
+                <p className="mt-0.5 text-xs text-slate-500">SN {machine.serialNumber}</p>
+              ) : null}
+            </div>
+            <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusTone(machine.status)}`}>
+              {machine.statusLabel || "Working"}
+            </span>
           </div>
-          <div className="sm:text-right">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Machine</p>
-            <p className="mt-1 font-medium">{machine.productName}</p>
+          <div className="mt-3 space-y-0.5 text-sm text-slate-600">
+            {machine.clientName ? <p>{machine.clientName}</p> : null}
+            {machine.location ? <p>{machine.location}</p> : null}
+            {machine.attendant ? <p>In charge · {machine.attendant}</p> : null}
           </div>
         </section>
 
-        <section className="border-t px-5 py-5 sm:px-8 sm:py-6">
-        {done ? (
-          <div className="relative py-4 text-center">
+        {!type && !done ? (
+          <>
+            {currentJob ? (
+              <section className="rounded-2xl border bg-white p-4">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Current job</p>
+                <p className="mt-1 text-sm font-medium text-slate-900">{currentJob.title}</p>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  {jobStatusLabel(currentJob.status)}
+                  {currentJob.engineer ? ` · ${currentJob.engineer}` : ""}
+                  {currentJob.date ? ` · ${formatWhen(currentJob.date)}` : ""}
+                </p>
+              </section>
+            ) : null}
+
+            <section className="rounded-2xl border bg-white p-4">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Engineer update</p>
+              {engineerUpdate ? (
+                <>
+                  <p className="mt-1 text-sm font-medium text-slate-900">
+                    {engineerUpdate.machineOkay === true
+                      ? "Machine okay"
+                      : engineerUpdate.machineOkay === false
+                        ? "Needs attention"
+                        : engineerUpdate.title || "Last visit"}
+                  </p>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    {formatWhen(engineerUpdate.date) || "Recent"}
+                    {engineerUpdate.engineer ? ` · ${engineerUpdate.engineer}` : ""}
+                  </p>
+                  {engineerUpdate.note ? (
+                    <p className="mt-2 text-sm leading-snug text-slate-700">{engineerUpdate.note}</p>
+                  ) : null}
+                </>
+              ) : (
+                <p className="mt-1 text-sm text-slate-500">No engineer update yet.</p>
+              )}
+            </section>
+
+            <section className="rounded-2xl border bg-white p-4">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Service history</p>
+              {history.length ? (
+                <ol className="mt-2 divide-y">
+                  {history.map((row) => (
+                    <li key={row.id} className="flex items-start justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-slate-900">{row.title}</p>
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          {formatWhen(row.date) || "—"}
+                          {row.engineer ? ` · ${row.engineer}` : ""}
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-[11px] font-medium text-slate-500">
+                        {row.machineOkay === true ? "Okay" : row.machineOkay === false ? "Attention" : "Done"}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="mt-1 text-sm text-slate-500">No service visits recorded yet.</p>
+              )}
+            </section>
+
+            <section className="rounded-2xl border bg-white p-2">
+              <p className="px-2 pt-2 text-[11px] font-medium uppercase tracking-wide text-slate-500">Need help?</p>
+              <div className="mt-1">
+                {ACTIONS.map((action) => {
+                  const Icon = action.icon
+                  return (
+                    <button
+                      key={action.id}
+                      type="button"
+                      onClick={() => setType(action.id)}
+                      className="flex min-h-12 w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left hover:bg-slate-50"
+                    >
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
+                        <Icon className="h-4 w-4" />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-sm font-medium text-slate-900">{action.title}</span>
+                        <span className="text-xs text-slate-500">{action.hint}</span>
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </section>
+          </>
+        ) : done ? (
+          <section className="rounded-2xl border bg-white px-4 py-8 text-center">
             <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-600" />
             <p className="mt-3 text-lg font-semibold">Received</p>
             <p className="mt-1 text-sm text-slate-600">{done}</p>
+            {reference ? <p className="mt-1 text-xs text-slate-500">Ref {reference}</p> : null}
             <Button
               variant="outline"
-              className="mt-4"
+              className="mt-5 w-full"
               onClick={() => {
                 setDone("")
                 setReference("")
@@ -209,195 +297,155 @@ export default function PublicMachineQrPage() {
                 setForm((current) => ({ ...current, message: "", productName: "", quantity: "1" }))
               }}
             >
-              Send another request
+              Back to machine
             </Button>
-          </div>
+          </section>
         ) : selectedAction ? (
-              <form onSubmit={submit} className="space-y-4">
-                <div className="flex items-center justify-between gap-3">
-                  <button
-                    type="button"
-                    className="inline-flex items-center text-sm font-medium text-slate-600 hover:text-slate-900"
-                    onClick={() => {
-                      setType("")
-                      setError("")
-                    }}
-                  >
-                    <ArrowLeft className="mr-1 h-4 w-4" />
-                    Back
-                  </button>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    {selectedAction.title}
-                  </p>
+          <section className="rounded-2xl border bg-white p-4">
+            <button
+              type="button"
+              className="inline-flex min-h-10 items-center text-sm font-medium text-slate-600"
+              onClick={() => {
+                setType("")
+                setError("")
+              }}
+            >
+              <ArrowLeft className="mr-1 h-4 w-4" />
+              Back
+            </button>
+            <h2 className="mt-1 text-base font-semibold">{selectedAction.title}</h2>
+            <form onSubmit={submit} className="mt-4 space-y-4">
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-xs text-slate-500">Your name</Label>
+                  <Input
+                    className="mt-1 h-11"
+                    required
+                    value={form.contactName}
+                    onChange={(e) => setForm((current) => ({ ...current, contactName: e.target.value }))}
+                  />
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="erp-icon-well flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold">
-                    1
-                  </div>
-                  <h3 className="text-sm font-semibold">Your details</h3>
+                <div>
+                  <Label className="text-xs text-slate-500">Phone</Label>
+                  <Input
+                    className="mt-1 h-11"
+                    required
+                    inputMode="tel"
+                    value={form.contactPhone}
+                    onChange={(e) => setForm((current) => ({ ...current, contactPhone: e.target.value }))}
+                  />
                 </div>
-                <div className="grid gap-3 rounded-xl border bg-muted/20 p-3 sm:grid-cols-2 sm:p-4">
-                  <div className="sm:col-span-2">
-                    <Label className="text-xs text-muted-foreground">Your name</Label>
+                <div>
+                  <Label className="text-xs text-slate-500">Email (optional)</Label>
+                  <Input
+                    className="mt-1 h-11"
+                    type="email"
+                    inputMode="email"
+                    value={form.contactEmail}
+                    onChange={(e) => setForm((current) => ({ ...current, contactEmail: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              {type === "product_order" ? (
+                <div className="space-y-3">
+                  <div>
+                    <Label className="text-xs text-slate-500">Product</Label>
+                    {catalog.length > 0 ? (
+                      <select
+                        className="mt-1 h-11 w-full rounded-md border bg-background px-3 text-sm"
+                        value={form.productName}
+                        onChange={(e) => setForm((current) => ({ ...current, productName: e.target.value }))}
+                      >
+                        <option value="">Select or type below</option>
+                        {catalog.map((item: any) => (
+                          <option key={item.name} value={item.name}>
+                            {item.name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : null}
                     <Input
-                      className="mt-1"
+                      className="mt-2 h-11"
+                      placeholder="Product name"
+                      value={form.productName}
+                      onChange={(e) => setForm((current) => ({ ...current, productName: e.target.value }))}
                       required
-                      value={form.contactName}
-                      onChange={(e) => setForm((current) => ({ ...current, contactName: e.target.value }))}
                     />
                   </div>
                   <div>
-                    <Label className="text-xs text-muted-foreground">Phone</Label>
+                    <Label className="text-xs text-slate-500">Quantity</Label>
                     <Input
-                      className="mt-1"
-                      required
-                      value={form.contactPhone}
-                      onChange={(e) => setForm((current) => ({ ...current, contactPhone: e.target.value }))}
+                      className="mt-1 h-11"
+                      type="number"
+                      min={1}
+                      inputMode="numeric"
+                      value={form.quantity}
+                      onChange={(e) => setForm((current) => ({ ...current, quantity: e.target.value }))}
                     />
                   </div>
                   <div>
-                    <Label className="text-xs text-muted-foreground">Email (optional)</Label>
-                    <Input
-                      className="mt-1"
-                      type="email"
-                      value={form.contactEmail}
-                      onChange={(e) => setForm((current) => ({ ...current, contactEmail: e.target.value }))}
+                    <Label className="text-xs text-slate-500">Notes</Label>
+                    <Textarea
+                      className="mt-1 min-h-24"
+                      value={form.message}
+                      onChange={(e) => setForm((current) => ({ ...current, message: e.target.value }))}
                     />
                   </div>
                 </div>
-
-                <div className="flex items-center gap-2">
-                  <div className="erp-icon-well flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold">
-                    2
+              ) : (
+                <div className="space-y-3">
+                  <div>
+                    <Label className="text-xs text-slate-500">
+                      {type === "breakdown" ? "What happened?" : "What do you need?"}
+                    </Label>
+                    <Textarea
+                      className="mt-1 min-h-28"
+                      required
+                      value={form.message}
+                      onChange={(e) => setForm((current) => ({ ...current, message: e.target.value }))}
+                    />
                   </div>
-                  <h3 className="text-sm font-semibold">{selectedAction.title}</h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-xs text-slate-500">Preferred date</Label>
+                      <Input
+                        className="mt-1 h-11"
+                        type="date"
+                        value={form.preferredDate}
+                        onChange={(e) => setForm((current) => ({ ...current, preferredDate: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-slate-500">Urgency</Label>
+                      <select
+                        className="mt-1 h-11 w-full rounded-md border bg-background px-3 text-sm"
+                        value={form.urgency}
+                        onChange={(e) => setForm((current) => ({ ...current, urgency: e.target.value }))}
+                      >
+                        <option value="low">Low</option>
+                        <option value="normal">Normal</option>
+                        <option value="high">High</option>
+                        <option value="critical">Critical</option>
+                      </select>
+                    </div>
+                  </div>
                 </div>
-                <div className="grid gap-3 rounded-xl border bg-muted/20 p-3 sm:p-4">
-                  {type === "product_order" ? (
-                    <>
-                      <div>
-                        <Label className="text-xs text-muted-foreground">Product</Label>
-                        {catalog.length > 0 ? (
-                          <select
-                            className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
-                            value={form.productName}
-                            onChange={(e) => setForm((current) => ({ ...current, productName: e.target.value }))}
-                          >
-                            <option value="">Select or type below</option>
-                            {catalog.map((item: any) => (
-                              <option key={item.name} value={item.name}>
-                                {item.name}
-                              </option>
-                            ))}
-                          </select>
-                        ) : null}
-                        <Input
-                          className="mt-2"
-                          placeholder="Product name"
-                          value={form.productName}
-                          onChange={(e) => setForm((current) => ({ ...current, productName: e.target.value }))}
-                          required
-                        />
-                      </div>
-                      <div className="max-w-[160px]">
-                        <Label className="text-xs text-muted-foreground">Quantity</Label>
-                        <Input
-                          className="mt-1"
-                          type="number"
-                          min={1}
-                          value={form.quantity}
-                          onChange={(e) => setForm((current) => ({ ...current, quantity: e.target.value }))}
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-xs text-muted-foreground">Notes</Label>
-                        <Textarea
-                          className="mt-1"
-                          value={form.message}
-                          onChange={(e) => setForm((current) => ({ ...current, message: e.target.value }))}
-                        />
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div>
-                        <Label className="text-xs text-muted-foreground">
-                          {type === "breakdown" ? "What happened?" : "What do you need?"}
-                        </Label>
-                        <Textarea
-                          className="mt-1"
-                          required
-                          value={form.message}
-                          onChange={(e) => setForm((current) => ({ ...current, message: e.target.value }))}
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <Label className="text-xs text-muted-foreground">Preferred date</Label>
-                          <Input
-                            className="mt-1"
-                            type="date"
-                            value={form.preferredDate}
-                            onChange={(e) => setForm((current) => ({ ...current, preferredDate: e.target.value }))}
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-xs text-muted-foreground">Urgency</Label>
-                          <select
-                            className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
-                            value={form.urgency}
-                            onChange={(e) => setForm((current) => ({ ...current, urgency: e.target.value }))}
-                          >
-                            <option value="low">Low</option>
-                            <option value="normal">Normal</option>
-                            <option value="high">High</option>
-                            <option value="critical">Critical</option>
-                          </select>
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
+              )}
 
-                {error ? <p className="text-sm text-rose-600">{error}</p> : null}
-                <Button type="submit" className="w-full sm:w-auto" disabled={submitting}>
-                  {submitting ? "Sending…" : "Send request"}
-                </Button>
-              </form>
-        ) : (
-          <>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">What do you need?</p>
-            <div className="mt-2 overflow-hidden rounded-md border">
-              {ACTIONS.map((action) => {
-                const Icon = action.icon
-                return (
-                  <button
-                    key={action.id}
-                    type="button"
-                    onClick={() => setType(action.id)}
-                    className="flex w-full items-start gap-3 border-b bg-white px-3 py-3 text-left last:border-b-0 hover:bg-slate-50"
-                  >
-                    <span className="erp-icon-well mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md">
-                      <Icon className="h-4 w-4" />
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block text-sm font-medium">{action.title}</span>
-                      <span className="text-xs text-slate-500">{action.hint}</span>
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-            <p className="mt-3 text-sm text-slate-500">Choose one. No login is required.</p>
-          </>
-        )}
-        </section>
+              {error ? <p className="text-sm text-rose-600">{error}</p> : null}
+              <Button type="submit" className="h-11 w-full" disabled={submitting}>
+                {submitting ? "Sending…" : "Send request"}
+              </Button>
+            </form>
+          </section>
+        ) : null}
 
-        <footer className="border-t px-5 py-4 text-xs text-slate-500 sm:px-8">
-          {branding.name ? `${branding.name} · ` : ""}Technical service
+        <p className="px-1 text-center text-[11px] text-slate-400">
+          {branding.name || "Technical service"}
           {branding.phone ? ` · ${branding.phone}` : ""}
-        </footer>
-      </article>
+        </p>
+      </div>
     </div>
   )
 }

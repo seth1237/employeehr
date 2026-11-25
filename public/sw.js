@@ -1,10 +1,17 @@
-const CACHE = "field-app-v2"
+const CACHE = "field-app-v3"
 
 self.addEventListener("install", (event) => {
   self.skipWaiting()
   event.waitUntil(
     caches.open(CACHE).then((cache) =>
-      cache.addAll(["/pwa-icon-192.png", "/pwa-icon-512.png", "/pwa-icon-maskable-512.png"]).catch(() => undefined),
+      cache
+        .addAll([
+          "/pwa-icon-192.png",
+          "/pwa-icon-512.png",
+          "/pwa-icon-maskable-512.png",
+          "/apple-touch-icon.png",
+        ])
+        .catch(() => undefined),
     ),
   )
 })

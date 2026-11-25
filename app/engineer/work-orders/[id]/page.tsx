@@ -23,6 +23,7 @@ import {
   withinEditWindow,
 } from "@/components/engineer/engineer-ui"
 import { cn } from "@/lib/utils"
+import { compressJobCardPhoto } from "@/lib/compress-photo"
 
 const ATTENDANT_ROLES = [
   "Attendant",
@@ -44,67 +45,6 @@ function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
-
-function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number) {
-  return new Promise<Blob | null>((resolve) => {
-    canvas.toBlob((blob) => resolve(blob), type, quality)
-  })
-}
-
-async function loadImageBitmap(file: File) {
-  try {
-    return await createImageBitmap(file, { imageOrientation: "from-image" } as ImageBitmapOptions)
-  } catch {
-    try {
-      return await createImageBitmap(file)
-    } catch {
-      const url = URL.createObjectURL(file)
-      try {
-        const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-          const img = new Image()
-          img.onload = () => resolve(img)
-          img.onerror = () => reject(new Error("Could not read photo"))
-          img.src = url
-        })
-        const canvas = document.createElement("canvas")
-        canvas.width = image.naturalWidth || image.width
-        canvas.height = image.naturalHeight || image.height
-        const ctx = canvas.getContext("2d")
-        if (!ctx) throw new Error("Could not read photo")
-        ctx.drawImage(image, 0, 0)
-        return createImageBitmap(canvas)
-      } finally {
-        URL.revokeObjectURL(url)
-      }
-    }
-  }
-}
-
-async function fileToLightWebp(file: File) {
-  if (file.type === "image/webp" && file.size <= 350 * 1024) return file
-  const bitmap = await loadImageBitmap(file)
-  const maxEdge = 1280
-  const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height))
-  const width = Math.max(1, Math.round(bitmap.width * scale))
-  const height = Math.max(1, Math.round(bitmap.height * scale))
-  const canvas = document.createElement("canvas")
-  canvas.width = width
-  canvas.height = height
-  const ctx = canvas.getContext("2d")
-  if (!ctx) throw new Error("Could not compress image")
-  ctx.fillStyle = "#ffffff"
-  ctx.fillRect(0, 0, width, height)
-  ctx.drawImage(bitmap, 0, 0, width, height)
-  bitmap.close?.()
-  const webp = await canvasToBlob(canvas, "image/webp", 0.62)
-  const jpeg = (!webp || webp.size === 0) ? await canvasToBlob(canvas, "image/jpeg", 0.7) : null
-  const blob = webp && webp.size > 0 ? webp : jpeg
-  if (!blob) throw new Error("Could not convert photo")
-  if (blob.size >= file.size && file.size <= 4.5 * 1024 * 1024) return file
-  const extension = blob.type === "image/webp" ? "webp" : "jpg"
-  const base = file.name.replace(/\.[^.]+$/, "") || "job-card"
-  return new File([blob], `${base}.${extension}`, { type: blob.type || `image/${extension}` })
 }
 
 function JobCompleteReward({ collapsing }: { collapsing: boolean }) {
@@ -327,6 +267,7 @@ export default function WorkOrderDetailPage() {
   const [jobCardFile, setJobCardFile] = useState<File | null>(null)
   const [jobCardPreview, setJobCardPreview] = useState("")
   const [jobCardBytes, setJobCardBytes] = useState<number | null>(null)
+  const [jobCardOriginalBytes, setJobCardOriginalBytes] = useState<number | null>(null)
   const [compressing, setCompressing] = useState(false)
   const [celebrate, setCelebrate] = useState<"in" | "out" | null>(null)
   const [machineOkay, setMachineOkay] = useState<"" | "yes" | "no">("")
@@ -386,16 +327,19 @@ export default function WorkOrderDetailPage() {
     if (!file) {
       setJobCardFile(null)
       setJobCardBytes(null)
+      setJobCardOriginalBytes(null)
       return
     }
     setCompressing(true)
+    setJobCardOriginalBytes(file.size)
     try {
-      const light = await fileToLightWebp(file)
+      const light = await compressJobCardPhoto(file)
       setJobCardFile(light)
       setJobCardBytes(light.size)
     } catch (error: any) {
       setJobCardFile(null)
       setJobCardBytes(null)
+      setJobCardOriginalBytes(null)
       toast({
         title: "Could not compress photo",
         description: error?.message || "Try another photo of the job card.",
@@ -513,8 +457,8 @@ export default function WorkOrderDetailPage() {
             ...costPayload(),
           }
       let photo = jobCardFile
-      if (photo && photo.type !== "image/webp") {
-        photo = await fileToLightWebp(photo)
+      if (photo && photo.size > 200 * 1024) {
+        photo = await compressJobCardPhoto(photo)
       }
       const res = await engineeringApi.completeWorkOrder(id, payload, photo)
       setRow(res.data)
@@ -780,7 +724,7 @@ export default function WorkOrderDetailPage() {
             <div>
               <Label>Job card</Label>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                Photo is converted to a light WebP as you upload. Starting a job does not need a job card.
+                High-resolution phone photos are compressed on the device before upload. Starting a job does not need a job card.
               </p>
               {canEdit ? (
                 <Input
@@ -793,9 +737,14 @@ export default function WorkOrderDetailPage() {
                 />
               ) : null}
               {compressing ? (
-                <p className="mt-2 text-xs text-slate-600">Compressing job card…</p>
+                <p className="mt-2 text-xs text-slate-600">Compressing high-resolution photo…</p>
               ) : jobCardBytes != null ? (
-                <p className="mt-2 text-xs text-slate-600">Ready to upload · {formatBytes(jobCardBytes)}</p>
+                <p className="mt-2 text-xs text-slate-600">
+                  Ready to upload · {formatBytes(jobCardBytes)}
+                  {jobCardOriginalBytes && jobCardOriginalBytes > jobCardBytes
+                    ? ` (from ${formatBytes(jobCardOriginalBytes)})`
+                    : ""}
+                </p>
               ) : null}
               {previewSrc ? (
                 <img

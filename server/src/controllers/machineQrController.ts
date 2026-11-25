@@ -21,29 +21,7 @@ const URGENCY = ["low", "normal", "high", "critical"] as const;
 
 const DEPLOYED_QR_ORIGIN = "https://elevatehub.co.ke";
 
-function publicOrigin(req: Request) {
-  const forwarded = String(req.headers["x-forwarded-host"] || "").split(",")[0].trim();
-  const host = forwarded || String(req.headers.host || "").trim();
-  const proto =
-    String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim() ||
-    (String(req.protocol || "https").includes("https") ? "https" : "http");
-  if (!host) return "";
-  return `${proto}://${host}`;
-}
-
-function isLocalHost(host: string) {
-  const value = String(host || "").toLowerCase();
-  return value === "localhost" || value === "127.0.0.1";
-}
-
-function resolveQrPublicOrigin(requested: string, req: Request) {
-  const raw = String(requested || "").trim() || publicOrigin(req);
-  try {
-    const url = new URL(raw);
-    if (isLocalHost(url.hostname)) return raw.replace(/\/$/, "");
-  } catch {
-    // fall through to deployed origin
-  }
+function resolveQrPublicOrigin(_requested?: string, _req?: Request) {
   return DEPLOYED_QR_ORIGIN;
 }
 

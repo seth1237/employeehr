@@ -1,0 +1,31 @@
+﻿Machine Name,Machine Category,Client,Contact person,phone number,In charge of machine (name),Role,No,LOCATION,Machine S/No,Installation Date,Last Service Date,Next Service
+Chemistry Analyzer,Laboratory,Acme Medical Centre,Dr Jane Wanjiku,0712345678,Peter Otieno,Lab Technician,0722001122,Nairobi,SN-CHEM-001,08/06/2023,07/05/2026,07/11/2026
+Hematology Analyzer,Laboratory,Acme Medical Centre,Dr Jane Wanjiku,0712345678,Mary Achieng,Lab Technician,0733112233,Nairobi,SN-HEM-002,15/11/2024,13/05/2026,13/11/2026
+Centrifuge,Laboratory,Acme Medical Centre,Dr Jane Wanjiku,0712345678,Peter Otieno,Lab Technician,0722001122,Nairobi,SN-CEN-003,22/04/2022,19/05/2026,19/11/2026
+Ultrasound Machine,Imaging,Kisii County Hospital,John Momanyi,0744556677,Evans Ongeri,Radiographer,0766778899,Kisii,SN-US-004,01/09/2023,25/05/2026,25/11/2026
+Microscope,Laboratory,Kisii County Hospital,John Momanyi,0744556677,Lilian Moraa,Lab Technician,0777889900,Kisii,SN-MIC-005,08/02/2024,31/05/2026,30/11/2026
+Urine Analyzer,Laboratory,Kisii County Hospital,John Momanyi,0744556677,Lilian Moraa,Lab Technician,0777889900,Kisii,SN-URI-006,15/07/2022,06/06/2026,06/12/2026
+Chemiluminescence Analyzer,Laboratory,Mombasa Coast Diagnostics,Dr Hassan Mwinyi,0701234567,Fatuma Said,Lab Manager,0702345678,Mombasa,SN-CLIA-007,22/12/2023,12/06/2026,12/12/2026
+Ultrasound Machine,Imaging,Mombasa Coast Diagnostics,Dr Hassan Mwinyi,0701234567,Amina Salim,Sonographer,0704567890,Mombasa,SN-US-008,01/05/2024,18/06/2026,18/12/2026
+Electrolyte Analyzer,Laboratory,Mombasa Coast Diagnostics,Dr Hassan Mwinyi,0701234567,Fatuma Said,Lab Manager,0702345678,Mombasa,SN-ELE-009,08/10/2022,24/06/2026,24/12/2026
+Blood Gas Analyzer,Laboratory,Kisumu Lakeview Hospital,Dr Beatrice Adhiambo,0715678901,Collins Odhiambo,Lab Technician,0716789012,Kisumu,SN-BGA-010,15/03/2023,11/05/2025,11/11/2025
+Ultrasound Machine,Imaging,Kisumu Lakeview Hospital,Dr Beatrice Adhiambo,0715678901,Rose Akinyi,Radiographer,0717890123,Kisumu,SN-US-011,22/08/2024,06/07/2026,06/01/2027
+Chemistry Analyzer,Laboratory,Kisumu Lakeview Hospital,Dr Beatrice Adhiambo,0715678901,Collins Odhiambo,Lab Technician,0716789012,Kisumu,SN-CHEM-012,01/01/2022,12/07/2026,12/01/2027
+Hematology Analyzer,Laboratory,Nakuru Referral Laboratory,Dr Paul Kimani,0721234098,Esther Wambui,Lab Manager,0722345109,Nakuru,SN-HEM-013,08/06/2023,18/07/2026,18/01/2027
+Coagulation Analyzer,Laboratory,Nakuru Referral Laboratory,Dr Paul Kimani,0721234098,Daniel Mwangi,Lab Technician,0723456210,Nakuru,SN-COAG-014,15/11/2024,24/07/2026,24/01/2027
+Immunofluorescence Analyzer,Laboratory,Nakuru Referral Laboratory,Dr Paul Kimani,0721234098,Faith Njeri,Lab Technician,0724567321,Nakuru,SN-IFA-015,22/04/2022,30/07/2026,30/01/2027
+Ultrasound Machine,Imaging,Eldoret Women's Clinic,Dr Susan Chebet,0731098765,Naomi Jepkorir,Sonographer,0732109876,Eldoret,SN-US-016,01/09/2023,05/08/2026,05/02/2027
+Hemoglobin Meter,Point of Care,Eldoret Women's Clinic,Dr Susan Chebet,0731098765,Kevin Kiprono,Lab Technician,0733210987,Eldoret,SN-HB-017,08/02/2024,11/08/2026,11/02/2027
+Urine Analyzer,Laboratory,Eldoret Women's Clinic,Dr Susan Chebet,0731098765,Kevin Kiprono,Lab Technician,0733210987,Eldoret,SN-URI-018,15/07/2022,17/08/2026,17/02/2027
+Chemistry Analyzer,Laboratory,Thika Level 5 Hospital,Dr Moses Gitau,0741122334,Alice Wanjiru,Lab Manager,0742233445,Thika,SN-CHEM-019,22/12/2023,23/08/2026,23/02/2027
+Ultrasound Machine,Imaging,Thika Level 5 Hospital,Dr Moses Gitau,0741122334,Joyce Muthoni,Radiographer,0744455667,Thika,SN-US-020,01/05/2024,21/05/2025,21/11/2025
+Centrifuge,Laboratory,Thika Level 5 Hospital,Dr Moses Gitau,0741122334,Alice Wanjiru,Lab Manager,0742233445,Thika,SN-CEN-021,08/10/2022,04/09/2026,04/03/2027
+Hematology Analyzer,Laboratory,Nyeri Highlands Medical,Dr Catherine Waweru,0751357924,Stephen Maina,Lab Technician,0752468135,Nyeri,SN-HEM-022,15/03/2023,10/09/2026,10/03/2027
+Microscope,Laboratory,Nyeri Highlands Medical,Dr Catherine Waweru,0751357924,Purity Nyambura,Lab Technician,0753579246,Nyeri,SN-MIC-023,22/08/2024,16/09/2026,16/03/2027
+Blood Glucose Meter,Point of Care,Nyeri Highlands Medical,Dr Catherine Waweru,0751357924,George Kamau,Biomedical Engineer,0754680357,Nyeri,SN-GLU-024,01/01/2022,22/09/2026,22/03/2027
+Hemoglobin Meter,Point of Care,Meru Community Health Centre,Mr Kenneth Mutua,0761472583,Lucy Kinya,Facility Manager,0762583694,Meru,SN-HB-025,08/06/2023,28/09/2026,28/03/2027
+Ultrasound Machine,Imaging,Meru Community Health Centre,Mr Kenneth Mutua,0761472583,Carol Gakii,Sonographer,0764705816,Meru,SN-US-026,15/11/2024,04/10/2026,04/04/2027
+Blood Glucose Meter,Point of Care,Meru Community Health Centre,Mr Kenneth Mutua,0761472583,Carol Gakii,Sonographer,0764705816,Meru,SN-GLU-027,22/04/2022,10/10/2026,10/04/2027
+Chemiluminescence Analyzer,Laboratory,Machakos Specialty Laboratory,Dr Rachel Mumo,0771593572,James Musyoka,Lab Manager,0772604683,Machakos,SN-CLIA-028,01/09/2023,16/10/2026,16/04/2027
+Coagulation Analyzer,Laboratory,Machakos Specialty Laboratory,Dr Rachel Mumo,0771593572,Winnie Mutheu,Lab Technician,0773715794,Machakos,SN-COAG-029,08/02/2024,22/10/2026,22/04/2027
+Centrifuge,Laboratory,Machakos Specialty Laboratory,Dr Rachel Mumo,0771593572,Tom Kioko,Lab Technician,0774826805,Machakos,SN-CEN-030,15/07/2022,03/05/2025,03/11/2025

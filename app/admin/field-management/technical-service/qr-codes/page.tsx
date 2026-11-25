@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { ChevronDown, Copy, Mail, Printer, QrCode, RefreshCw, Search, X } from "lucide-react"
+import { ChevronDown, Copy, Download, Mail, QrCode, RefreshCw, Search, X } from "lucide-react"
 import {
   DesktopTableShell,
   MobileCard,
@@ -17,7 +17,7 @@ import {
   TechnicalServiceHeader,
   TechnicalServicePage,
 } from "@/components/admin/technical-service-ui"
-import { printMachineQr, qrImageUrl } from "@/lib/machine-qr"
+import { downloadMachineQr, qrImageUrl } from "@/lib/machine-qr"
 
 type QrMachine = {
   _id: string
@@ -157,6 +157,7 @@ function TechnicalServiceQrCodesPage() {
   const [mailCc, setMailCc] = useState<string[]>([])
   const [savingMail, setSavingMail] = useState(false)
   const [mailOpen, setMailOpen] = useState(false)
+  const [downloading, setDownloading] = useState("")
 
   const loadCodes = (query = q) => {
     setLoading(true)
@@ -199,7 +200,7 @@ function TechnicalServiceQrCodesPage() {
 
   const showPreview = (machine: QrMachine) => {
     setPreview(machine)
-    setMessage("QR code ready. Print this label and attach it to the machine.")
+    setMessage("QR code ready. Download the image and attach it to the machine.")
   }
 
   const saveNotifyEmails = async () => {
@@ -221,6 +222,17 @@ function TechnicalServiceQrCodesPage() {
     if (!url) return
     await navigator.clipboard.writeText(url)
     setMessage("Public link copied.")
+  }
+
+  const saveQr = async (machine: QrMachine) => {
+    setDownloading(machine._id || machine.publicUrl || "qr")
+    try {
+      await downloadMachineQr(machine)
+    } catch (error: any) {
+      window.alert(error?.message || "Could not download this QR code.")
+    } finally {
+      setDownloading("")
+    }
   }
 
   const generateExisting = async (machineId: string) => {
@@ -373,7 +385,7 @@ function TechnicalServiceQrCodesPage() {
       {preview?.publicUrl ? (
         <Card>
           <CardHeader className="px-4 py-3">
-            <CardTitle className="text-base">Print this QR</CardTitle>
+            <CardTitle className="text-base">Download this QR</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-4 px-4 pb-4 sm:flex-row sm:items-center">
             <img
@@ -389,9 +401,13 @@ function TechnicalServiceQrCodesPage() {
               </p>
               <p className="break-all text-xs text-muted-foreground">{preview.publicUrl}</p>
               <div className="flex flex-wrap gap-2">
-                <Button size="sm" onClick={() => printMachineQr(preview)}>
-                  <Printer className="mr-1.5 h-4 w-4" />
-                  Print label
+                <Button
+                  size="sm"
+                  onClick={() => void saveQr(preview)}
+                  disabled={Boolean(downloading)}
+                >
+                  <Download className="mr-1.5 h-4 w-4" />
+                  {downloading ? "Downloading…" : "Download"}
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => copyUrl(preview.publicUrl)}>
                   <Copy className="mr-1.5 h-4 w-4" />
@@ -654,8 +670,14 @@ function TechnicalServiceQrCodesPage() {
                                 <QrCode className="mr-1 h-3.5 w-3.5" />
                                 View
                               </Button>
-                              <Button size="sm" variant="outline" onClick={() => printMachineQr(machine)}>
-                                Print
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => void saveQr(machine)}
+                                disabled={downloading === machine._id}
+                              >
+                                <Download className="mr-1 h-3.5 w-3.5" />
+                                Download
                               </Button>
                             </div>
                           ) : (
@@ -684,9 +706,20 @@ function TechnicalServiceQrCodesPage() {
                   </p>
                   <div className="mt-2">
                     {machine.qrToken ? (
-                      <Button size="sm" variant="outline" onClick={() => showPreview(machine)}>
-                        View QR
-                      </Button>
+                      <div className="flex flex-wrap gap-2">
+                        <Button size="sm" variant="outline" onClick={() => showPreview(machine)}>
+                          View QR
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void saveQr(machine)}
+                          disabled={downloading === machine._id}
+                        >
+                          <Download className="mr-1 h-3.5 w-3.5" />
+                          Download
+                        </Button>
+                      </div>
                     ) : (
                       <Button size="sm" onClick={() => generateExisting(machine._id)}>
                         Generate QR

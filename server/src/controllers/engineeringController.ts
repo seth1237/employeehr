@@ -153,11 +153,25 @@ async function saveJobCardPhotoWebp(file?: Express.Multer.File) {
   const filename = `jobcard-${Date.now()}-${Math.round(Math.random() * 1e9)}.webp`;
   const uploadDir = path.join(process.cwd(), "uploads/job-cards");
   await fs.mkdir(uploadDir, { recursive: true });
-  await sharp(file.buffer)
+  const hardMax = 200 * 1024;
+  let output = await sharp(file.buffer)
     .rotate()
-    .resize({ width: 1600, height: 1600, fit: "inside", withoutEnlargement: true })
-    .webp({ quality: 70 })
-    .toFile(path.join(uploadDir, filename));
+    .resize({ width: 1100, height: 1100, fit: "inside", withoutEnlargement: true })
+    .webp({ quality: 50, effort: 5 })
+    .toBuffer();
+  if (output.length > hardMax) {
+    output = await sharp(file.buffer)
+      .rotate()
+      .resize({ width: 800, height: 800, fit: "inside", withoutEnlargement: true })
+      .webp({ quality: 38, effort: 5 })
+      .toBuffer();
+  }
+  if (output.length > hardMax) {
+    output = await sharp(output)
+      .webp({ quality: 28, effort: 6 })
+      .toBuffer();
+  }
+  await fs.writeFile(path.join(uploadDir, filename), output);
   return `/uploads/job-cards/${filename}`;
 }
 

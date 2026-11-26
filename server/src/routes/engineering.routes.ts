@@ -58,6 +58,10 @@ router.get(
   roleMiddleware("company_admin", "super_admin", "hr", "manager"),
   EngineeringController.exportReport,
 );
+router.get("/activities", EngineeringController.listLoggedActivities);
+router.post("/activities", EngineeringController.createLoggedActivity);
+router.delete("/activities/:id", EngineeringController.deleteLoggedActivity);
+
 router.get("/expenses", EngineeringController.myExpenseClaims);
 router.get("/tools", EngineeringController.listToolRequests);
 router.post("/tools", EngineeringController.createToolRequest);

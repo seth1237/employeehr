@@ -2040,6 +2040,23 @@ export const engineeringApi = {
     client.post<any>(`/api/engineering/requests/${id}/convert-to-wo`, data || {}),
   getAssetHistory: (id: string) =>
     client.get<any>(`/api/engineering/assets/${id}/history`),
+  getLoggedActivities: (params?: { from?: string; to?: string; engineerId?: string }) => {
+    const search = new URLSearchParams()
+    if (params?.from) search.set("from", params.from)
+    if (params?.to) search.set("to", params.to)
+    if (params?.engineerId) search.set("engineerId", params.engineerId)
+    const query = search.toString()
+    return client.get<any[]>(`/api/engineering/activities${query ? `?${query}` : ""}`)
+  },
+  createLoggedActivity: (data: {
+    type: string
+    date?: string
+    notes?: string
+    hours?: number
+    title?: string
+  }) => client.post<any>("/api/engineering/activities", data),
+  deleteLoggedActivity: (id: string) =>
+    client.delete<any>(`/api/engineering/activities/${id}`),
   getMyActivity: (params?: { from?: string; to?: string; engineerId?: string }) => {
     const search = new URLSearchParams()
     if (params?.from) search.set("from", params.from)

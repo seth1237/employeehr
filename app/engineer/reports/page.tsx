@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { ClipboardList, Download, MapPin, Wrench } from "lucide-react"
+import { ClipboardList, Download, ListTodo, Wrench } from "lucide-react"
 import { engineeringApi } from "@/lib/api"
 import { PageLoadingSkeleton } from "@/components/admin/ui/page-states"
 import { EngineerHeader, EngineerKpi, EngineerPage, EngineerStatusBadge, formatWhen } from "@/components/engineer/engineer-ui"
@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useToast } from "@/hooks/use-toast"
 import { downloadEngineerActivityPdf, loadReportBranding } from "@/lib/engineer-reports-pdf"
-import { cleanActivityLabel } from "@/lib/engineer-activity"
+import { cleanActivityLabel, LOGGED_ACTIVITY_TYPES } from "@/lib/engineer-activity"
 import { getUser } from "@/lib/auth"
 import { isTechnicalServiceLead } from "@/lib/engineer-roles"
 
@@ -66,7 +66,18 @@ export default function EngineerReportsPage() {
   }, [from, to, engineerId, lead])
 
   const activities = payload?.activities || []
-  const stats = payload?.stats || { assigned: 0, completed: 0, open: 0, facilities: 0 }
+  const loggedTypes = new Set(LOGGED_ACTIVITY_TYPES.map((item) => item.id))
+  const isLogged = (row: any) =>
+    String(row.kind || "") === "logged" || loggedTypes.has(String(row.type || ""))
+  const fieldWork = activities.filter((row: any) => !isLogged(row))
+  const otherWork = activities.filter((row: any) => isLogged(row))
+  const fieldCompleted = fieldWork.filter(
+    (row: any) => String(row.status || "").toLowerCase() === "completed",
+  ).length
+  const fieldOpen = fieldWork.filter((row: any) => {
+    const status = String(row.status || "").toLowerCase()
+    return status && !["completed", "cancelled", "closed", "resolved", "dismissed"].includes(status)
+  }).length
   const engineerName = payload?.engineer?.name || "Engineer"
 
   const download = async () => {
@@ -98,8 +109,8 @@ export default function EngineerReportsPage() {
         title="Reports"
         description={
           lead
-            ? "Download activity for every engineer, or just one person: facility, machine, and the visit report."
-            : "Download your assigned work for the month: facility, machine, and the visit report."
+            ? "Download the month’s field jobs and other activities for every engineer, or just one person."
+            : "Download your month: field jobs plus office, CME, SME, and other activities."
         }
         actions={
           <Button onClick={() => void download()} disabled={downloading} className="h-10">
@@ -143,20 +154,23 @@ export default function EngineerReportsPage() {
       </div>
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <EngineerKpi label="Assigned" value={stats.assigned} icon={ClipboardList} />
-        <EngineerKpi label="Completed" value={stats.completed} icon={ClipboardList} />
-        <EngineerKpi label="Open" value={stats.open} icon={Wrench} />
-        <EngineerKpi label="Facilities" value={stats.facilities} icon={MapPin} />
+        <EngineerKpi label="Field jobs" value={fieldWork.length} icon={ClipboardList} />
+        <EngineerKpi label="Completed" value={fieldCompleted} icon={ClipboardList} />
+        <EngineerKpi label="Open" value={fieldOpen} icon={Wrench} />
+        <EngineerKpi label="Other activities" value={otherWork.length} icon={ListTodo} />
       </div>
 
-      <div className="overflow-hidden rounded-xl border bg-white">
-        {activities.length === 0 ? (
+      <section className="overflow-hidden rounded-xl border bg-white">
+        <div className="border-b px-4 py-3">
+          <h2 className="text-sm font-semibold text-slate-900">Field jobs</h2>
+        </div>
+        {fieldWork.length === 0 ? (
           <p className="px-4 py-10 text-center text-sm text-muted-foreground">
-            No assigned activity in {monthLabel(month)}.
+            No field jobs in {monthLabel(month)}.
           </p>
         ) : (
           <ul className="divide-y">
-            {activities.map((row: any) => (
+            {fieldWork.map((row: any) => (
               <li key={row.id} className="px-4 py-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -185,7 +199,41 @@ export default function EngineerReportsPage() {
             ))}
           </ul>
         )}
-      </div>
+      </section>
+
+      <section className="overflow-hidden rounded-xl border bg-white">
+        <div className="border-b px-4 py-3">
+          <h2 className="text-sm font-semibold text-slate-900">Other activities</h2>
+          <p className="mt-0.5 text-xs text-slate-500">Office days, CME, SME sessions, in-office repair, and other work.</p>
+        </div>
+        {otherWork.length === 0 ? (
+          <p className="px-4 py-10 text-center text-sm text-muted-foreground">
+            No other activities logged in {monthLabel(month)}.
+          </p>
+        ) : (
+          <ul className="divide-y">
+            {otherWork.map((row: any) => (
+              <li key={row.id} className="px-4 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-slate-900">
+                      {cleanActivityLabel(row)}
+                    </p>
+                    {row.engineerName ? (
+                      <p className="mt-0.5 truncate text-xs text-slate-500">{row.engineerName}</p>
+                    ) : null}
+                    {row.notes ? <p className="mt-1 line-clamp-2 text-xs text-slate-600">{row.notes}</p> : null}
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <EngineerStatusBadge status={row.status} />
+                    <p className="mt-1 text-[11px] text-slate-500">{formatWhen(row.date)}</p>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </EngineerPage>
   )
 }

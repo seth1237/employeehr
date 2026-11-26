@@ -18,6 +18,7 @@ const navigation = [
   { name: "Requests", href: "/engineer/requests" },
   { name: "Machines", href: "/engineer/machines" },
   { name: "Reports", href: "/engineer/reports" },
+  { name: "Activities", href: "/engineer/activities" },
   { name: "Team", href: "/engineer/team", leadOnly: true },
   { name: "Calendar", href: "/engineer/calendar" },
   { name: "Leave", href: "/engineer/leave" },

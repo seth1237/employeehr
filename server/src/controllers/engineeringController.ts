@@ -11,6 +11,10 @@ import { CalibrationRecord } from "../models/CalibrationRecord";
 import { VendorContract } from "../models/VendorContract";
 import { StockExpenseClaim } from "../models/StockExpenseClaim";
 import { ToolRequest } from "../models/ToolRequest";
+import {
+  ENGINEER_LOGGED_ACTIVITY_TYPES,
+  EngineerLoggedActivity,
+} from "../models/EngineerLoggedActivity";
 import { StockClient } from "../models/StockClient";
 import { User } from "../models/User";
 import { LeaveRequest } from "../models/LeaveRequest";
@@ -28,6 +32,16 @@ function startOfDay(value = new Date()) {
   const date = new Date(value);
   date.setHours(0, 0, 0, 0);
   return date;
+}
+
+function parseDateInput(value: unknown) {
+  const text = String(value || "").trim();
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(text);
+  if (match) {
+    return startOfDay(new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  }
+  const date = new Date(text);
+  return Number.isNaN(date.getTime()) ? null : startOfDay(date);
 }
 
 function endOfDay(value = new Date()) {
@@ -276,23 +290,35 @@ function isInstallationWorkOrder(row?: { type?: string | null; serviceType?: str
   return row?.type === "installation" || /install/i.test(String(row?.serviceType || ""));
 }
 
+function loggedActivityLabel(row?: { type?: string | null; title?: string | null }) {
+  const type = String(row?.type || "").toLowerCase();
+  if (type === "cme") return "CME";
+  if (type === "sme_session") return "SME session";
+  if (type === "in_office") return "In office";
+  if (type === "in_office_repair") return "In-office repair";
+  return String(row?.title || "").trim() || "Other";
+}
+
 function cleanActivityLabel(row?: {
-  type?: string | null
-  serviceType?: string | null
-  kind?: string | null
-  title?: string | null
+  type?: string | null;
+  serviceType?: string | null;
+  kind?: string | null;
+  title?: string | null;
 }) {
-  const type = String(row?.type || "").toLowerCase()
-  const kind = String(row?.kind || "").toLowerCase()
-  const title = String(row?.serviceType || row?.title || "").toLowerCase()
-  const blob = `${type} ${kind} ${title}`
-  if (kind === "request" || type === "request") return "Fault report"
-  if (type === "installation" || /install/.test(blob)) return "Machine installation"
-  if (type === "corrective" || /repair|breakdown|fault|corrective/.test(blob)) {
-    return "Machine repair"
+  const type = String(row?.type || "").toLowerCase();
+  const kind = String(row?.kind || "").toLowerCase();
+  const title = String(row?.serviceType || row?.title || "").toLowerCase();
+  const blob = `${type} ${kind} ${title}`;
+  if (kind === "logged" || ENGINEER_LOGGED_ACTIVITY_TYPES.includes(type as any)) {
+    return loggedActivityLabel(row);
   }
-  if (type === "calibration" || /calibrat/.test(blob)) return "Calibration"
-  return "Machine service"
+  if (kind === "request" || type === "request") return "Fault report";
+  if (type === "installation" || /install/.test(blob)) return "Machine installation";
+  if (type === "corrective" || /repair|breakdown|fault|corrective/.test(blob)) {
+    return "Machine repair";
+  }
+  if (type === "calibration" || /calibrat/.test(blob)) return "Calibration";
+  return "Machine service";
 }
 
 function normalizeCostLines(value: unknown) {
@@ -1237,12 +1263,15 @@ export class EngineeringController {
 
       const requestedEngineer = String(req.query.engineerId || "").trim();
       const lead = isTechnicalServiceLead(req.user?.role);
-      const [orders, tickets, me, team] = await Promise.all([
+      const [orders, tickets, me, team, loggedRows] = await Promise.all([
         MachineService.find({ org_id }).sort({ updatedAt: -1 }).limit(1500).lean(),
         Ticket.find({ org_id }).sort({ updatedAt: -1 }).limit(800).lean(),
         User.findById(userId).select("firstName lastName email").lean(),
         User.find({ org_id, role: technicalServiceRoleQuery })
           .select("firstName lastName email role")
+          .lean(),
+        EngineerLoggedActivity.find({ org_id, date: { $gte: from, $lte: to } })
+          .sort({ date: -1 })
           .lean(),
       ]);
 
@@ -1360,6 +1389,35 @@ export class EngineeringController {
             location: machine?.client?.location || machine?.installationLocation || "",
           };
         }),
+        ...loggedRows
+          .filter((row: any) => {
+            const engineerId = String(row.engineerId || "");
+            if (!subjectIds) return nameById.has(engineerId) || Boolean(engineerId);
+            return subjectIds.has(engineerId);
+          })
+          .map((row: any) => ({
+            id: String(row._id),
+            kind: "logged",
+            date: row.date,
+            woNumber: "",
+            job: loggedActivityLabel(row),
+            type: row.type || "other",
+            status: "completed",
+            notes: [
+              Number(row.hours || 0) > 0 ? `${row.hours} hr${Number(row.hours) === 1 ? "" : "s"}` : "",
+              row.notes || "",
+            ]
+              .filter(Boolean)
+              .join(" · "),
+            machineOkay: null,
+            failureCode: "",
+            causeCode: "",
+            engineerName: nameById.get(String(row.engineerId || "")) || row.engineerName || subjectName,
+            machine: "",
+            serialNumber: "",
+            facility: "",
+            location: "",
+          })),
       ].sort(
         (a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime(),
       );
@@ -1753,10 +1811,13 @@ export class EngineeringController {
         const value = new Date(date);
         return value >= from && value <= to;
       };
-      const [orders, expenses, engineers] = await Promise.all([
+      const [orders, expenses, engineers, loggedRows] = await Promise.all([
         MachineService.find({ org_id }).sort({ updatedAt: -1 }).limit(1500).lean(),
         StockExpenseClaim.find({ org_id, source: "engineer" }).sort({ createdAt: -1 }).limit(500).lean(),
         User.find({ org_id, role: technicalServiceRoleQuery }).select("firstName lastName email").lean(),
+        EngineerLoggedActivity.find({ org_id, date: { $gte: from, $lte: to } })
+          .sort({ date: -1 })
+          .lean(),
       ]);
       const nameById = new Map(
         engineers.map((user: any) => [String(user._id), displayName(user) || user.email]),
@@ -1797,6 +1858,16 @@ export class EngineeringController {
             date: row.submittedAt || row.createdAt,
             woId: row.woId || "",
           })),
+          otherActivities: loggedRows
+            .filter((row: any) => !engineerId || String(row.engineerId) === engineerId)
+            .map((row: any) => ({
+              date: row.date,
+              type: row.type,
+              job: loggedActivityLabel(row),
+              engineer: nameById.get(String(row.engineerId || "")) || row.engineerName || "",
+              notes: row.notes || "",
+              hours: Number(row.hours || 0),
+            })),
         },
       });
     } catch (error: any) {
@@ -1915,6 +1986,108 @@ export class EngineeringController {
       return res.status(200).json({ success: true, data: updated });
     } catch (error: any) {
       return res.status(500).json({ success: false, message: error.message || "Failed to update request" });
+    }
+  }
+
+  static async listLoggedActivities(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id;
+      const userId = String(req.user?.userId || "");
+      if (!org_id || !userId) {
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+      }
+      const lead = isTechnicalServiceLead(req.user?.role);
+      const requestedEngineer = String(req.query.engineerId || "").trim();
+      const query: Record<string, any> = { org_id };
+      if (lead && (requestedEngineer === "all" || requestedEngineer === "*")) {
+        // team-wide
+      } else if (lead && requestedEngineer) {
+        query.engineerId = requestedEngineer;
+      } else {
+        query.engineerId = userId;
+      }
+      const from = req.query.from ? startOfDay(new Date(String(req.query.from))) : null;
+      const to = req.query.to ? endOfDay(new Date(String(req.query.to))) : null;
+      if (from && !Number.isNaN(from.getTime())) {
+        query.date = { ...(query.date || {}), $gte: from };
+      }
+      if (to && !Number.isNaN(to.getTime())) {
+        query.date = { ...(query.date || {}), $lte: to };
+      }
+      const data = await EngineerLoggedActivity.find(query).sort({ date: -1, createdAt: -1 }).limit(400).lean();
+      return res.status(200).json({ success: true, data });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to list activities",
+      });
+    }
+  }
+
+  static async createLoggedActivity(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id;
+      const userId = String(req.user?.userId || "");
+      if (!org_id || !userId) {
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+      }
+      const body = req.body || {};
+      const type = String(body.type || "").trim();
+      if (!ENGINEER_LOGGED_ACTIVITY_TYPES.includes(type as any)) {
+        return res.status(400).json({ success: false, message: "Choose a valid activity type" });
+      }
+      const title = String(body.title || "").trim();
+      if (type === "other" && !title) {
+        return res.status(400).json({ success: false, message: "Describe the other activity" });
+      }
+      const date = body.date ? parseDateInput(body.date) : startOfDay();
+      if (!date) {
+        return res.status(400).json({ success: false, message: "Enter a valid date" });
+      }
+      const hoursRaw = body.hours === "" || body.hours == null ? undefined : Number(body.hours);
+      const hours =
+        hoursRaw == null || Number.isNaN(hoursRaw) ? undefined : Math.min(24, Math.max(0, hoursRaw));
+      const me = await User.findById(userId).select("firstName lastName first_name last_name email").lean();
+      const data = await EngineerLoggedActivity.create({
+        org_id,
+        engineerId: userId,
+        engineerName: displayName(me as any) || "Engineer",
+        type,
+        title: type === "other" ? title : "",
+        notes: String(body.notes || "").trim(),
+        hours,
+        date,
+      });
+      return res.status(201).json({ success: true, data });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to save activity",
+      });
+    }
+  }
+
+  static async deleteLoggedActivity(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id;
+      const userId = String(req.user?.userId || "");
+      if (!org_id || !userId) {
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+      }
+      const id = String(req.params.id || "").trim();
+      const lead = isTechnicalServiceLead(req.user?.role);
+      const query: Record<string, any> = { _id: id, org_id };
+      if (!lead) query.engineerId = userId;
+      const deleted = await EngineerLoggedActivity.findOneAndDelete(query).lean();
+      if (!deleted) {
+        return res.status(404).json({ success: false, message: "Activity not found" });
+      }
+      return res.status(200).json({ success: true, data: deleted });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to delete activity",
+      });
     }
   }
 }

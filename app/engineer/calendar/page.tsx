@@ -8,6 +8,7 @@ import { PageLoadingSkeleton } from "@/components/admin/ui/page-states"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { EngineerHeader, EngineerPage, EngineerStatusBadge, ResponseTrack } from "@/components/engineer/engineer-ui"
+import { loggedActivityLabel } from "@/lib/engineer-activity"
 import { cn } from "@/lib/utils"
 
 const WEEKDAYS_SHORT = ["S", "M", "T", "W", "T", "F", "S"]
@@ -70,6 +71,7 @@ export default function EngineerCalendarPage() {
   const [selectedDay, setSelectedDay] = useState(new Date().getDate())
   const [loading, setLoading] = useState(true)
   const [rows, setRows] = useState<any[]>([])
+  const [activityRows, setActivityRows] = useState<any[]>([])
   const [leaveRows, setLeaveRows] = useState<LeaveRow[]>([])
 
   const from = startOfMonth(cursor)
@@ -84,13 +86,21 @@ export default function EngineerCalendarPage() {
 
   useEffect(() => {
     setLoading(true)
-    engineeringApi
-      .getWorkOrders({
+    Promise.all([
+      engineeringApi.getWorkOrders({
         filter: "mine",
         from: from.toISOString(),
         to: to.toISOString(),
+      }),
+      engineeringApi.getLoggedActivities({
+        from: from.toISOString(),
+        to: to.toISOString(),
+      }),
+    ])
+      .then(([jobRes, activityRes]) => {
+        setRows(jobRes.data || [])
+        setActivityRows(activityRes.data || [])
       })
-      .then((res) => setRows(res.data || []))
       .finally(() => setLoading(false))
   }, [monthKey(cursor)])
 
@@ -104,6 +114,16 @@ export default function EngineerCalendarPage() {
     }
     return map
   }, [rows])
+
+  const activitiesByDay = useMemo(() => {
+    const map = new Map<string, any[]>()
+    for (const row of activityRows) {
+      const key = toDayKey(row.date)
+      if (!key) continue
+      map.set(key, [...(map.get(key) || []), row])
+    }
+    return map
+  }, [activityRows])
 
   const leaveByDay = useMemo(() => {
     const map = new Map<string, LeaveRow[]>()
@@ -128,6 +148,7 @@ export default function EngineerCalendarPage() {
 
   const selectedKey = dayKey(cursor.getFullYear(), cursor.getMonth(), selectedDay)
   const selectedJobs = byDay.get(selectedKey) || []
+  const selectedActivities = activitiesByDay.get(selectedKey) || []
   const selectedLeave = leaveByDay.get(selectedKey) || []
   const selectedDate = new Date(cursor.getFullYear(), cursor.getMonth(), selectedDay)
   const selectedIsToday = isSameDay(selectedDate, today)
@@ -149,7 +170,7 @@ export default function EngineerCalendarPage() {
 
   return (
     <EngineerPage>
-      <EngineerHeader title="Calendar" description="Jobs this month, with approved leave days highlighted." />
+      <EngineerHeader title="Calendar" description="Jobs, office days, CME, and approved leave for the month." />
 
       <Card className="overflow-hidden">
         <div className="flex items-center gap-2 border-b px-3 py-2.5 sm:px-4">
@@ -188,8 +209,10 @@ export default function EngineerCalendarPage() {
               if (!day) return <div key={`empty-${index}`} className="h-14 sm:min-h-24" />
               const key = dayKey(cursor.getFullYear(), cursor.getMonth(), day)
               const jobs = byDay.get(key) || []
+              const dayActivities = activitiesByDay.get(key) || []
               const leave = leaveByDay.get(key) || []
               const hasLeave = leave.length > 0
+              const hasActivity = dayActivities.length > 0
               const isToday = isSameDay(new Date(cursor.getFullYear(), cursor.getMonth(), day), today)
               const isSelected = day === selectedDay
               return (
@@ -221,7 +244,7 @@ export default function EngineerCalendarPage() {
                     {day}
                   </span>
                   <span className="mt-0.5 flex h-3.5 items-center justify-center gap-0.5 sm:hidden">
-                    {jobs.length === 0 && !hasLeave ? (
+                    {jobs.length === 0 && !hasLeave && !hasActivity ? (
                       <span className="h-1.5 w-1.5 rounded-full bg-transparent" />
                     ) : null}
                     {jobs.length === 1 ? (
@@ -231,6 +254,7 @@ export default function EngineerCalendarPage() {
                         {jobs.length}
                       </span>
                     ) : null}
+                    {hasActivity ? <span className="h-1.5 w-1.5 rounded-full bg-teal-600" /> : null}
                     {hasLeave ? <span className="h-1.5 w-1.5 rounded-full bg-amber-500" /> : null}
                   </span>
                   <div className="mt-1 hidden space-y-1 sm:block">
@@ -239,7 +263,15 @@ export default function EngineerCalendarPage() {
                         Leave
                       </span>
                     ) : null}
-                    {jobs.slice(0, hasLeave ? 2 : 3).map((job) => (
+                    {dayActivities.slice(0, 1).map((row) => (
+                      <span
+                        key={row._id}
+                        className="block truncate rounded bg-teal-50 px-1 py-0.5 text-[11px] font-medium text-teal-800"
+                      >
+                        {loggedActivityLabel(row)}
+                      </span>
+                    ))}
+                    {jobs.slice(0, hasLeave || hasActivity ? 1 : 3).map((job) => (
                       <Link
                         key={job._id}
                         href={`/engineer/work-orders/${job._id}`}
@@ -248,11 +280,6 @@ export default function EngineerCalendarPage() {
                         {job.serviceType || job.woNumber}
                       </Link>
                     ))}
-                    {jobs.length > (hasLeave ? 2 : 3) ? (
-                      <p className="text-[10px] text-muted-foreground">
-                        +{jobs.length - (hasLeave ? 2 : 3)} more
-                      </p>
-                    ) : null}
                   </div>
                 </button>
               )
@@ -262,6 +289,10 @@ export default function EngineerCalendarPage() {
             <span className="inline-flex items-center gap-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
               Jobs
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-teal-600" />
+              Activities
             </span>
             <span className="inline-flex items-center gap-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
@@ -283,6 +314,7 @@ export default function EngineerCalendarPage() {
           </div>
           <p className="text-xs font-medium text-slate-600">
             {selectedJobs.length} job{selectedJobs.length === 1 ? "" : "s"}
+            {selectedActivities.length > 0 ? ` · ${selectedActivities.length} activit${selectedActivities.length === 1 ? "y" : "ies"}` : ""}
             {selectedLeave.length > 0 ? " · leave" : ""}
           </p>
         </div>
@@ -297,12 +329,31 @@ export default function EngineerCalendarPage() {
             ))}
           </div>
         ) : null}
+        {selectedActivities.length > 0 ? (
+          <div className="mb-2 rounded-2xl border border-teal-200 bg-teal-50 px-3 py-2.5">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-teal-800">Activities</p>
+            {selectedActivities.map((row) => (
+              <p key={row._id} className="mt-0.5 text-sm text-teal-950">
+                {loggedActivityLabel(row)}
+                {row.notes ? ` · ${row.notes}` : ""}
+              </p>
+            ))}
+          </div>
+        ) : null}
         {selectedJobs.length === 0 ? (
           <div className="rounded-2xl border bg-white px-4 py-10 text-center">
             <p className="text-sm font-medium text-slate-800">
-              {selectedLeave.length > 0 ? "On approved leave" : "Nothing scheduled"}
+              {selectedLeave.length > 0
+                ? "On approved leave"
+                : selectedActivities.length > 0
+                  ? "Logged activity"
+                  : "Nothing scheduled"}
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">Tap another day or open work orders to plan a visit.</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {selectedActivities.length > 0
+                ? "Add more from Activities, or open work orders to plan a visit."
+                : "Tap another day or open work orders to plan a visit."}
+            </p>
           </div>
         ) : (
           <ul className="space-y-2">

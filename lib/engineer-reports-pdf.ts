@@ -36,6 +36,7 @@ export type EngineerActivityRow = {
   woNumber?: string
   job: string
   type?: string
+  kind?: string
   status?: string
   notes?: string
   machineOkay?: boolean | null
@@ -44,6 +45,16 @@ export type EngineerActivityRow = {
   facility?: string
   location?: string
   engineerName?: string
+}
+
+function isLoggedActivityRow(row: EngineerActivityRow) {
+  const kind = String(row.kind || "").toLowerCase()
+  const type = String(row.type || "").toLowerCase()
+  return (
+    kind === "logged" ||
+    kind === "other_activity" ||
+    ["cme", "sme_session", "in_office", "in_office_repair", "other"].includes(type)
+  )
 }
 
 type Column = { id: string; header: string; width: number }
@@ -133,6 +144,7 @@ function prettyActivityType(kind?: string) {
   if (value === "breakdown" || value === "repair") return "REPAIR"
   if (value === "calibration") return "CALIBRATION"
   if (value === "ticket" || value === "request") return "FAULT REPORT"
+  if (value === "logged" || value === "other_activity") return "ACTIVITY"
   return "SERVICE"
 }
 
@@ -346,6 +358,20 @@ function drawDataRows(
   setColor(doc, DEFAULT_TEXT, "text")
   const count = recordCount ?? rows.length
   doc.text(`${count} record${count === 1 ? "" : "s"}`, MARGIN + 3, y + 6)
+  return y + 14
+}
+
+function drawSectionTitle(doc: jsPDF, y: number, label: string, branding: ReportBranding) {
+  if (y + 16 > PAGE_BOTTOM) {
+    doc.addPage()
+    y = MARGIN + 8
+  }
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(11)
+  setColor(doc, brandHex(branding.primaryColor), "text")
+  doc.text(label, MARGIN, y + 6)
+  setColor(doc, DEFAULT_TEXT, "text")
+  return y + 10
 }
 
 export async function downloadMachineHistoryPdf(params: {
@@ -431,23 +457,24 @@ export async function downloadEngineerActivityPdf(params: {
   const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "landscape" })
   const title = "Engineer Activity"
   const period = `${params.engineerName}  ·  ${params.periodLabel}`
-  const completed = params.activities.filter((row) => String(row.status || "").toLowerCase() === "completed").length
-  const open = params.activities.filter((row) => {
+  const fieldWork = params.activities.filter((row) => !isLoggedActivityRow(row))
+  const otherWork = params.activities.filter((row) => isLoggedActivityRow(row))
+  const completed = fieldWork.filter((row) => String(row.status || "").toLowerCase() === "completed").length
+  const open = fieldWork.filter((row) => {
     const status = String(row.status || "").toLowerCase()
     return status && status !== "completed" && status !== "cancelled"
   }).length
-  const facilities = Array.from(new Set(params.activities.map((row) => row.facility).filter(Boolean)))
   const meta = [
     { label: "Engineer", value: params.engineerName },
-    { label: "Assigned", value: String(params.activities.length) },
+    { label: "Field jobs", value: String(fieldWork.length) },
     { label: "Completed / open", value: `${completed} / ${open}` },
-    { label: "Facilities", value: String(facilities.length) },
+    { label: "Other activities", value: String(otherWork.length) },
   ]
   let y = drawHeader(doc, title, period, branding)
   y = drawMetaStrip(doc, y, meta, branding)
 
   const showEngineer = params.activities.some((row) => row.engineerName)
-  const columns: Column[] = showEngineer
+  const fieldColumns: Column[] = showEngineer
     ? [
         { id: "date", header: "Date", width: 24 },
         { id: "engineer", header: "Engineer", width: 32 },
@@ -465,7 +492,7 @@ export async function downloadEngineerActivityPdf(params: {
         { id: "status", header: "Status", width: 24 },
         { id: "report", header: "Report", width: 91 },
       ]
-  const rows = params.activities.map((row) => {
+  const toFieldRow = (row: EngineerActivityRow) => {
     const machine = [row.machine, row.serialNumber ? `SN ${row.serialNumber}` : ""].filter(Boolean).join(" · ")
     const facility = [row.facility, row.location].filter(Boolean).join(" · ")
     const reportBits = [
@@ -482,18 +509,54 @@ export async function downloadEngineerActivityPdf(params: {
       status: prettyStatus(row.status),
       report: reportBits.join(" · ") || "—",
     }
-  })
-  if (!rows.length) {
-    rows.push({
+  }
+  const fieldRows = fieldWork.map(toFieldRow)
+  if (!fieldRows.length) {
+    fieldRows.push({
       date: "—",
-      job: "No assigned activity in this period",
+      engineer: "—",
+      job: "No field jobs in this period",
       machine: "—",
       facility: "—",
       status: "—",
       report: "—",
     })
   }
-  drawDataRows(doc, y, columns, rows, branding, title, period, meta, params.activities.length)
+  y = drawSectionTitle(doc, y, "Field jobs", branding)
+  y = drawDataRows(doc, y, fieldColumns, fieldRows, branding, title, period, meta, fieldWork.length)
+
+  const otherColumns: Column[] = showEngineer
+    ? [
+        { id: "date", header: "Date", width: 28 },
+        { id: "engineer", header: "Engineer", width: 40 },
+        { id: "job", header: "Activity", width: 48 },
+        { id: "status", header: "Status", width: 28 },
+        { id: "report", header: "Notes", width: 129 },
+      ]
+    : [
+        { id: "date", header: "Date", width: 32 },
+        { id: "job", header: "Activity", width: 52 },
+        { id: "status", header: "Status", width: 32 },
+        { id: "report", header: "Notes", width: 157 },
+      ]
+  const otherRows = otherWork.map((row) => ({
+    date: formatDate(row.date),
+    engineer: row.engineerName || "—",
+    job: cleanActivityLabel(row),
+    status: prettyStatus(row.status),
+    report: row.notes || "—",
+  }))
+  if (!otherRows.length) {
+    otherRows.push({
+      date: "—",
+      engineer: "—",
+      job: "No office, CME, or other activities in this period",
+      status: "—",
+      report: "—",
+    })
+  }
+  y = drawSectionTitle(doc, y, "Other activities", branding)
+  drawDataRows(doc, y, otherColumns, otherRows, branding, title, period, meta, otherWork.length)
   applyFooters(doc, branding)
   doc.save(`${fileSafe(`engineer-activity-${params.engineerName}-${params.periodLabel}`)}.pdf`)
 }

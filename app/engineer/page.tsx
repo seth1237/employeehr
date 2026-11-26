@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation"
 import { engineeringApi } from "@/lib/api"
 import { getUser } from "@/lib/auth"
 import { PageLoadingSkeleton } from "@/components/admin/ui/page-states"
-import { AlertTriangle, CheckCircle2, ChevronRight, ClipboardList, BarChart3, Inbox, Palmtree, CircleDollarSign, Hammer, Wrench, Banknote, Users } from "lucide-react"
+import { AlertTriangle, CheckCircle2, ChevronRight, ClipboardList, BarChart3, Inbox, Palmtree, CircleDollarSign, Wrench, Banknote, Users, ListTodo } from "lucide-react"
 import { isTechnicalServiceLead } from "@/lib/engineer-roles"
 import { EngineerHeader, EngineerKpi, EngineerPage } from "@/components/engineer/engineer-ui"
 import { useEngineerBranding } from "@/components/engineer/branding"
@@ -56,11 +56,11 @@ export default function EngineerDashboard() {
   const lead = isTechnicalServiceLead(user?.role)
   const extras = [
     { label: "Reports", href: "/engineer/reports", icon: BarChart3 },
+    { label: "Activities", href: "/engineer/activities", icon: ListTodo },
     ...(lead ? [{ label: "Team", href: "/engineer/team", icon: Users }] : []),
     { label: "Leave", href: "/engineer/leave", icon: Palmtree },
     { label: "Payroll", href: "/engineer/payroll", icon: Banknote },
     { label: "Expenses", href: "/engineer/expenses", icon: CircleDollarSign },
-    { label: "Tools of work", href: "/engineer/tools", icon: Hammer },
   ]
 
   const overdue = (data?.overdueOrders || []).slice(0, 4)

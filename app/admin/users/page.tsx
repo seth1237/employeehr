@@ -279,6 +279,8 @@ export default function AdminUsersPage() {
               ? 'dispatch'
               : newUser.role === 'technical_service_engineer'
                 ? 'technical_service_engineer'
+                : newUser.role === 'technical_service_lead'
+                  ? 'technical_service_lead'
                 : newUser.role === 'pos_cashier'
                   ? 'pos_cashier'
                   : newUser.isManager || newUser.role === 'manager'
@@ -581,6 +583,7 @@ export default function AdminUsersPage() {
                   <SelectItem value="employee">Employee</SelectItem>
                   <SelectItem value="sales_rep">Sales Representative</SelectItem>
                   <SelectItem value="technical_service_engineer">Service Engineer</SelectItem>
+                  <SelectItem value="technical_service_lead">Technical Service Lead</SelectItem>
                   <SelectItem value="dispatch">Dispatch</SelectItem>
                   <SelectItem value="pos_cashier">Cashier (POS)</SelectItem>
                   <SelectItem value="manager">Manager</SelectItem>
@@ -695,6 +698,13 @@ export default function AdminUsersPage() {
                           </Button>
                           <Button
                             type="button"
+                            variant={newUser.role === 'technical_service_lead' ? 'default' : 'outline'}
+                            onClick={() => setNewUser({ ...newUser, role: 'technical_service_lead', isManager: false })}
+                          >
+                            Technical Service Lead
+                          </Button>
+                          <Button
+                            type="button"
                             variant={newUser.role === 'manager' ? 'default' : 'outline'}
                             onClick={() => setNewUser({ ...newUser, role: 'manager', isManager: true })}
                           >
@@ -723,13 +733,13 @@ export default function AdminUsersPage() {
                           </Button>
                         </div>
                         <p className="text-xs text-muted-foreground">
-                          Cashiers open straight on the till. Sales reps, engineers, and dispatch use their own portals.
+                          Cashiers open straight on the till. Sales reps, engineers, the technical service lead, and dispatch use their own portals.
                         </p>
                       </div>
                       <div className="flex items-center gap-2 mt-2">
                         <Checkbox
                           checked={newUser.isManager}
-                          disabled={['admin', 'sales_rep', 'technical_service_engineer', 'dispatch', 'pos_cashier'].includes(newUser.role)}
+                          disabled={['admin', 'sales_rep', 'technical_service_engineer', 'technical_service_lead', 'dispatch', 'pos_cashier'].includes(newUser.role)}
                           onCheckedChange={(v: any) =>
                             setNewUser({
                               ...newUser,
@@ -742,6 +752,8 @@ export default function AdminUsersPage() {
                                     ? 'sales_rep'
                                     : newUser.role === 'technical_service_engineer'
                                       ? 'technical_service_engineer'
+                                    : newUser.role === 'technical_service_lead'
+                                      ? 'technical_service_lead'
                                   : newUser.role === 'dispatch'
                                     ? 'dispatch'
                                     : newUser.role === 'pos_cashier'
@@ -788,10 +800,12 @@ export default function AdminUsersPage() {
                             user.role === 'admin' ? 'destructive' :
                             user.role === 'manager' ? 'default' :
                             user.role === 'dispatch' ? 'outline' :
-                            user.role === 'sales_rep' || user.role === 'technical_service_engineer' ? 'outline' : 'secondary'
+                            user.role === 'sales_rep' || user.role === 'technical_service_engineer' || user.role === 'technical_service_lead' ? 'outline' : 'secondary'
                           }>
                             {user.role === 'sales_rep'
                               ? 'Sales Representative'
+                              : user.role === 'technical_service_lead'
+                                ? 'Technical Service Lead'
                               : user.role === 'technical_service_engineer'
                                 ? 'Service Engineer'
                                 : user.role === 'dispatch'
@@ -871,6 +885,10 @@ export default function AdminUsersPage() {
                           <DropdownMenuItem onClick={() => handleUpdateRole(user._id, 'technical_service_engineer')}>
                             <FileText className="h-4 w-4 mr-2" />
                             Assign as Service Engineer
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleUpdateRole(user._id, 'technical_service_lead')}>
+                            <ShieldCheck className="h-4 w-4 mr-2" />
+                            Assign as Technical Service Lead
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleUpdateRole(user._id, 'dispatch')}>
                             <Package className="h-4 w-4 mr-2" />

@@ -16,7 +16,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { useToast } from "@/hooks/use-toast"
-import { AlertTriangle, ArrowLeft, Clock, MapPin, Phone, Search, Ticket, UserRound, Users, Wrench } from "lucide-react"
+import { AlertTriangle, ArrowLeft, Clock, Download, MapPin, Phone, Search, Ticket, UserRound, Users, Wrench } from "lucide-react"
+import { downloadMachineHistoryPdf, loadReportBranding } from "@/lib/engineer-reports-pdf"
 
 type Machine = {
   _id: string
@@ -204,14 +205,67 @@ function EngineerMachinesInner() {
   const [ticketMachine, setTicketMachine] = useState<Machine | null>(null)
   const [ticketNotes, setTicketNotes] = useState("")
   const [ticketSaving, setTicketSaving] = useState(false)
+  const [downloadingId, setDownloadingId] = useState("")
+  const [page, setPage] = useState(1)
+  const [hasMore, setHasMore] = useState(false)
+  const [totalMachines, setTotalMachines] = useState(0)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [searchInput, setSearchInput] = useState("")
+
+  const PAGE_SIZE = 10
+
+  const mergeMachines = (current: Machine[], incoming: Machine[]) => {
+    const map = new Map(current.map((row) => [row._id, row]))
+    for (const row of incoming) map.set(row._id, row)
+    return Array.from(map.values())
+  }
+
+  const fetchMachines = async (nextPage: number, query: string, append: boolean) => {
+    const res = await stockApi.getInstalledMachines(nextPage, PAGE_SIZE, {
+      q: query || undefined,
+      compact: true,
+      machineId: nextPage === 1 ? machineIdFromUrl || undefined : undefined,
+    })
+    const rows = (res.data || []) as Machine[]
+    const meta = (res as any).meta || {}
+    setMachines((prev) => (append ? mergeMachines(prev, rows) : rows))
+    setPage(nextPage)
+    setHasMore(Boolean(meta.hasMore))
+    setTotalMachines(Number(meta.total || rows.length))
+  }
 
   useEffect(() => {
-    stockApi
-      .getInstalledMachines()
-      .then((res) => setMachines(res.data || []))
-      .catch((error) => console.error(error))
-      .finally(() => setLoading(false))
-  }, [])
+    const query = searchInput.trim()
+    const delay = query ? 280 : 0
+    let cancelled = false
+    const handle = window.setTimeout(() => {
+      setSearch(query)
+      setLoading(true)
+      fetchMachines(1, query, false)
+        .catch((error) => {
+          if (!cancelled) console.error(error)
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false)
+        })
+    }, delay)
+    return () => {
+      cancelled = true
+      window.clearTimeout(handle)
+    }
+  }, [searchInput, machineIdFromUrl])
+
+  const loadMore = async () => {
+    if (loadingMore || !hasMore) return
+    setLoadingMore(true)
+    try {
+      await fetchMachines(page + 1, search, true)
+    } catch (error) {
+      console.error(error)
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   const clients = useMemo(() => {
     const map = new Map<string, ClientRow>()
@@ -234,27 +288,7 @@ function EngineerMachinesInner() {
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name))
   }, [machines])
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    if (!q) return clients
-    return clients.filter((client) => {
-      const haystack = [
-        client.name,
-        client.number,
-        client.location,
-        client.contactPerson,
-        ...client.machines.flatMap((machine) => [
-          machine.productName,
-          machine.serialNumber,
-          machine.attendant,
-        ]),
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-      return haystack.includes(q)
-    })
-  }, [clients, search])
+  const filtered = clients
 
   useEffect(() => {
     if (!machineIdFromUrl || clients.length === 0) return
@@ -304,6 +338,54 @@ function EngineerMachinesInner() {
     setTicketNotes("")
   }
 
+  const downloadHistory = async (machine: Machine, events?: TimelineEvent[]) => {
+    setDownloadingId(machine._id)
+    try {
+      let timeline = events
+      if (!timeline) {
+        const res = await engineeringApi.getAssetHistory(machine._id)
+        timeline = buildTimeline(machine, res.data || res)
+      }
+      const facility =
+        selected?.name ||
+        machine.client?.name ||
+        ""
+      const location =
+        machine.installationLocation ||
+        selected?.location ||
+        machine.client?.location ||
+        ""
+      const branding = await loadReportBranding()
+      await downloadMachineHistoryPdf({
+        machineName: machine.productName,
+        serialNumber: machine.serialNumber,
+        status: machine.status,
+        facility,
+        location,
+        attendant: personInCharge(machine)?.name,
+        installedBy: machine.installedBy,
+        installationDate: machine.installationDate,
+        events: (timeline || []).map((event) => ({
+          kind: kindLabel(event.kind),
+          title: event.title,
+          status: event.status,
+          when: event.when,
+          person: event.person,
+          detail: event.detail,
+        })),
+        branding,
+      })
+    } catch (error: any) {
+      toast({
+        title: "Could not download history",
+        description: error?.message || "Try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setDownloadingId("")
+    }
+  }
+
   const submitTicket = async () => {
     if (!ticketMachine) return
     const description = ticketNotes.trim()
@@ -341,20 +423,20 @@ function EngineerMachinesInner() {
     }
   }
 
-  if (loading) return <PageLoadingSkeleton title="Machines" />
+  if (loading && machines.length === 0) return <PageLoadingSkeleton title="Machines" />
 
   return (
     <EngineerPage>
       <EngineerHeader
         title="Machines"
-        description="Search a client, open machine history, or raise a ticket if a machine is not okay."
+        description="Search a client, open machine history, download a report, or raise a ticket if a machine is not okay."
       />
 
       <div className="relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
         <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
           placeholder="Search client, location, phone, or machine"
           className="h-11 bg-white pl-9"
           aria-label="Search machines"
@@ -403,6 +485,23 @@ function EngineerMachinesInner() {
             ))}
           </ul>
         )}
+      </div>
+      <div className="flex items-center justify-between gap-3 px-1 text-xs text-muted-foreground">
+        <span>
+          {machines.length}
+          {totalMachines ? ` of ${totalMachines}` : ""} machines
+        </span>
+        {hasMore ? (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8"
+            onClick={() => void loadMore()}
+            disabled={loadingMore || loading}
+          >
+            {loadingMore ? "Loading…" : "Load more"}
+          </Button>
+        ) : null}
       </div>
 
       <Dialog open={!!selected} onOpenChange={closeClient}>
@@ -509,15 +608,26 @@ function EngineerMachinesInner() {
                 </p>
               </div>
 
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8"
-                onClick={() => openTicket(historyMachine)}
-              >
-                <Ticket className="mr-1.5 h-3.5 w-3.5" />
-                Raise ticket · not okay
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  className="h-8"
+                  onClick={() => void downloadHistory(historyMachine, historyEvents)}
+                  disabled={historyLoading || downloadingId === historyMachine._id}
+                >
+                  <Download className="mr-1.5 h-3.5 w-3.5" />
+                  {downloadingId === historyMachine._id ? "Preparing…" : "Download history"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8"
+                  onClick={() => openTicket(historyMachine)}
+                >
+                  <Ticket className="mr-1.5 h-3.5 w-3.5" />
+                  Raise ticket · not okay
+                </Button>
+              </div>
 
               <div>
                 <p className="flex items-center gap-1.5 text-sm font-medium">
@@ -625,6 +735,15 @@ function EngineerMachinesInner() {
                         >
                           <Wrench className="mr-1.5 h-3.5 w-3.5" />
                           Machine history
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="h-8"
+                          onClick={() => void downloadHistory(machine)}
+                          disabled={downloadingId === machine._id}
+                        >
+                          <Download className="mr-1.5 h-3.5 w-3.5" />
+                          {downloadingId === machine._id ? "Preparing…" : "Download history"}
                         </Button>
                         <Button
                           size="sm"

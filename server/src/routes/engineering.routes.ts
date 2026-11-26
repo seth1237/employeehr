@@ -29,10 +29,14 @@ router.post(
   EngineeringController.completeWorkOrder,
 );
 
+router.get("/engineers", EngineeringController.listEngineers);
+router.get("/team", EngineeringController.teamOverview);
 router.get("/requests", EngineeringController.listRequests);
+router.post("/requests/:id/assign", EngineeringController.assignRequest);
 router.post("/requests/:id/convert-to-wo", EngineeringController.convertRequestToWorkOrder);
 
 router.get("/assets/:id/history", EngineeringController.assetHistory);
+router.get("/my-activity", EngineeringController.myActivity);
 
 router.get("/maintenance-plans", EngineeringController.listPlans);
 router.post("/maintenance-plans", EngineeringController.createPlan);

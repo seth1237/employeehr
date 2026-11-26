@@ -19,6 +19,8 @@ import {
 import { cn } from "@/lib/utils"
 import { DesktopTableShell, MobileCardList, MobileCard } from "@/components/admin/ui/mobile-list"
 import { ChevronRight, Plus } from "lucide-react"
+import { getUser } from "@/lib/auth"
+import { isTechnicalServiceLead } from "@/lib/engineer-roles"
 import {
   EngineerHeader,
   EngineerPage,
@@ -51,11 +53,12 @@ export default function WorkOrdersPage() {
 
 function WorkOrdersInner() {
   const searchParams = useSearchParams()
+  const lead = isTechnicalServiceLead(getUser()?.role)
   const [loading, setLoading] = useState(true)
   const [rows, setRows] = useState<any[]>([])
   const highlightId = searchParams.get("highlight") || ""
   const [editNotice, setEditNotice] = useState(searchParams.get("editWindow") === "1")
-  const [filter, setFilter] = useState(searchParams.get("filter") || "mine")
+  const [filter, setFilter] = useState(searchParams.get("filter") || (lead ? "all" : "mine"))
   const [status, setStatus] = useState(searchParams.get("status") || "")
   const [assetId, setAssetId] = useState(searchParams.get("assetId") || "")
   const [q, setQ] = useState("")
@@ -93,8 +96,12 @@ function WorkOrdersInner() {
   }, [filter, status, assetId])
 
   useEffect(() => {
-    stockApi.getInstalledMachines().then((res) => setAssets(res.data || [])).catch(() => setAssets([]))
-  }, [])
+    if (!createOpen) return
+    stockApi
+      .getInstalledMachines(1, 30, { compact: true })
+      .then((res) => setAssets(res.data || []))
+      .catch(() => setAssets([]))
+  }, [createOpen])
 
   const visible = useMemo(() => {
     const needle = q.trim().toLowerCase()
@@ -126,6 +133,9 @@ function WorkOrdersInner() {
 
   const shown = visible.slice(0, visibleCount)
   const hasMore = visible.length > shown.length
+  const visibleFilters = lead
+    ? FILTERS
+    : FILTERS.filter((item) => item.id === "mine" || item.id === "installations")
 
   useEffect(() => {
     setVisibleCount(PAGE_SIZE)
@@ -175,14 +185,16 @@ function WorkOrdersInner() {
         title="Work orders"
         description="Pending and in-progress jobs first. Open a completed job to view and download its job card."
         actions={
-          <Button
-            size="sm"
-            className="h-8 px-3 text-xs sm:text-sm"
-            onClick={() => setCreateOpen(true)}
-          >
-            <Plus className="mr-1 h-3.5 w-3.5" />
-            New work order
-          </Button>
+          lead ? (
+            <Button
+              size="sm"
+              className="h-8 px-3 text-xs sm:text-sm"
+              onClick={() => setCreateOpen(true)}
+            >
+              <Plus className="mr-1 h-3.5 w-3.5" />
+              New work order
+            </Button>
+          ) : undefined
         }
       />
 
@@ -196,7 +208,7 @@ function WorkOrdersInner() {
       ) : null}
 
       <div className="hidden flex-wrap gap-2 md:flex">
-        {FILTERS.map((item) => (
+        {visibleFilters.map((item) => (
           <Button
             key={item.id}
             size="sm"
@@ -223,7 +235,7 @@ function WorkOrdersInner() {
 
       <div className="space-y-3 md:hidden">
         <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {FILTERS.map((item) => (
+          {visibleFilters.map((item) => (
             <Button
               key={item.id}
               size="sm"

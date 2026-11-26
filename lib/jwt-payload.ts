@@ -21,5 +21,5 @@ export function jwtSecondsRemaining(token: string, fallbackSeconds: number): num
 }
 
 export function isFieldAuthRole(role?: unknown) {
-  return role === "sales_rep" || role === "technical_service_engineer"
+  return role === "sales_rep" || role === "technical_service_engineer" || role === "technical_service_lead"
 }

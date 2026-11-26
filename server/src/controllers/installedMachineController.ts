@@ -157,6 +157,9 @@ export class InstalledMachineController {
         100,
         Math.max(1, Number.isFinite(requestedLimit) ? requestedLimit : 20),
       );
+      const search = String(req.query.q || "").trim();
+      const compact = String(req.query.compact || "") === "1";
+      const pinId = String(req.query.machineId || "").trim();
 
       // Exclude machines whose invoice has an issued/applied credit note.
       const creditNotes = await CreditNote.find({
@@ -178,27 +181,59 @@ export class InstalledMachineController {
         org_id,
         isActive: true,
       };
+      const andFilters: Record<string, any>[] = [];
       // Keep manually-added machines (no invoiceId) while excluding reversed invoices.
       if (reversedInvoiceIds.length > 0) {
-        query.$or = [
-          { invoiceId: { $exists: false } },
-          { invoiceId: null },
-          { invoiceId: "" },
-          { invoiceId: { $nin: reversedInvoiceIds } },
-        ];
+        andFilters.push({
+          $or: [
+            { invoiceId: { $exists: false } },
+            { invoiceId: null },
+            { invoiceId: "" },
+            { invoiceId: { $nin: reversedInvoiceIds } },
+          ],
+        });
       }
+      if (search) {
+        const escaped = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const rx = new RegExp(escaped, "i");
+        andFilters.push({
+          $or: [
+            { productName: rx },
+            { serialNumber: rx },
+            { attendant: rx },
+            { installationLocation: rx },
+            { "client.name": rx },
+            { "client.number": rx },
+            { "client.location": rx },
+            { "client.contactPerson": rx },
+          ],
+        });
+      }
+      if (andFilters.length) query.$and = andFilters;
 
+      const compactFields =
+        "productName serialNumber status nextServiceDate installationLocation installationDate installedBy notes client attendant attendantNumber attendantRole";
       const machineQuery = InstalledMachine.find(query).sort({ createdAt: -1 });
+      if (compact) machineQuery.select(compactFields);
       if (paginated) {
         machineQuery.skip((page - 1) * limit).limit(limit);
       }
 
-      const [machines, total] = await Promise.all([
+      const [pageMachines, total, pinned] = await Promise.all([
         machineQuery.lean(),
         paginated
           ? InstalledMachine.countDocuments(query)
           : Promise.resolve(0),
+        pinId && /^[0-9a-fA-F]{24}$/.test(pinId)
+          ? InstalledMachine.findOne({ _id: pinId, org_id, isActive: true })
+              .select(compact ? compactFields : undefined)
+              .lean()
+          : Promise.resolve(null),
       ]);
+      const machines = [...pageMachines];
+      if (pinned && !machines.some((row: any) => String(row._id) === pinId)) {
+        machines.unshift(pinned);
+      }
 
       return res.status(200).json({
         success: true,

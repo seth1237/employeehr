@@ -13,11 +13,16 @@ import { StockExpenseClaim } from "../models/StockExpenseClaim";
 import { ToolRequest } from "../models/ToolRequest";
 import { StockClient } from "../models/StockClient";
 import { User } from "../models/User";
+import { LeaveRequest } from "../models/LeaveRequest";
 import {
   deriveWorkOrderStatus,
   isOpenWorkOrderStatus,
   nextWoNumber,
 } from "../lib/workOrder";
+import {
+  isTechnicalServiceLead,
+  technicalServiceRoleQuery,
+} from "../lib/engineer-roles";
 
 function startOfDay(value = new Date()) {
   const date = new Date(value);
@@ -419,11 +424,28 @@ export class EngineeringController {
             new Date(a.completedDate || a.updatedAt || 0).getTime(),
         )
         .slice(0, 6);
-      const [dueTodayOrders, overdueOrders, completedOrders] = await Promise.all([
-        enrichWorkOrders(org_id, dueToday.slice(0, 8)),
-        enrichWorkOrders(org_id, overdue.slice(0, 8)),
-        enrichWorkOrders(org_id, completedMine),
-      ]);
+      const inProgress = myOpen.filter(
+        (row) => row.status === "in_progress" || Boolean(row.startedAt),
+      );
+      const upcoming = myOpen
+        .filter((row) => {
+          if (!row.scheduledDate) return false;
+          if (row.scheduledDate && new Date(row.scheduledDate) < today) return false;
+          return !inProgress.some((job) => String(job._id) === String(row._id));
+        })
+        .sort(
+          (a, b) =>
+            new Date(a.scheduledDate || 0).getTime() - new Date(b.scheduledDate || 0).getTime(),
+        );
+      const current = inProgress.length ? inProgress : dueToday;
+      const [dueTodayOrders, overdueOrders, completedOrders, currentOrders, upcomingOrders] =
+        await Promise.all([
+          enrichWorkOrders(org_id, dueToday.slice(0, 8)),
+          enrichWorkOrders(org_id, overdue.slice(0, 8)),
+          enrichWorkOrders(org_id, completedMine),
+          enrichWorkOrders(org_id, current.slice(0, 8)),
+          enrichWorkOrders(org_id, upcoming.slice(0, 8)),
+        ]);
 
       return res.status(200).json({
         success: true,
@@ -434,14 +456,18 @@ export class EngineeringController {
           dueToday: dueToday.length,
           waitingParts: waitingParts.length,
           unassigned: unassigned.length,
-          openRequests: tickets.filter(
-            (ticket: any) =>
-              !ticket.assignedTechnician_id ||
-              String(ticket.assignedTechnician_id) === userId,
-          ).length,
+          isLead: isTechnicalServiceLead(req.user?.role),
+          openRequests: tickets.filter((ticket: any) => {
+            const assigned = String(ticket.assignedTechnician_id || "").trim();
+            if (isTechnicalServiceLead(req.user?.role)) return !assigned;
+            return assigned === userId || String(ticket.createdBy || "") === userId;
+          }).length,
+          unassignedRequests: tickets.filter((ticket: any) => !String(ticket.assignedTechnician_id || "").trim()).length,
           plansDue: plans,
           dueTodayOrders,
           overdueOrders,
+          currentOrders,
+          upcomingOrders,
           completedOrders,
           pendingInstallations: myPending.slice(0, 8),
           myMachines: myMachines.slice(0, 8),
@@ -490,7 +516,9 @@ export class EngineeringController {
 
       const aliases = userAliases(me, userId);
       let list = rows.map((row) => ({ ...row, status: deriveWorkOrderStatus(row) }));
-      if (filter === "mine" || filter === "installations") {
+      if (!isTechnicalServiceLead(req.user?.role)) {
+        list = list.filter((row) => assignedToUser(row, userId, aliases));
+      } else if (filter === "mine" || filter === "installations") {
         list = list.filter((row) => assignedToUser(row, userId, aliases));
       } else if (filter === "unassigned") {
         list = list.filter((row) => !row.technicianId && !String(row.technician || "").trim());
@@ -592,9 +620,10 @@ export class EngineeringController {
         })
       }
 
-      const technicianId = body.technicianId
+      let technicianId = body.technicianId
         ? String(body.technicianId).trim()
         : userId;
+      if (!isTechnicalServiceLead(req.user?.role)) technicianId = userId;
       const woNumber = await nextWoNumber(org_id);
       const created = await MachineService.create({
         org_id,
@@ -891,10 +920,13 @@ export class EngineeringController {
         status: { $nin: ["Closed", "Dismissed", "Resolved"] },
       };
       const mine = String(req.query.filter || "mine");
-      if (mine === "mine") {
+      const lead = isTechnicalServiceLead(req.user?.role);
+      if (mine === "all" || (lead && mine !== "mine")) {
+        // Lead sees every open request so they can assign engineers.
+      } else {
         filter.$or = [
           { assignedTechnician_id: userId },
-          { assignedTechnician_id: { $in: [null, ""] } },
+          { createdBy: userId },
         ];
       }
       const tickets = await Ticket.find(filter).sort({ createdAt: -1 }).lean();
@@ -949,7 +981,26 @@ export class EngineeringController {
           message: "This request has no machine. Choose an asset first.",
         });
       }
-      const technicianId = userId;
+      if (!isTechnicalServiceLead(req.user?.role)) {
+        return res.status(403).json({
+          success: false,
+          message: "Only the technical service lead can assign this job",
+        });
+      }
+      const technicianId = String(req.body?.technicianId || "").trim();
+      if (!technicianId) {
+        return res.status(400).json({ success: false, message: "Choose an engineer to assign" });
+      }
+      const technician = await User.findOne({
+        _id: technicianId,
+        org_id,
+        role: technicalServiceRoleQuery,
+      })
+        .select("firstName lastName email")
+        .lean();
+      if (!technician) {
+        return res.status(400).json({ success: false, message: "That engineer was not found" });
+      }
       const woNumber = await nextWoNumber(org_id);
       const created = await MachineService.create({
         org_id,
@@ -960,14 +1011,14 @@ export class EngineeringController {
         priority: req.body?.priority || "high",
         serviceType: String(ticket.title || "Corrective service").trim(),
         scheduledDate: normalizeDate(req.body?.scheduledDate) || ticket.scheduledDate || new Date(),
-        technician: displayName(req.user as any),
+        technician: displayName(technician),
         technicianId,
         notes: String(ticket.description || "").trim(),
         requestId: String(ticket._id),
       });
 
       ticket.serviceId = String(created._id);
-      ticket.assignedTechnician_id = userId;
+      ticket.assignedTechnician_id = technicianId;
       ticket.status = "Scheduled";
       await ticket.save();
 
@@ -977,6 +1028,145 @@ export class EngineeringController {
       return res.status(500).json({
         success: false,
         message: error.message || "Failed to convert request",
+      });
+    }
+  }
+
+  static async assignRequest(req: AuthenticatedRequest, res: Response) {
+    return EngineeringController.convertRequestToWorkOrder(req, res);
+  }
+
+  static async listEngineers(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id;
+      if (!org_id) return res.status(401).json({ success: false, message: "Unauthorized" });
+      const rows = await User.find({
+        org_id,
+        role: technicalServiceRoleQuery,
+        status: { $ne: "inactive" },
+      })
+        .select("firstName lastName email role")
+        .sort({ firstName: 1, lastName: 1 })
+        .lean();
+      return res.status(200).json({
+        success: true,
+        data: rows.map((user: any) => ({
+          _id: String(user._id),
+          name: displayName(user) || user.email,
+          email: user.email,
+          role: user.role,
+        })),
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to list engineers",
+      });
+    }
+  }
+
+  static async teamOverview(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id;
+      const userId = String(req.user?.userId || "");
+      if (!org_id || !userId) {
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+      }
+      if (!isTechnicalServiceLead(req.user?.role)) {
+        return res.status(403).json({
+          success: false,
+          message: "Only the technical service lead can view the team",
+        });
+      }
+
+      const today = startOfDay();
+      const monthStart = startOfDay(new Date(today.getFullYear(), today.getMonth(), 1));
+      const [engineers, orders, tickets, leaves] = await Promise.all([
+        User.find({ org_id, role: technicalServiceRoleQuery, status: { $ne: "inactive" } })
+          .select("firstName lastName email role")
+          .sort({ firstName: 1, lastName: 1 })
+          .lean(),
+        MachineService.find({ org_id }).sort({ updatedAt: -1 }).limit(1500).lean(),
+        Ticket.find({
+          org_id,
+          status: { $nin: ["Closed", "Dismissed", "Resolved"] },
+        })
+          .select("assignedTechnician_id")
+          .lean(),
+        LeaveRequest.find({
+          org_id,
+          status: { $in: ["pending", "approved"] },
+          endDate: { $gte: monthStart },
+        })
+          .sort({ startDate: 1 })
+          .lean(),
+      ]);
+
+      const shaped = orders.map((row) => ({ ...row, status: deriveWorkOrderStatus(row) }));
+      const engineerIds = new Set(engineers.map((user: any) => String(user._id)));
+      const people = engineers.map((user: any) => {
+        const id = String(user._id);
+        const jobs = shaped.filter((row) => String(row.technicianId || "") === id);
+        const openJobs = jobs.filter((row) => isOpenWorkOrderStatus(row.status));
+        const current = openJobs[0];
+        const offs = leaves.filter((row: any) => String(row.user_id) === id);
+        const onLeave = offs.find(
+          (row: any) =>
+            row.status === "approved" &&
+            new Date(row.startDate) <= endOfDay() &&
+            new Date(row.endDate) >= today,
+        );
+        return {
+          _id: id,
+          name: displayName(user) || user.email,
+          email: user.email,
+          role: user.role,
+          openJobs: openJobs.length,
+          completed: jobs.filter((row) => row.status === "completed").length,
+          currentJob: current
+            ? {
+                _id: String(current._id),
+                title: current.serviceType || current.woNumber || "Work order",
+                status: current.status,
+              }
+            : null,
+          onLeave: onLeave
+            ? {
+                type: onLeave.type,
+                startDate: onLeave.startDate,
+                endDate: onLeave.endDate,
+              }
+            : null,
+        };
+      });
+
+      const offs = leaves
+        .filter((row: any) => engineerIds.has(String(row.user_id)))
+        .map((row: any) => ({
+          _id: String(row._id),
+          engineerId: String(row.user_id),
+          engineerName: people.find((person) => person._id === String(row.user_id))?.name || "Engineer",
+          type: row.type,
+          status: row.status,
+          startDate: row.startDate,
+          endDate: row.endDate,
+          reason: row.reason,
+        }));
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          engineers: people,
+          offs,
+          unassignedRequests: tickets.filter((ticket: any) => !String(ticket.assignedTechnician_id || "").trim()).length,
+          teamOpen: people.reduce((sum, person) => sum + person.openJobs, 0),
+          onLeaveToday: people.filter((person) => person.onLeave).length,
+        },
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to load team",
       });
     }
   }
@@ -1006,6 +1196,196 @@ export class EngineeringController {
       return res.status(500).json({
         success: false,
         message: error.message || "Failed to load asset history",
+      });
+    }
+  }
+
+  static async myActivity(req: AuthenticatedRequest, res: Response) {
+    try {
+      const org_id = req.user?.org_id;
+      const userId = String(req.user?.userId || "");
+      if (!org_id || !userId) {
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+      }
+
+      const now = new Date();
+      const from = req.query.from
+        ? startOfDay(new Date(String(req.query.from)))
+        : startOfDay(new Date(now.getFullYear(), now.getMonth(), 1));
+      const to = req.query.to
+        ? endOfDay(new Date(String(req.query.to)))
+        : endOfDay(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+
+      const requestedEngineer = String(req.query.engineerId || "").trim();
+      const lead = isTechnicalServiceLead(req.user?.role);
+      const [orders, tickets, me, team] = await Promise.all([
+        MachineService.find({ org_id }).sort({ updatedAt: -1 }).limit(1500).lean(),
+        Ticket.find({ org_id }).sort({ updatedAt: -1 }).limit(800).lean(),
+        User.findById(userId).select("firstName lastName email").lean(),
+        User.find({ org_id, role: technicalServiceRoleQuery })
+          .select("firstName lastName email role")
+          .lean(),
+      ]);
+
+      const aliases = userAliases(me, userId);
+      const nameById = new Map(
+        team.map((user: any) => [String(user._id), displayName(user) || user.email || "Engineer"]),
+      );
+      let subjectIds: Set<string> | null = new Set([userId]);
+      let subjectName = displayName(me) || me?.email || "Engineer";
+      if (lead && (requestedEngineer === "all" || requestedEngineer === "*")) {
+        subjectIds = null;
+        subjectName = "All engineers";
+      } else if (lead && requestedEngineer && requestedEngineer !== userId) {
+        subjectIds = new Set([requestedEngineer]);
+        subjectName = nameById.get(requestedEngineer) || "Engineer";
+      }
+      const matchesSubject = (row: { technicianId?: string | null; technician?: string | null }) => {
+        if (!subjectIds) {
+          const techId = String(row.technicianId || "").trim();
+          return techId ? nameById.has(techId) : Boolean(String(row.technician || "").trim());
+        }
+        if (subjectIds.has(userId) && subjectIds.size === 1) {
+          return assignedToUser(row, userId, aliases);
+        }
+        const techId = String(row.technicianId || "").trim();
+        return techId ? subjectIds.has(techId) : false;
+      };
+      const inPeriod = (value?: Date | string | null) => {
+        if (!value) return false;
+        const date = new Date(value);
+        return !Number.isNaN(date.getTime()) && date >= from && date <= to;
+      };
+      const activityDate = (row: any) =>
+        row.completedDate || row.startedAt || row.scheduledDate || row.resolvedDate || row.createdAt;
+
+      const mineOrders = orders
+        .map((row) => ({ ...row, status: deriveWorkOrderStatus(row) }))
+        .filter((row) => matchesSubject(row))
+        .filter((row) =>
+          [row.completedDate, row.startedAt, row.scheduledDate, row.createdAt, row.updatedAt].some((value) =>
+            inPeriod(value),
+          ),
+        );
+      const enriched = await enrichWorkOrders(org_id, mineOrders);
+      const woRequestIds = new Set(
+        enriched.map((row: any) => String(row.requestId || "")).filter(Boolean),
+      );
+
+      const assignedTicket = (ticket: any) => {
+        const assigned = String(ticket.assignedTechnician_id || "").trim();
+        if (!subjectIds) return assigned ? nameById.has(assigned) : false;
+        if (subjectIds.has(userId) && subjectIds.size === 1) {
+          return assigned === userId || aliases.has(assigned.toLowerCase());
+        }
+        return assigned ? subjectIds.has(assigned) : false;
+      };
+      const mineTickets = tickets
+        .filter(assignedTicket)
+        .filter((ticket: any) => !woRequestIds.has(String(ticket._id)))
+        .filter((ticket: any) =>
+          [ticket.resolvedDate, ticket.scheduledDate, ticket.createdAt, ticket.updatedAt].some((value) =>
+            inPeriod(value),
+          ),
+        );
+
+      const ticketMachineIds = Array.from(
+        new Set(mineTickets.map((ticket: any) => String(ticket.machine_id || "")).filter(Boolean)),
+      );
+      const ticketMachines = ticketMachineIds.length
+        ? await InstalledMachine.find({ org_id, _id: { $in: ticketMachineIds } })
+            .select("productName serialNumber client installationLocation")
+            .lean()
+        : [];
+      const ticketMachineMap = new Map(
+        ticketMachines.map((row: any) => [String(row._id), row]),
+      );
+
+      const activities = [
+        ...enriched.map((row: any) => ({
+          id: String(row._id),
+          kind: "work_order",
+          date: activityDate(row),
+          woNumber: row.woNumber || "",
+          job: row.serviceType || row.type || "Work order",
+          type: row.type || "service",
+          status: row.status,
+          notes: row.notes || "",
+          machineOkay: row.machineOkay,
+          failureCode: row.failureCode || "",
+          causeCode: row.causeCode || "",
+          engineerName: nameById.get(String(row.technicianId || "")) || row.technician || subjectName,
+          machine: row.machine?.productName || "",
+          serialNumber: row.machine?.serialNumber || "",
+          facility: row.machine?.client?.name || "",
+          location: row.machine?.client?.location || row.machine?.installationLocation || "",
+        })),
+        ...mineTickets.map((ticket: any) => {
+          const machine = ticketMachineMap.get(String(ticket.machine_id || "")) || null;
+          return {
+            id: String(ticket._id),
+            kind: "request",
+            date: activityDate(ticket),
+            woNumber: "",
+            job: ticket.title || "Request",
+            type: "request",
+            status: ticket.status,
+            notes: ticket.resolutionNote || ticket.description || "",
+            machineOkay: null,
+            failureCode: "",
+            causeCode: "",
+            engineerName: nameById.get(String(ticket.assignedTechnician_id || "")) || subjectName,
+            machine: machine?.productName || "",
+            serialNumber: machine?.serialNumber || "",
+            facility: machine?.client?.name || "",
+            location: machine?.client?.location || machine?.installationLocation || "",
+          };
+        }),
+      ].sort(
+        (a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime(),
+      );
+
+      const facilities = Array.from(
+        new Set(activities.map((row) => String(row.facility || "").trim()).filter(Boolean)),
+      );
+      const completed = activities.filter(
+        (row) => String(row.status || "").toLowerCase() === "completed",
+      ).length;
+      const open = activities.filter((row) => {
+        const status = String(row.status || "").toLowerCase();
+        return status && !["completed", "cancelled", "closed", "resolved", "dismissed"].includes(status);
+      }).length;
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          engineer: {
+            name: subjectName,
+            email: me?.email || "",
+            id: subjectIds && subjectIds.size === 1 ? Array.from(subjectIds)[0] : "all",
+          },
+          engineers: lead
+            ? team.map((user: any) => ({
+                _id: String(user._id),
+                name: displayName(user) || user.email,
+                role: user.role,
+              }))
+            : [],
+          from,
+          to,
+          stats: {
+            assigned: activities.length,
+            completed,
+            open,
+            facilities: facilities.length,
+          },
+          activities,
+        },
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to load engineer activity",
       });
     }
   }
@@ -1173,7 +1553,7 @@ export class EngineeringController {
           .sort({ createdAt: -1 })
           .limit(100)
           .lean(),
-        User.find({ org_id, role: "technical_service_engineer" })
+        User.find({ org_id, role: technicalServiceRoleQuery })
           .select("firstName lastName email")
           .lean(),
       ]);
@@ -1357,7 +1737,7 @@ export class EngineeringController {
       const [orders, expenses, engineers] = await Promise.all([
         MachineService.find({ org_id }).sort({ updatedAt: -1 }).limit(1500).lean(),
         StockExpenseClaim.find({ org_id, source: "engineer" }).sort({ createdAt: -1 }).limit(500).lean(),
-        User.find({ org_id, role: "technical_service_engineer" }).select("firstName lastName email").lean(),
+        User.find({ org_id, role: technicalServiceRoleQuery }).select("firstName lastName email").lean(),
       ]);
       const nameById = new Map(
         engineers.map((user: any) => [String(user._id), displayName(user) || user.email]),

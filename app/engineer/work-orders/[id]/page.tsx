@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { createPortal } from "react-dom"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import { engineeringApi } from "@/lib/api"
@@ -48,13 +49,22 @@ function formatBytes(bytes: number) {
 }
 
 function JobCompleteReward({ collapsing }: { collapsing: boolean }) {
-  return (
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+  if (!mounted) return null
+  return createPortal(
     <div
       className={cn(
-        "fixed inset-0 z-[80] flex flex-col items-center justify-center bg-white/92 px-6 text-center backdrop-blur-sm",
+        "fixed inset-0 z-[200] flex flex-col items-center justify-center bg-white px-6 text-center",
         collapsing && "pointer-events-none",
       )}
-      style={collapsing ? { animation: "job-reward-out 420ms ease-in forwards" } : undefined}
+      style={{
+        animation: collapsing
+          ? "job-reward-out 420ms ease-in forwards"
+          : "job-reward-in 220ms ease-out both",
+      }}
       role="status"
       aria-live="polite"
     >
@@ -78,7 +88,8 @@ function JobCompleteReward({ collapsing }: { collapsing: boolean }) {
       </div>
       <p className="mt-3 text-xl font-semibold tracking-tight text-slate-900">Nice work</p>
       <p className="mt-1 text-sm text-slate-600">Job complete. Heading home…</p>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -394,7 +405,7 @@ export default function WorkOrderDetailPage() {
     setSaving(true)
     try {
       const res = await engineeringApi.startWorkOrder(id, { notes })
-      setRow(res.data)
+      setRow(res.data || res || row)
       toast({ title: "Work started" })
     } catch (error: any) {
       toast({ title: "Could not start", description: error?.message, variant: "destructive" })
@@ -461,7 +472,7 @@ export default function WorkOrderDetailPage() {
         photo = await compressJobCardPhoto(photo)
       }
       const res = await engineeringApi.completeWorkOrder(id, payload, photo)
-      setRow(res.data)
+      setRow(res.data || res || row)
       setJobCardFile(null)
       setCelebrate("in")
     } catch (error: any) {
@@ -477,7 +488,11 @@ export default function WorkOrderDetailPage() {
     return ""
   }, [jobCardPreview, existingPhoto])
 
-  if (loading || !row) return <PageLoadingSkeleton title="Work order" />
+  if ((loading || !row) && !celebrate) return <PageLoadingSkeleton title="Work order" />
+
+  if (!row) {
+    return celebrate ? <JobCompleteReward collapsing={celebrate === "out"} /> : null
+  }
 
   const covered = (row.contracts || []).filter((contract: any) => {
     if (!contract.endDate) return true

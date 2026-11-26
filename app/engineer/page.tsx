@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation"
 import { engineeringApi } from "@/lib/api"
 import { getUser } from "@/lib/auth"
 import { PageLoadingSkeleton } from "@/components/admin/ui/page-states"
-import { AlertTriangle, CheckCircle2, ChevronRight, ClipboardList, Inbox, Palmtree, CircleDollarSign, Hammer, Wrench, Banknote } from "lucide-react"
+import { AlertTriangle, CheckCircle2, ChevronRight, ClipboardList, BarChart3, Inbox, Palmtree, CircleDollarSign, Hammer, Wrench, Banknote, Users } from "lucide-react"
+import { isTechnicalServiceLead } from "@/lib/engineer-roles"
 import { EngineerHeader, EngineerKpi, EngineerPage } from "@/components/engineer/engineer-ui"
 import { useEngineerBranding } from "@/components/engineer/branding"
 import { ShimmerButton } from "@/components/ui/shimmer-button"
@@ -52,7 +53,10 @@ export default function EngineerDashboard() {
     { label: "Requests", value: data?.openRequests ?? 0, href: "/engineer/requests", icon: Inbox },
     { label: "Machines", value: data?.assets ?? 0, href: "/engineer/machines", icon: Wrench },
   ]
+  const lead = isTechnicalServiceLead(user?.role)
   const extras = [
+    { label: "Reports", href: "/engineer/reports", icon: BarChart3 },
+    ...(lead ? [{ label: "Team", href: "/engineer/team", icon: Users }] : []),
     { label: "Leave", href: "/engineer/leave", icon: Palmtree },
     { label: "Payroll", href: "/engineer/payroll", icon: Banknote },
     { label: "Expenses", href: "/engineer/expenses", icon: CircleDollarSign },
@@ -60,12 +64,44 @@ export default function EngineerDashboard() {
   ]
 
   const overdue = (data?.overdueOrders || []).slice(0, 4)
-  const overdueTotal = (data?.overdueOrders || []).length
+  const currentDuty = (data?.currentOrders || data?.dueTodayOrders || []).slice(0, 4)
+  const upcoming = (data?.upcomingOrders || []).slice(0, 4)
   const completed = (data?.completedOrders || []).slice(0, 4)
+  const duty =
+    overdue.length > 0
+      ? {
+          title: "Overdue",
+          href: "/engineer/work-orders?status=overdue",
+          empty: "No overdue jobs.",
+          items: overdue,
+          total: (data?.overdueOrders || []).length,
+        }
+      : currentDuty.length > 0
+        ? {
+            title: "Current duty",
+            href: "/engineer/work-orders?filter=mine",
+            empty: "No jobs in progress.",
+            items: currentDuty,
+            total: (data?.currentOrders || data?.dueTodayOrders || []).length,
+          }
+        : {
+            title: "Scheduled",
+            href: "/engineer/work-orders?filter=mine",
+            empty: "Nothing scheduled yet.",
+            items: upcoming,
+            total: (data?.upcomingOrders || []).length,
+          }
 
   return (
     <EngineerPage>
-      <EngineerHeader title={greeting} description="Your open work, overdue jobs, and recent wins." />
+      <EngineerHeader
+        title={greeting}
+        description={
+          lead
+            ? "Team jobs, unassigned tickets, and your own work for the day."
+            : "Your open work, overdue jobs, and recent wins."
+        }
+      />
 
       <div data-tour="wt-dashboard" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {stats.map((stat) => (
@@ -97,10 +133,10 @@ export default function EngineerDashboard() {
 
       <section className="space-y-2">
         <div className="flex items-end justify-between gap-2">
-          <h2 className="text-sm font-semibold sm:text-base">Overdue</h2>
-          {overdueTotal > 4 ? (
+          <h2 className="text-sm font-semibold sm:text-base">{duty.title}</h2>
+          {duty.total > 4 ? (
             <Link
-              href="/engineer/work-orders?status=overdue"
+              href={duty.href}
               className="text-xs font-medium hover:underline"
               style={{ color: branding.primaryColor }}
             >
@@ -109,13 +145,13 @@ export default function EngineerDashboard() {
           ) : null}
         </div>
 
-        {overdue.length === 0 ? (
+        {duty.items.length === 0 ? (
           <p className="rounded-xl border bg-white px-4 py-6 text-center text-sm text-muted-foreground">
-            No overdue jobs.
+            {duty.empty}
           </p>
         ) : (
           <div className="grid gap-2 sm:grid-cols-2">
-            {overdue.map((row: any) => (
+            {duty.items.map((row: any) => (
               <ShimmerButton
                 key={row._id}
                 className="h-auto w-full min-h-[3.5rem] justify-between whitespace-normal px-4 py-3"

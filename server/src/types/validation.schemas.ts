@@ -120,6 +120,7 @@ export const createEmployeeSchema = z.object({
     "sales_rep",
     "dispatch",
     "technical_service_engineer",
+    "technical_service_lead",
     "pos_cashier",
     "portal_client",
   ]).optional(),

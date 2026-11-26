@@ -4,7 +4,7 @@ import type { NextRequest } from "next/server"
 const TOKEN_COOKIE = "elevate_auth_token"
 const ADMIN_ROLES = new Set(["company_admin", "admin", "hr", "super_admin", "dispatch"])
 const SALES_ROLES = new Set(["sales_rep"])
-const ENGINEER_ROLES = new Set(["technical_service_engineer"])
+const ENGINEER_ROLES = new Set(["technical_service_engineer", "technical_service_lead"])
 const POS_ROLES = new Set(["pos_cashier", "company_admin", "admin", "hr", "super_admin"])
 
 function isProcurementEnabled() {

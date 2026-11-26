@@ -226,6 +226,8 @@ export const NAV_ICONS: Record<string, LucideIcon> = {
   "/engineer/work-orders": ClipboardList,
   "/engineer/requests": Inbox,
   "/engineer/machines": Cpu,
+  "/engineer/reports": BarChart3,
+  "/engineer/team": UsersRound,
   "/engineer/calendar": CalendarDays,
   "/engineer/expenses": CircleDollarSign,
   "/engineer/leave": Palmtree,

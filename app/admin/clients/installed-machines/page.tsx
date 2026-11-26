@@ -1569,6 +1569,7 @@ export default function InstalledMachinesPage({ isEngineerView = false }: { isEn
     const engineerEmployees = employees.filter(
       (employee) =>
         employee.role === "technical_service_engineer" ||
+        employee.role === "technical_service_lead" ||
         employee.role === "admin" ||
         employee.role === "company_admin" ||
         employee.role === "super_admin",
@@ -1578,7 +1579,11 @@ export default function InstalledMachinesPage({ isEngineerView = false }: { isEn
       value: employeeId(employee),
       label:
         getEmployeeLabel(employee) +
-        (employee.role === "technical_service_engineer" ? " (Engineer)" : ""),
+        (employee.role === "technical_service_lead"
+          ? " (Lead)"
+          : employee.role === "technical_service_engineer"
+            ? " (Engineer)"
+            : ""),
     })).filter((option) => option.value);
     if (
       scheduleForm.engineer &&
@@ -1657,10 +1662,10 @@ export default function InstalledMachinesPage({ isEngineerView = false }: { isEn
   }, [reminderServices, selectedMachine]);
 
   const technicianOptions = useMemo(() => {
-    const engineerEmployees = employees.filter(e => e.role === "technical_service_engineer" || e.role === "admin" || e.role === "company_admin" || e.role === "super_admin");
+    const engineerEmployees = employees.filter(e => e.role === "technical_service_engineer" || e.role === "technical_service_lead" || e.role === "admin" || e.role === "company_admin" || e.role === "super_admin");
     const options = engineerEmployees.map((employee) => ({
       value: getEmployeeLabel(employee),
-      label: getEmployeeLabel(employee) + (employee.role === "technical_service_engineer" ? " (Service Engineer)" : " (Admin)"),
+      label: getEmployeeLabel(employee) + (employee.role === "technical_service_lead" ? " (Lead)" : employee.role === "technical_service_engineer" ? " (Service Engineer)" : " (Admin)"),
       original: employee
     }));
 

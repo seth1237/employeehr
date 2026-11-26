@@ -16,6 +16,7 @@ export interface IUser {
     | "hr"
     | "sales_rep"
     | "technical_service_engineer"
+    | "technical_service_lead"
     | "dispatch"
     | "pos_cashier"
     | "portal_client";

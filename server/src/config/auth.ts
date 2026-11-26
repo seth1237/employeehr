@@ -4,7 +4,7 @@ import type { IJWTPayload } from "../types/interfaces"
 const JWT_SECRET = process.env.JWT_SECRET
 const JWT_EXPIRY = "7d"
 const FIELD_JWT_EXPIRY = "365d"
-const FIELD_ROLES = new Set(["sales_rep", "technical_service_engineer"])
+const FIELD_ROLES = new Set(["sales_rep", "technical_service_engineer", "technical_service_lead"])
 
 if (!JWT_SECRET && process.env.NODE_ENV === "production") {
   throw new Error("JWT_SECRET is required in production")

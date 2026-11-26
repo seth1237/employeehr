@@ -1033,14 +1033,16 @@ export const stockApi = {
   getWarehouseLocations: (warehouseId: string) =>
     client.get<any[]>(`/api/stock/warehouses/${warehouseId}/locations`),
   // Installed machines
-  getInstalledMachines: (page?: number, limit?: number) =>
-    client.get<any[]>(
-      `/api/stock/installed-machines${
-        page || limit
-          ? `?page=${page || 1}&limit=${limit || 20}`
-          : ""
-      }`,
-    ),
+  getInstalledMachines: (page?: number, limit?: number, extra?: { q?: string; compact?: boolean; machineId?: string }) => {
+    const search = new URLSearchParams()
+    if (page) search.set("page", String(page))
+    if (limit) search.set("limit", String(limit))
+    if (extra?.q) search.set("q", extra.q)
+    if (extra?.compact) search.set("compact", "1")
+    if (extra?.machineId) search.set("machineId", extra.machineId)
+    const query = search.toString()
+    return client.get<any[]>(`/api/stock/installed-machines${query ? `?${query}` : ""}`)
+  },
   createInstalledMachine: (data: any) =>
     client.post<any>("/api/stock/installed-machines", data),
   updateInstalledMachine: (id: string, data: any) =>
@@ -2037,6 +2039,18 @@ export const engineeringApi = {
     client.post<any>(`/api/engineering/requests/${id}/convert-to-wo`, data || {}),
   getAssetHistory: (id: string) =>
     client.get<any>(`/api/engineering/assets/${id}/history`),
+  getMyActivity: (params?: { from?: string; to?: string; engineerId?: string }) => {
+    const search = new URLSearchParams()
+    if (params?.from) search.set("from", params.from)
+    if (params?.to) search.set("to", params.to)
+    if (params?.engineerId) search.set("engineerId", params.engineerId)
+    const query = search.toString()
+    return client.get<any>(`/api/engineering/my-activity${query ? `?${query}` : ""}`)
+  },
+  listEngineers: () => client.get<any[]>("/api/engineering/engineers"),
+  getTeamOverview: () => client.get<any>("/api/engineering/team"),
+  assignRequest: (id: string, data: { technicianId: string; scheduledDate?: string; machineId?: string }) =>
+    client.post<any>(`/api/engineering/requests/${id}/assign`, data),
   getMaintenancePlans: (assetId?: string) =>
     client.get<any[]>(
       `/api/engineering/maintenance-plans${assetId ? `?assetId=${encodeURIComponent(assetId)}` : ""}`,

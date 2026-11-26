@@ -79,8 +79,8 @@ function ExpenseClaimsInner() {
         setCategories(catRes.data || [])
         const allUsers = asUserList(usersRes).length ? asUserList(usersRes) : asUserList(usersRes.data)
         const roles = engineerView
-          ? ["technical_service_engineer"]
-          : ["employee", "sales_rep", "technical_service_engineer"]
+          ? ["technical_service_engineer", "technical_service_lead"]
+          : ["employee", "sales_rep", "technical_service_engineer", "technical_service_lead"]
         const matched = allUsers.filter((u: any) =>
           roles.includes(String(u.role || "").toLowerCase()),
         )

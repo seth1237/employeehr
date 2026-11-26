@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { getUser, postLoginPath } from "@/lib/auth"
+import { isTechnicalServiceRole } from "@/lib/engineer-roles"
 import { EngineerBrandProvider } from "@/components/engineer/branding"
 import { EngineerSidebar } from "@/components/engineer/sidebar"
 import { EngineerTopNav } from "@/components/engineer/top-nav"
@@ -44,7 +45,7 @@ export default function EngineerLayoutClient({ children }: { children: React.Rea
       router.push("/auth/login")
       return
     }
-    if (user.role !== "technical_service_engineer") {
+    if (!isTechnicalServiceRole(user.role)) {
       router.push(postLoginPath(user.role))
       return
     }

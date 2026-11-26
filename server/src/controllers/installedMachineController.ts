@@ -10,6 +10,25 @@ import { MachineService } from "../models/MachineService";
 import { nextWoNumber } from "../lib/workOrder";
 import { isAdminRole } from "./stock/stockShared";
 
+const CLIENT_KEY_EXPR = {
+  $concat: [
+    { $toLower: { $trim: { input: { $ifNull: ["$client.name", ""] } } } },
+    "|",
+    { $toLower: { $trim: { input: { $ifNull: ["$client.number", ""] } } } },
+    "|",
+    { $toLower: { $trim: { input: { $ifNull: ["$client.location", ""] } } } },
+  ],
+};
+
+function clientKeyFromMachine(machine?: {
+  client?: { name?: string; number?: string; location?: string };
+}) {
+  const name = String(machine?.client?.name || "").trim().toLowerCase();
+  const number = String(machine?.client?.number || "").trim().toLowerCase();
+  const location = String(machine?.client?.location || "").trim().toLowerCase();
+  return `${name}|${number}|${location}`;
+}
+
 function parseCsvLine(line: string, delimiter: string = ","): string[] {
   const cells: string[] = [];
   let current = "";
@@ -147,15 +166,25 @@ export class InstalledMachineController {
 
       const requestedPage = Number(req.query.page);
       const requestedLimit = Number(req.query.limit);
+      const groupByClient = String(req.query.groupBy || "") === "client";
       const paginated =
-        Number.isFinite(requestedPage) || Number.isFinite(requestedLimit);
+        groupByClient ||
+        Number.isFinite(requestedPage) ||
+        Number.isFinite(requestedLimit);
       const page = Math.max(
         1,
         Number.isFinite(requestedPage) ? requestedPage : 1,
       );
       const limit = Math.min(
-        100,
-        Math.max(1, Number.isFinite(requestedLimit) ? requestedLimit : 20),
+        groupByClient ? 50 : 100,
+        Math.max(
+          1,
+          Number.isFinite(requestedLimit)
+            ? requestedLimit
+            : groupByClient
+              ? 10
+              : 20,
+        ),
       );
       const search = String(req.query.q || "").trim();
       const compact = String(req.query.compact || "") === "1";
@@ -213,6 +242,93 @@ export class InstalledMachineController {
 
       const compactFields =
         "productName serialNumber status nextServiceDate installationLocation installationDate installedBy notes client attendant attendantNumber attendantRole";
+      const compactProjection = {
+        productName: 1,
+        serialNumber: 1,
+        status: 1,
+        nextServiceDate: 1,
+        installationLocation: 1,
+        installationDate: 1,
+        installedBy: 1,
+        notes: 1,
+        client: 1,
+        attendant: 1,
+        attendantNumber: 1,
+        attendantRole: 1,
+      };
+      const pinQuery =
+        pinId && /^[0-9a-fA-F]{24}$/.test(pinId)
+          ? InstalledMachine.findOne({ _id: pinId, org_id, isActive: true })
+              .select(compact ? compactFields : undefined)
+              .lean()
+          : Promise.resolve(null);
+
+      if (groupByClient) {
+        const [grouped, pinned] = await Promise.all([
+          InstalledMachine.aggregate([
+            { $match: query },
+            {
+              $addFields: {
+                clientKey: CLIENT_KEY_EXPR,
+                sortName: {
+                  $toLower: {
+                    $trim: { input: { $ifNull: ["$client.name", "unknown"] } },
+                  },
+                },
+              },
+            },
+            { $sort: { createdAt: -1 } },
+            {
+              $group: {
+                _id: "$clientKey",
+                sortName: { $first: "$sortName" },
+              },
+            },
+            { $sort: { sortName: 1, _id: 1 } },
+            {
+              $facet: {
+                page: [{ $skip: (page - 1) * limit }, { $limit: limit }],
+                total: [{ $count: "count" }],
+              },
+            },
+          ]),
+          pinQuery,
+        ]);
+        const facet = grouped[0] || { page: [], total: [] };
+        const clientKeys = (facet.page || []).map((row: any) => String(row._id));
+        const totalClients = Number(facet.total?.[0]?.count || 0);
+        if (page === 1 && pinned) {
+          const pinKey = clientKeyFromMachine(pinned);
+          if (!clientKeys.includes(pinKey)) clientKeys.unshift(pinKey);
+        }
+        const machines = clientKeys.length
+          ? await InstalledMachine.aggregate([
+              { $match: query },
+              { $addFields: { clientKey: CLIENT_KEY_EXPR } },
+              { $match: { clientKey: { $in: clientKeys } } },
+              { $sort: { createdAt: -1 } },
+              compact
+                ? { $project: compactProjection }
+                : { $project: { clientKey: 0 } },
+            ])
+          : [];
+        if (pinned && !machines.some((row: any) => String(row._id) === pinId)) {
+          machines.unshift(pinned);
+        }
+        return res.status(200).json({
+          success: true,
+          data: machines,
+          meta: {
+            page,
+            limit,
+            total: totalClients,
+            totalPages: Math.ceil(totalClients / limit) || 0,
+            hasMore: page * limit < totalClients,
+            groupBy: "client",
+          },
+        });
+      }
+
       const machineQuery = InstalledMachine.find(query).sort({ createdAt: -1 });
       if (compact) machineQuery.select(compactFields);
       if (paginated) {
@@ -224,11 +340,7 @@ export class InstalledMachineController {
         paginated
           ? InstalledMachine.countDocuments(query)
           : Promise.resolve(0),
-        pinId && /^[0-9a-fA-F]{24}$/.test(pinId)
-          ? InstalledMachine.findOne({ _id: pinId, org_id, isActive: true })
-              .select(compact ? compactFields : undefined)
-              .lean()
-          : Promise.resolve(null),
+        pinQuery,
       ]);
       const machines = [...pageMachines];
       if (pinned && !machines.some((row: any) => String(row._id) === pinId)) {

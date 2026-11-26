@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useToast } from "@/hooks/use-toast"
 import { downloadEngineerActivityPdf, loadReportBranding } from "@/lib/engineer-reports-pdf"
+import { cleanActivityLabel } from "@/lib/engineer-activity"
 import { getUser } from "@/lib/auth"
 import { isTechnicalServiceLead } from "@/lib/engineer-roles"
 
@@ -160,7 +161,7 @@ export default function EngineerReportsPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="truncate font-medium text-slate-900">
-                      {[row.woNumber, row.job].filter(Boolean).join(" · ")}
+                      {cleanActivityLabel(row)}
                     </p>
                     <p className="mt-0.5 truncate text-xs text-slate-500">
                       {[

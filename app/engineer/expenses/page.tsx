@@ -1,15 +1,55 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { engineeringApi, stockApi } from "@/lib/api"
 import { getUser } from "@/lib/auth"
 import { PageLoadingSkeleton } from "@/components/admin/ui/page-states"
+import { EngineerHeader, EngineerPage } from "@/components/engineer/engineer-ui"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { DesktopTableShell } from "@/components/admin/ui/mobile-list"
+
+function facilityName(job?: any) {
+  return String(
+    job?.machine?.client?.name ||
+      job?.machine?.installationLocation ||
+      job?.machine?.client?.location ||
+      "",
+  ).trim()
+}
+
+function isInstallationJob(job?: any) {
+  const type = String(job?.type || "").toLowerCase()
+  const title = String(job?.serviceType || "").toLowerCase()
+  return type === "installation" || title.includes("install")
+}
+
+function purposeFromJob(job?: any) {
+  if (!job) return ""
+  const kind = isInstallationJob(job) ? "Installation" : "Service"
+  const facility = facilityName(job)
+  return facility ? `${kind} (${facility})` : kind
+}
+
+function reasonFromJob(job?: any) {
+  return String(job?.notes || "").trim()
+}
+
+function jobLabel(job: any) {
+  const kind = isInstallationJob(job) ? "Installation" : "Service"
+  const facility = facilityName(job)
+  return [
+    job.woNumber || job.serviceType || "Work order",
+    kind,
+    facility || job.machine?.productName,
+  ]
+    .filter(Boolean)
+    .join(" · ")
+}
 
 export default function EngineerExpensesPage() {
   const user = getUser()
@@ -18,11 +58,16 @@ export default function EngineerExpensesPage() {
   const [claims, setClaims] = useState<any[]>([])
   const [jobs, setJobs] = useState<any[]>([])
   const [form, setForm] = useState({
+    woId: "",
+    purpose: "",
     description: "",
     amount: "",
-    purpose: "",
-    woId: "",
   })
+
+  const selectedJob = useMemo(
+    () => jobs.find((job) => String(job._id) === form.woId) || null,
+    [jobs, form.woId],
+  )
 
   const load = () => {
     setLoading(true)
@@ -41,9 +86,28 @@ export default function EngineerExpensesPage() {
     load()
   }, [])
 
+  const pickWorkOrder = (woId: string) => {
+    if (!woId) {
+      setForm((prev) => ({ ...prev, woId: "", purpose: "", description: "" }))
+      return
+    }
+    const job = jobs.find((row) => String(row._id) === woId)
+    setForm((prev) => ({
+      ...prev,
+      woId,
+      purpose: purposeFromJob(job),
+      description: reasonFromJob(job),
+    }))
+  }
+
   const submit = async () => {
-    if (!form.purpose.trim() || !form.description.trim() || !form.amount) {
-      window.alert("Purpose, description and amount are required")
+    if (!form.woId) {
+      window.alert("Select the work order first")
+      return
+    }
+    const purpose = form.purpose.trim() || purposeFromJob(selectedJob)
+    if (!purpose || !form.description.trim() || !form.amount) {
+      window.alert("Purpose, reason, and amount are required")
       return
     }
     if (!user?._id) return
@@ -52,13 +116,13 @@ export default function EngineerExpensesPage() {
       await stockApi.createExpenseClaim({
         employeeId: user._id,
         employeeName: `${user.first_name || ""} ${user.last_name || ""}`.trim() || user.email,
-        purpose: form.purpose.trim(),
+        purpose,
         items: [{ description: form.description.trim(), amount: Number(form.amount) }],
         status: "submitted",
         source: "engineer",
-        woId: form.woId || undefined,
+        woId: form.woId,
       })
-      setForm({ description: "", amount: "", purpose: "", woId: "" })
+      setForm({ woId: "", purpose: "", description: "", amount: "" })
       load()
     } catch (error: any) {
       window.alert(error?.message || "Could not submit claim")
@@ -70,13 +134,11 @@ export default function EngineerExpensesPage() {
   if (loading) return <PageLoadingSkeleton title="Expenses" />
 
   return (
-    <div className="space-y-4 p-4 pb-24 md:p-8">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Expenses</h1>
-        <p className="text-sm text-muted-foreground">
-          Submit a claim, then follow your expense history as accounts reviews it.
-        </p>
-      </div>
+    <EngineerPage>
+      <EngineerHeader
+        title="Expenses"
+        description="Pick the job, then the purpose fills from the facility. Add the reason and amount."
+      />
 
       <Card>
         <CardHeader>
@@ -84,45 +146,58 @@ export default function EngineerExpensesPage() {
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2">
           <div className="sm:col-span-2">
-            <Label>Purpose</Label>
-            <Input
-              value={form.purpose}
-              onChange={(e) => setForm((prev) => ({ ...prev, purpose: e.target.value }))}
-              placeholder="Site visit / spare purchase"
-            />
-          </div>
-          <div>
-            <Label>Description</Label>
-            <Input
-              value={form.description}
-              onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
-              placeholder="Fuel, taxi, parts…"
-            />
-          </div>
-          <div>
-            <Label>Amount</Label>
-            <Input
-              type="number"
-              value={form.amount}
-              onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))}
-            />
-          </div>
-          <div className="sm:col-span-2">
-            <Label>Work order (optional)</Label>
+            <Label htmlFor="claim-wo">Work order</Label>
             <select
-              className="mt-1 w-full rounded border px-3 py-2 text-sm"
+              id="claim-wo"
+              className="mt-1 h-11 w-full rounded-md border bg-white px-3 text-sm"
               value={form.woId}
-              onChange={(e) => setForm((prev) => ({ ...prev, woId: e.target.value }))}
+              onChange={(e) => pickWorkOrder(e.target.value)}
             >
-              <option value="">Not linked</option>
+              <option value="">Select work order</option>
               {jobs.map((job) => (
                 <option key={job._id} value={job._id}>
-                  {job.woNumber || job.serviceType} — {job.machine?.productName || "asset"}
+                  {jobLabel(job)}
                 </option>
               ))}
             </select>
           </div>
-          <Button className="sm:col-span-2" disabled={saving} onClick={() => void submit()}>
+          <div className="sm:col-span-2">
+            <Label htmlFor="claim-purpose">Purpose</Label>
+            <Input
+              id="claim-purpose"
+              value={form.purpose}
+              readOnly
+              placeholder="Installation (facility) or Service (facility)"
+              className="bg-slate-50"
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Fills as Installation or Service with the facility from the selected job.
+            </p>
+          </div>
+          <div className="sm:col-span-2">
+            <Label htmlFor="claim-reason">Description / reason</Label>
+            <Textarea
+              id="claim-reason"
+              value={form.description}
+              onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
+              placeholder="Why this expense was needed"
+              rows={4}
+            />
+          </div>
+          <div>
+            <Label htmlFor="claim-amount">Amount</Label>
+            <Input
+              id="claim-amount"
+              type="number"
+              inputMode="decimal"
+              min="0"
+              step="0.01"
+              value={form.amount}
+              onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))}
+              placeholder="0.00"
+            />
+          </div>
+          <Button className="sm:col-span-2 h-11" disabled={saving} onClick={() => void submit()}>
             {saving ? "Submitting…" : "Submit claim"}
           </Button>
         </CardContent>
@@ -154,8 +229,7 @@ export default function EngineerExpensesPage() {
                   claims.map((claim) => (
                     <tr key={claim._id} className="border-t">
                       <td className="px-4 py-3">
-                        <p className="font-medium">{claim.claimNumber || claim.purpose}</p>
-                        <p className="text-xs text-muted-foreground">{claim.purpose}</p>
+                        <p className="font-medium">{claim.purpose || claim.claimNumber}</p>
                         {Array.isArray(claim.items) && claim.items[0]?.description ? (
                           <p className="text-xs text-muted-foreground">{claim.items[0].description}</p>
                         ) : null}
@@ -179,6 +253,6 @@ export default function EngineerExpensesPage() {
           </DesktopTableShell>
         </CardContent>
       </Card>
-    </div>
+    </EngineerPage>
   )
 }

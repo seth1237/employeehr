@@ -18,6 +18,7 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { AlertTriangle, ArrowLeft, Clock, Download, MapPin, Phone, Search, Ticket, UserRound, Users, Wrench } from "lucide-react"
 import { downloadMachineHistoryPdf, loadReportBranding } from "@/lib/engineer-reports-pdf"
+import { cleanActivityLabel } from "@/lib/engineer-activity"
 
 type Machine = {
   _id: string
@@ -85,7 +86,7 @@ function eventDate(value?: string | Date | null) {
 
 function kindLabel(kind: TimelineEvent["kind"]) {
   if (kind === "installation") return "Installation"
-  if (kind === "breakdown") return "Breakdown"
+  if (kind === "breakdown") return "Repair"
   if (kind === "calibration") return "Calibration"
   if (kind === "ticket") return "Fault report"
   return "Service"
@@ -142,7 +143,7 @@ function buildTimeline(machine: Machine, payload: any): TimelineEvent[] {
     events.push({
       id: String(row._id),
       kind,
-      title: row.serviceType || row.woNumber || kindLabel(kind),
+      title: cleanActivityLabel({ type: row.type, serviceType: row.serviceType, kind }),
       status: row.status || (row.completedDate ? "completed" : row.startedAt ? "in_progress" : "open"),
       when: row.completedDate || row.startedAt || row.scheduledDate || row.createdAt,
       person: row.technician,
@@ -208,7 +209,7 @@ function EngineerMachinesInner() {
   const [downloadingId, setDownloadingId] = useState("")
   const [page, setPage] = useState(1)
   const [hasMore, setHasMore] = useState(false)
-  const [totalMachines, setTotalMachines] = useState(0)
+  const [totalClients, setTotalClients] = useState(0)
   const [loadingMore, setLoadingMore] = useState(false)
   const [searchInput, setSearchInput] = useState("")
 
@@ -224,6 +225,7 @@ function EngineerMachinesInner() {
     const res = await stockApi.getInstalledMachines(nextPage, PAGE_SIZE, {
       q: query || undefined,
       compact: true,
+      groupBy: "client",
       machineId: nextPage === 1 ? machineIdFromUrl || undefined : undefined,
     })
     const rows = (res.data || []) as Machine[]
@@ -231,7 +233,7 @@ function EngineerMachinesInner() {
     setMachines((prev) => (append ? mergeMachines(prev, rows) : rows))
     setPage(nextPage)
     setHasMore(Boolean(meta.hasMore))
-    setTotalMachines(Number(meta.total || rows.length))
+    setTotalClients(Number(meta.total || 0))
   }
 
   useEffect(() => {
@@ -366,7 +368,7 @@ function EngineerMachinesInner() {
         installedBy: machine.installedBy,
         installationDate: machine.installationDate,
         events: (timeline || []).map((event) => ({
-          kind: kindLabel(event.kind),
+          kind: event.kind,
           title: event.title,
           status: event.status,
           when: event.when,
@@ -488,8 +490,8 @@ function EngineerMachinesInner() {
       </div>
       <div className="flex items-center justify-between gap-3 px-1 text-xs text-muted-foreground">
         <span>
-          {machines.length}
-          {totalMachines ? ` of ${totalMachines}` : ""} machines
+          {filtered.length}
+          {totalClients ? ` of ${totalClients}` : ""} clients
         </span>
         {hasMore ? (
           <Button

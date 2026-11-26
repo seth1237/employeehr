@@ -276,6 +276,25 @@ function isInstallationWorkOrder(row?: { type?: string | null; serviceType?: str
   return row?.type === "installation" || /install/i.test(String(row?.serviceType || ""));
 }
 
+function cleanActivityLabel(row?: {
+  type?: string | null
+  serviceType?: string | null
+  kind?: string | null
+  title?: string | null
+}) {
+  const type = String(row?.type || "").toLowerCase()
+  const kind = String(row?.kind || "").toLowerCase()
+  const title = String(row?.serviceType || row?.title || "").toLowerCase()
+  const blob = `${type} ${kind} ${title}`
+  if (kind === "request" || type === "request") return "Fault report"
+  if (type === "installation" || /install/.test(blob)) return "Machine installation"
+  if (type === "corrective" || /repair|breakdown|fault|corrective/.test(blob)) {
+    return "Machine repair"
+  }
+  if (type === "calibration" || /calibrat/.test(blob)) return "Calibration"
+  return "Machine service"
+}
+
 function normalizeCostLines(value: unknown) {
   const parsed = parseMaybeJson(value);
   if (!Array.isArray(parsed)) return [];
@@ -1126,7 +1145,7 @@ export class EngineeringController {
           currentJob: current
             ? {
                 _id: String(current._id),
-                title: current.serviceType || current.woNumber || "Work order",
+                title: cleanActivityLabel(current),
                 status: current.status,
               }
             : null,
@@ -1307,7 +1326,7 @@ export class EngineeringController {
           kind: "work_order",
           date: activityDate(row),
           woNumber: row.woNumber || "",
-          job: row.serviceType || row.type || "Work order",
+          job: cleanActivityLabel(row),
           type: row.type || "service",
           status: row.status,
           notes: row.notes || "",
@@ -1327,7 +1346,7 @@ export class EngineeringController {
             kind: "request",
             date: activityDate(ticket),
             woNumber: "",
-            job: ticket.title || "Request",
+            job: cleanActivityLabel({ kind: "request", title: ticket.title }),
             type: "request",
             status: ticket.status,
             notes: ticket.resolutionNote || ticket.description || "",

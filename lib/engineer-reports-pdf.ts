@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf"
 import { companyApi } from "@/lib/api"
+import { cleanActivityLabel } from "@/lib/engineer-activity"
 
 const DEFAULT_PRIMARY = "#0f766e"
 const DEFAULT_TEXT = "#1f2937"
@@ -124,6 +125,15 @@ function formatDateTime(value?: string | Date | null) {
 
 function prettyStatus(value?: string) {
   return String(value || "open").replace(/_/g, " ").toUpperCase()
+}
+
+function prettyActivityType(kind?: string) {
+  const value = String(kind || "").toLowerCase()
+  if (value === "installation") return "INSTALLATION"
+  if (value === "breakdown" || value === "repair") return "REPAIR"
+  if (value === "calibration") return "CALIBRATION"
+  if (value === "ticket" || value === "request") return "FAULT REPORT"
+  return "SERVICE"
 }
 
 function fileSafe(value: string) {
@@ -389,8 +399,8 @@ export async function downloadMachineHistoryPdf(params: {
   ]
   const rows = params.events.map((event) => ({
     date: formatDateTime(event.when),
-    type: event.kind.replace(/_/g, " ").toUpperCase(),
-    activity: event.title || "—",
+    type: prettyActivityType(event.kind),
+    activity: cleanActivityLabel({ kind: event.kind, title: event.title }),
     engineer: event.person || "—",
     status: prettyStatus(event.status),
     report: event.detail || "—",
@@ -466,7 +476,7 @@ export async function downloadEngineerActivityPdf(params: {
     return {
       date: formatDate(row.date),
       engineer: row.engineerName || "—",
-      job: [row.woNumber, row.job].filter(Boolean).join(" · ") || "—",
+      job: cleanActivityLabel(row),
       machine: machine || "—",
       facility: facility || "—",
       status: prettyStatus(row.status),

@@ -1033,13 +1033,14 @@ export const stockApi = {
   getWarehouseLocations: (warehouseId: string) =>
     client.get<any[]>(`/api/stock/warehouses/${warehouseId}/locations`),
   // Installed machines
-  getInstalledMachines: (page?: number, limit?: number, extra?: { q?: string; compact?: boolean; machineId?: string }) => {
+  getInstalledMachines: (page?: number, limit?: number, extra?: { q?: string; compact?: boolean; machineId?: string; groupBy?: "client" }) => {
     const search = new URLSearchParams()
     if (page) search.set("page", String(page))
     if (limit) search.set("limit", String(limit))
     if (extra?.q) search.set("q", extra.q)
     if (extra?.compact) search.set("compact", "1")
     if (extra?.machineId) search.set("machineId", extra.machineId)
+    if (extra?.groupBy) search.set("groupBy", extra.groupBy)
     const query = search.toString()
     return client.get<any[]>(`/api/stock/installed-machines${query ? `?${query}` : ""}`)
   },
